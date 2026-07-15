@@ -3,21 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A clean, modern default landing page for your project.">
-    <title>Welcome</title>
+    <meta name="description" content="A mini piano that plays real notes right in your browser using the Web Audio API.">
+    <title>Mini Piano</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <main class="hero">
-        <div class="hero__content">
-            <span class="hero__badge">Powered by AI</span>
-            <h1 class="hero__title">Welcome to your project</h1>
-            <p class="hero__subtitle">This is a default landing page. Replace this text with your product, service, or idea and start building.</p>
-            <a href="#" class="cta">Get Started</a>
-        </div>
+    <main class="app">
+        <header class="app__header">
+            <span class="app__badge">Web Audio</span>
+            <h1 class="app__title">Mini Piano</h1>
+            <p class="app__subtitle">Click the keys or use your keyboard to play real notes.</p>
+        </header>
+
+        <div class="piano" id="piano" role="group" aria-label="Piano keyboard"></div>
+
+        <p class="app__hint">Keyboard: <kbd>A</kbd> <kbd>W</kbd> <kbd>S</kbd> <kbd>E</kbd> <kbd>D</kbd> <kbd>F</kbd> <kbd>T</kbd> <kbd>G</kbd> <kbd>Y</kbd> <kbd>H</kbd> <kbd>U</kbd> <kbd>J</kbd> <kbd>K</kbd></p>
     </main>
+
+    <script src="piano.js"></script>
 </body>
 </html>
