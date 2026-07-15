@@ -1,0 +1,8 @@
+{
+  "name": "hello-ai",
+  "version": "1.0.0",
+  "description": "A clean, modern default landing page.",
+  "scripts": {
+    "test": "node test/landing.test.mjs"
+  }
+}

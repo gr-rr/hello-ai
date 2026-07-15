@@ -1,0 +1,100 @@
+:root {
+    --blue-1: #1e3a8a;
+    --blue-2: #2563eb;
+    --blue-3: #38bdf8;
+    --text-light: #f8fafc;
+    --text-muted: #cbd5e1;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+}
+
+body {
+    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    color: var(--text-light);
+    background: linear-gradient(135deg, var(--blue-1) 0%, var(--blue-2) 55%, var(--blue-3) 100%);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+.hero {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.hero__content {
+    max-width: 42rem;
+    text-align: center;
+}
+
+.hero__badge {
+    display: inline-block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(8px);
+    margin-bottom: 1.5rem;
+}
+
+.hero__title {
+    font-size: clamp(2.75rem, 8vw, 5rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.25rem;
+}
+
+.hero__subtitle {
+    font-size: clamp(1.05rem, 2.5vw, 1.35rem);
+    font-weight: 400;
+    line-height: 1.6;
+    color: var(--text-muted);
+    margin-bottom: 2.5rem;
+}
+
+.cta {
+    display: inline-block;
+    font-size: 1.0625rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: var(--blue-1);
+    background: var(--text-light);
+    padding: 0.95rem 2.5rem;
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cta:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
+}
+
+.cta:active {
+    transform: translateY(0);
+}
+
+@media (max-width: 480px) {
+    .hero {
+        padding: 1.5rem;
+    }
+    .cta {
+        width: 100%;
+    }
+}
