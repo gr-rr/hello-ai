@@ -27,14 +27,30 @@ function getAudioContext() {
         const Ctx = window.AudioContext || window.webkitAudioContext;
         audioCtx = new Ctx();
     }
-    if (audioCtx.state === "suspended") {
-        audioCtx.resume();
-    }
     return audioCtx;
+}
+
+// iOS Safari keeps the AudioContext suspended until a user gesture and will
+// not produce sound until it is resumed. Playing a silent buffer on the first
+// interaction reliably "unlocks" audio on mobile.
+function unlockAudio() {
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") {
+        ctx.resume();
+    }
+    const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
 }
 
 function playNote(note) {
     const ctx = getAudioContext();
+    if (ctx.state === "suspended") {
+        ctx.resume();
+    }
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     const now = ctx.currentTime;
@@ -50,19 +66,26 @@ function playNote(note) {
     osc.start(now);
     osc.stop(now + 1.5);
 
-    activeOscillators.set(note.note, osc);
+    activeOscillators.set(note.note, { osc, startedAt: performance.now() });
 }
 
 function stopNote(note) {
-    const osc = activeOscillators.get(note.note);
-    if (osc) {
-        try {
-            osc.stop();
-        } catch (e) {
-            /* already stopped */
-        }
+    const entry = activeOscillators.get(note.note);
+    if (!entry) return;
+    // A quick tap (common on mobile) releases pointerup almost immediately.
+    // If we stopped the oscillator then, the mobile audio thread would never
+    // get a chance to start it, so we let short presses ring out. Longer
+    // holds can still be released to cut the note.
+    if (performance.now() - entry.startedAt < 120) {
         activeOscillators.delete(note.note);
+        return;
     }
+    try {
+        entry.osc.stop();
+    } catch (e) {
+        /* already stopped */
+    }
+    activeOscillators.delete(note.note);
 }
 
 function buildKeyboard() {
@@ -88,6 +111,7 @@ function buildKeyboard() {
 
         const press = (event) => {
             event.preventDefault();
+            unlockAudio();
             key.classList.add("key--active");
             playNote(note);
         };
@@ -111,6 +135,7 @@ function buildKeyboard() {
         const entry = keyByChar.get(event.key.toLowerCase());
         if (!entry || pressed.has(entry.note.note)) return;
         pressed.add(entry.note.note);
+        unlockAudio();
         entry.key.classList.add("key--active");
         playNote(entry.note);
     });
@@ -123,5 +148,11 @@ function buildKeyboard() {
         stopNote(entry.note);
     });
 }
+
+// Unlock audio on the very first interaction anywhere on the page (covers
+// taps that begin outside a key and mobile browsers that need an early gesture).
+["pointerdown", "touchstart", "keydown"].forEach((evt) =>
+    window.addEventListener(evt, unlockAudio, { once: true })
+);
 
 document.addEventListener("DOMContentLoaded", buildKeyboard);
