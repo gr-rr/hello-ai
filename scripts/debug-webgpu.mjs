@@ -1,6 +1,6 @@
 import { chromium } from "playwright";
 
-const URL = process.env.URL || "https://hello-ai-wheat.vercel.app";
+const BASE = process.env.URL || "https://hello-ai-wheat.vercel.app";
 
 const browser = await chromium.launch({
   args: [
@@ -16,36 +16,52 @@ const logs = [];
 page.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 
-await page.goto(URL, { waitUntil: "domcontentloaded" });
+// ---------- Music Studio (/ ) ----------
+console.log("=== Music Studio (/ ) ===");
+await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
 
-// Check WebGPU availability
 const webgpu = await page.evaluate(() => !!navigator.gpu);
 console.log("navigator.gpu available:", webgpu);
 
-// Wait for model to be ready (status text)
 try {
   await page.waitForFunction(
     () => document.querySelector(".status")?.textContent?.includes("Ready"),
-    { timeout: 180000 }
+    { timeout: 240000 }
   );
-  console.log("Model ready.");
+  console.log("Music model ready.");
 } catch (e) {
-  console.log("Model did NOT become ready. Status:", await page.$eval(".status", (el) => el.textContent).catch(() => "n/a"));
+  console.log(
+    "Music model did NOT become ready. Status:",
+    await page
+      .$eval(".status", (el) => el.textContent)
+      .catch(() => "n/a")
+  );
 }
 
-// Type a message and send
-await page.fill("textarea", "What is 2+2?");
-await page.click("button");
+await page.fill(".prompt", "lofi slow bpm electro chill with organic samples");
+await page.click(".generate");
 
-// Wait for the assistant message to update / error
-let msg = "";
-for (let i = 0; i < 12; i++) {
+let ok = false;
+for (let i = 0; i < 30; i++) {
   await page.waitForTimeout(10000);
-  msg = await page.$eval(".msg.assistant", (el) => el.textContent).catch(() => "no assistant msg");
-  const status = await page.$eval(".status", (el) => el.textContent).catch(() => "");
-  console.log(`t+${(i + 1) * 10}s status="${status}" msg="${msg}"`);
-  if (msg && msg !== "▋" && !msg.endsWith("▋")) break;
+  const status = await page
+    .$eval(".status", (el) => el.textContent)
+    .catch(() => "");
+  console.log(`t+${(i + 1) * 10}s status="${status}"`);
+  if (status?.includes("Done") || status?.includes("Encoding")) {
+    ok = true;
+    break;
+  }
+  if (status?.includes("error")) break;
 }
+
+const audioSrc = await page
+  .$eval("audio", (el) => el.getAttribute("src"))
+  .catch(() => null);
+const hasCanvas = (await page.$("canvas.visualizer")) !== null;
+console.log("audio src:", audioSrc);
+console.log("visualizer canvas present:", hasCanvas);
+console.log("music generation completed:", ok && !!audioSrc?.startsWith("blob:"));
 
 console.log("\n=== FULL CONSOLE LOGS ===");
 console.log(logs.join("\n"));

@@ -1,18 +1,18 @@
-import Chat from "@/components/Chat";
+import MusicGen from "@/components/MusicGen";
 
 export default function Home() {
   return (
     <main className="page">
       <div className="header">
         <span className="badge">Browser · WebGPU · transformers.js</span>
-        <h1>hello-ai</h1>
+        <h1>hello-ai · Music Studio</h1>
         <p>
-          Chat with a small language model running entirely in your browser.
-          No server, no API keys. Future builds will add an Unsloth
-          finetuning demo.
+          Generate music from a text description, entirely in your browser. No
+          server, no API keys — the model runs locally on your GPU. Try the{" "}
+          <a href="/chat">LLM chat</a> too.
         </p>
       </div>
-      <Chat />
+      <MusicGen />
       <div className="footer">
         Powered by{" "}
         <a
@@ -23,10 +23,14 @@ export default function Home() {
           transformers.js
         </a>{" "}
         and{" "}
-        <a href="https://unsloth.ai" target="_blank" rel="noreferrer">
-          Unsloth
-        </a>{" "}
-        (coming soon).
+        <a
+          href="https://huggingface.co/facebook/musicgen-small"
+          target="_blank"
+          rel="noreferrer"
+        >
+          MusicGen
+        </a>
+        .
       </div>
     </main>
   );
