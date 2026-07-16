@@ -5,13 +5,50 @@ import Visualizer from "./Visualizer";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import { getTracks, saveTrack, type Track } from "@/lib/db";
 
-const EXAMPLES = [
+const SEED_EXAMPLES = [
   "80s pop track with bassy drums and synth",
   "90s rock song with loud guitars and heavy drums",
   "a light and cheerful EDM track, with syncopated drums, airy pads, strong emotions, bpm: 130",
   "a cheerful country song with acoustic guitars",
   "lofi slow bpm electro chill with organic samples",
 ];
+
+// Word banks for client-side suggestion generation (no LLM required).
+// Upgrade path: replace generateSuggestions() with a small-LLM call.
+const GENRES = [
+  "pop", "rock", "EDM", "lofi", "jazz", "hip hop", "ambient", "synthwave",
+  "funk", "classical", "house", "techno", "rnb", "metal", "country", "dubstep",
+];
+const ADJ = [
+  "cheerful", "melancholic", "energetic", "dreamy", "aggressive", "smooth",
+  "uplifting", "dark", "playful", "cinematic", "chill", "euphoric", "moody",
+];
+const INSTR = [
+  "bassy drums", "airy pads", "distorted guitars", "soft piano", "brass section",
+  "string quartet", "syncopated hi-hats", "analog synth", "acoustic guitar",
+  "sub bass", "orchestral strings", "vintage keys", "choir vocals",
+];
+const EXTRAS = [
+  "strong emotions", "driving rhythm", "warm texture", "wide stereo image",
+  "punchy low end", "lush harmonies", "minimal arrangement", "heavy reverb",
+  "build-up and drop", "call and response",
+];
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateSuggestions(n = 5): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const bpm = 70 + Math.floor(Math.random() * 90);
+    out.push(
+      `a ${pick(ADJ)} ${pick(GENRES)} track with ${pick(INSTR)}, ` +
+        `${pick(EXTRAS)}, bpm: ${bpm}`
+    );
+  }
+  return out;
+}
 
 function saveAudio(url: string) {
   const a = document.createElement("a");
@@ -31,11 +68,13 @@ function audioFromBase64(b64: string): { url: string; blob: Blob } {
 }
 
 export default function MusicGen() {
-  const [textInput, setTextInput] = useState(EXAMPLES[0]);
-  const [status, setStatus] = useState("Loading model (~656MB)…");
+  const [textInput, setTextInput] = useState(SEED_EXAMPLES[0]);
+  const [suggestions, setSuggestions] = useState<string[]>(SEED_EXAMPLES);
+  const [status, setStatus] = useState("Ready. Describe the music you want.");
   const [progress, setProgress] = useState(0);
   const [indeterminate, setIndeterminate] = useState(false);
-  const [ready, setReady] = useState(false);
+  // Server-side generation: the backend is always "ready" (no client model load).
+  const [ready, setReady] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const [duration, setDuration] = useState(5);
@@ -51,53 +90,60 @@ export default function MusicGen() {
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const workerInit = useRef(false);
+
+  // Lazily spin up the in-browser WASM worker only when we actually fall back
+  // to client-side generation (avoids downloading the ~656MB model upfront
+  // when the server backend is available).
+  function ensureWorker(): Promise<void> {
+    if (workerInit.current) return Promise.resolve();
+    return new Promise((resolve) => {
+      const worker = new Worker(
+        new URL("./musicgen.worker.ts", import.meta.url)
+      );
+      workerRef.current = worker;
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+        if (msg.type === "load-progress") {
+          setProgress(msg.progress);
+          setStatus(
+            msg.progress >= 1
+              ? "Finalizing model…"
+              : `Loading model (${(msg.progress * 100).toFixed(0)}% of ~656MB)…`
+          );
+        } else if (msg.type === "ready") {
+          setReady(true);
+          setStatus("Ready. Describe the music you want.");
+        } else if (msg.type === "result") {
+          const blob = new Blob([msg.buffer], { type: "audio/wav" });
+          const url = URL.createObjectURL(blob);
+          setAudioUrl(url);
+          setAudioBlob(blob);
+          setSaved(false);
+          setStatus("Done!");
+          setProgress(1);
+          setIndeterminate(false);
+          setBusy(false);
+        } else if (msg.type === "error") {
+          setStatus("⚠️ " + msg.message);
+          setIndeterminate(false);
+          setBusy(false);
+        }
+      };
+      worker.postMessage({ type: "init" });
+      workerInit.current = true;
+      // Give the worker a moment to start; readiness is handled via messages.
+      setTimeout(resolve, 300);
+    });
+  }
 
   useEffect(() => {
-    let cancelled = false;
-    const worker = new Worker(
-      new URL("./musicgen.worker.ts", import.meta.url)
-    );
-    workerRef.current = worker;
-
-    worker.onmessage = (e: MessageEvent) => {
-      const msg = e.data;
-      if (msg.type === "load-progress") {
-        setProgress(msg.progress);
-        setStatus(
-          msg.progress >= 1
-            ? "Finalizing model…"
-            : `Loading model (${(msg.progress * 100).toFixed(0)}% of ~656MB)…`
-        );
-      } else if (msg.type === "ready") {
-        if (cancelled) return;
-        setReady(true);
-        setStatus("Ready. Describe the music you want.");
-      } else if (msg.type === "result") {
-        const blob = new Blob([msg.buffer], { type: "audio/wav" });
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-        setAudioBlob(blob);
-        setSaved(false);
-        setStatus("Done!");
-        setProgress(1);
-        setIndeterminate(false);
-        setBusy(false);
-      } else if (msg.type === "error") {
-        setStatus("⚠️ " + msg.message);
-        setIndeterminate(false);
-        setBusy(false);
-      }
-    };
-
-    worker.postMessage({ type: "init" });
-
     if (isSupabaseConfigured) {
       getTracks().then(setTracks).catch(() => {});
     }
 
     return () => {
-      cancelled = true;
-      worker.terminate();
+      workerRef.current?.terminate();
       workerRef.current = null;
     };
   }, []);
@@ -125,6 +171,10 @@ export default function MusicGen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function regenerateSuggestions() {
+    setSuggestions(generateSuggestions(5));
   }
 
   async function generate() {
@@ -178,16 +228,14 @@ export default function MusicGen() {
         return;
       }
       throw new Error("no audio returned");
-    } catch {
-      // Fallback to in-browser WASM inference.
-      setStatus("Generating… (in-browser, this can take 10–30s)");
-      workerRef.current?.postMessage({
-        type: "generate",
-        text,
-        duration,
-        guidanceScale,
-        temperature,
-      });
+    } catch (err) {
+      // Server-side generation failed. The in-browser WASM worker exists as a
+      // reference fallback (see ensureWorker) but is intentionally disabled so
+      // we don't pull the ~656MB model into the browser. Just surface the error.
+      const msg = err instanceof Error ? err.message : String(err ?? "unknown");
+      setStatus("⚠️ Generation failed: " + msg);
+      setIndeterminate(false);
+      setBusy(false);
     }
   }
 
@@ -202,7 +250,13 @@ export default function MusicGen() {
       />
 
       <div className="examples">
-        {EXAMPLES.map((ex, i) => (
+        <div className="examples-head">
+          <span>Examples</span>
+          <button className="chip ghost" onClick={regenerateSuggestions} disabled={busy}>
+            ↻ Regenerate
+          </button>
+        </div>
+        {suggestions.map((ex, i) => (
           <button
             key={i}
             className="chip"
