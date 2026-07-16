@@ -78,7 +78,7 @@ export default function MusicGen() {
               decoder_model_merged: "q8",
               encodec_decode: "fp32",
             },
-            device: "webgpu",
+            device: "wasm",
             progress_callback: (data: any) => {
               if (data.status !== "progress") return;
               if (typeof data.progress === "number") setProgress(data.progress);
@@ -93,7 +93,7 @@ export default function MusicGen() {
       } catch (err) {
         console.error(err);
         setStatus(
-          "Failed to load model. Your browser may not support WebGPU, or you may be offline."
+          "Failed to load model. You may be offline, or the model download failed."
         );
       }
     }
