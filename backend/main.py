@@ -87,4 +87,4 @@ def _upload_to_supabase(wav_bytes: bytes, req: GenerateRequest) -> str:
         "audio_path": path,
     }).execute()
     public = sb.storage.from_("audio").get_public_url(path)
-    return public.get("publicUrl", "")
+    return public if isinstance(public, str) else public.get("publicUrl", "")
