@@ -379,6 +379,22 @@ a {
   width: 100%;
 }
 
+.gallery-play {
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.gallery-play:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .gallery-prompt {
   font-size: 14px;
   color: var(--text);

@@ -177,6 +177,14 @@ export default function MusicGen() {
     setSuggestions(generateSuggestions(5));
   }
 
+  function playTrack(t: Track) {
+    // Reuse the main player + Visualizer instead of a separate <audio>,
+    // so gallery playback also gets visualized.
+    setAudioUrl(supabaseAudioUrl(t.audio_path));
+    setAudioBlob(null);
+    setSaved(true);
+  }
+
   async function generate() {
     const text = textInput.trim();
     if (!text || busy || !ready) return;
@@ -351,7 +359,9 @@ export default function MusicGen() {
           <ul>
             {tracks.map((t) => (
               <li key={t.id}>
-                <audio controls src={supabaseAudioUrl(t.audio_path)} />
+                <button className="gallery-play" onClick={() => playTrack(t)}>
+                  ▶ Play
+                </button>
                 <span className="gallery-prompt">{t.prompt}</span>
                 <span className="gallery-meta">
                   {t.duration}s · g{t.guidance_scale} · t{t.temperature}
