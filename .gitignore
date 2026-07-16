@@ -6,3 +6,12 @@ node_modules/
 next-env.d.ts
 out/
 build
+.env.local
+.env
+
+# Python backend
+backend/.venv/
+__pycache__/
+*.pyc
+backend/__pycache__/
+
