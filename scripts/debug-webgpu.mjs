@@ -16,7 +16,7 @@ const logs = [];
 page.on("console", (m) => logs.push(`[${m.type()}] ${m.text()}`));
 page.on("pageerror", (e) => logs.push(`[pageerror] ${e.message}`));
 
-await page.goto(URL, { waitUntil: "networkidle" });
+await page.goto(URL, { waitUntil: "domcontentloaded" });
 
 // Check WebGPU availability
 const webgpu = await page.evaluate(() => !!navigator.gpu);

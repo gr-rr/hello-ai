@@ -14,7 +14,6 @@ export default function Chat() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const generatorRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +22,7 @@ export default function Chat() {
 
     async function init() {
       try {
-        const { pipeline, TextStreamer } = await import(
+        const { pipeline } = await import(
           "@huggingface/transformers"
         );
         setStatus("Loading model weights (first run downloads ~0.5B params)…");
