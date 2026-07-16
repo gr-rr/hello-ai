@@ -2,14 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "hello-ai — In-Browser Music Studio & Local LLM Chat",
+  title: "hello-ai — Music Studio, Finetune & Compare",
   description:
-    "Generate music from text and chat with a local LLM, entirely in your browser via WebGPU and transformers.js.",
+    "Generate music, fine-tune small LLMs, and compare model outputs — with a server backend on Oracle and Supabase.",
   icons: {
     icon: "/icon.svg",
     apple: "/icon.svg",
   },
 };
+
+const NAV = [
+  { href: "/", label: "Music" },
+  { href: "/chat", label: "Chat" },
+  { href: "/data", label: "Datasets" },
+  { href: "/train", label: "Train" },
+  { href: "/compare", label: "Compare" },
+];
 
 export default function RootLayout({
   children,
@@ -18,7 +26,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <nav className="nav">
+          {NAV.map((n) => (
+            <a key={n.href} href={n.href}>
+              {n.label}
+            </a>
+          ))}
+        </nav>
+        {children}
+      </body>
     </html>
   );
 }

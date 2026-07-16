@@ -1,17 +1,35 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import uuid
 import io
+import json
 import base64
+import os
 import logging
+import threading
 
 from musicgen_server import generate_audio
+from finetune_server import (
+    list_base_models,
+    load_dataset_jsonl,
+    train_lora,
+    generate as ft_generate,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
 
-app = FastAPI(title="hello-ai music backend", version="0.1.0")
+app = FastAPI(title="hello-ai backend", version="0.2.0")
+
+# Local cache for trained adapters (persisted on the VM volume).
+ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
+os.makedirs(ADAPTER_ROOT, exist_ok=True)
+
+# In-memory job status (mirrors Supabase jobs row; Supabase is source of truth
+# when configured, this is the fallback for quick status updates).
+_job_logs: dict[str, str] = {}
+_job_lock = threading.Lock()
 
 
 class GenerateRequest(BaseModel):
@@ -34,6 +52,202 @@ class GenerateResponse(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Finetune studio
+# ---------------------------------------------------------------------------
+class TrainRequest(BaseModel):
+    base_model: str
+    dataset_text: Optional[str] = None  # raw JSONL
+    dataset_path: Optional[str] = None  # path in Supabase 'datasets' bucket
+    name: Optional[str] = None
+    lora_r: int = 16
+    lora_alpha: int = 32
+    epochs: float = 3.0
+    learning_rate: float = 2e-4
+    max_seq_len: Optional[int] = None
+    batch_size: int = 4
+
+
+class CompareRequest(BaseModel):
+    prompt: str
+    model_a: str = "base"  # "base" or a models.id
+    model_b: str = "base"
+    base_model: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    max_new_tokens: int = 128
+    temperature: float = 0.7
+
+
+def _sb():
+    from supabase import create_client
+    import os
+
+    url = os.environ.get("SUPABASE_URL")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        return None
+    return create_client(url, key)
+
+
+def _append_log(job_id: str, msg: str):
+    with _job_lock:
+        _job_logs[job_id] = (_job_logs.get(job_id, "") + msg + "\n").strip()[-4000:]
+    sb = _sb()
+    if sb:
+        sb.table("jobs").update({"loss_log": _job_logs[job_id]}).eq("id", job_id).execute()
+
+
+def _run_training(job_id: str, req: TrainRequest):
+    sb = _sb()
+    if sb:
+        sb.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
+    try:
+        # Resolve dataset text.
+        if req.dataset_text:
+            text = req.dataset_text
+        elif req.dataset_path:
+            sb2 = _sb()
+            if not sb2:
+                raise RuntimeError("Supabase not configured for dataset fetch")
+            data = sb2.storage.from_("datasets").download(req.dataset_path)
+            text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+        else:
+            raise ValueError("no dataset provided")
+
+        rows = load_dataset_jsonl(text)
+
+        adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
+        params = {
+            "lora_r": req.lora_r,
+            "lora_alpha": req.lora_alpha,
+            "epochs": req.epochs,
+            "learning_rate": req.learning_rate,
+            "max_seq_len": req.max_seq_len or 1024,
+            "batch_size": req.batch_size,
+        }
+        train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
+
+        # Persist adapter to Supabase if configured.
+        adapter_path = f"adapters/{job_id}"
+        sb3 = _sb()
+        if sb3:
+            for fname in os.listdir(adapter_dir):
+                with open(os.path.join(adapter_dir, fname), "rb") as f:
+                    sb3.storage.from_("adapters").upload(
+                        f"{job_id}/{fname}", f.read(),
+                        {"content-type": "application/octet-stream"}, upsert=True,
+                    )
+            sb3.table("models").insert({
+                "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
+                "base_model": req.base_model,
+                "job_id": job_id,
+                "adapter_path": adapter_path,
+            }).execute()
+
+        if sb:
+            sb.table("jobs").update({
+                "status": "done", "finished_at": "now()",
+                "loss_log": _job_logs.get(job_id, ""),
+            }).eq("id", job_id).execute()
+        _append_log(job_id, "DONE")
+    except Exception as e:
+        logger.exception("training failed")
+        _append_log(job_id, f"ERROR: {e}")
+        if sb:
+            sb.table("jobs").update({
+                "status": "error", "error": str(e), "finished_at": "now()",
+            }).eq("id", job_id).execute()
+
+
+@app.get("/models/base")
+def models_base():
+    return {"models": list_base_models()}
+
+
+@app.post("/train")
+def train(req: TrainRequest, background_tasks: BackgroundTasks):
+    if not req.dataset_text and not req.dataset_path:
+        raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
+    job_id = uuid.uuid4().hex
+    params = {
+        "lora_r": req.lora_r, "lora_alpha": req.lora_alpha,
+        "epochs": req.epochs, "learning_rate": req.learning_rate,
+        "max_seq_len": req.max_seq_len or 1024, "batch_size": req.batch_size,
+        "name": req.name,
+    }
+    sb = _sb()
+    if sb:
+        sb.table("jobs").insert({
+            "id": job_id, "base_model": req.base_model,
+            "params": params, "dataset_path": req.dataset_path, "status": "queued",
+        }).execute()
+    _job_logs[job_id] = "queued"
+    background_tasks.add_task(_run_training, job_id, req)
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/jobs/{job_id}")
+def job_status(job_id: str):
+    sb = _sb()
+    if sb:
+        res = sb.table("jobs").select("*").eq("id", job_id).execute()
+        if res.data:
+            row = res.data[0]
+            row["loss_log"] = _job_logs.get(job_id, row.get("loss_log", ""))
+            return row
+    with _job_lock:
+        log = _job_logs.get(job_id)
+    if not log:
+        raise HTTPException(status_code=404, detail="job not found")
+    return {"id": job_id, "status": "running", "loss_log": log}
+
+
+@app.get("/models")
+def list_models():
+    sb = _sb()
+    if not sb:
+        return {"models": []}
+    res = sb.table("models").select("*").order("created_at", desc=True).execute()
+    return {"models": res.data or []}
+
+
+def _resolve_adapter(model_ref: str, base_model: str):
+    """Return (base_model, adapter_dir_or_None) for a model reference."""
+    if model_ref in ("base", "", None):
+        return base_model, None
+    sb = _sb()
+    if sb:
+        res = sb.table("models").select("*").eq("id", model_ref).execute()
+        if res.data:
+            m = res.data[0]
+            adapter_dir = os.path.join(ADAPTER_ROOT, m["id"])
+            # Pull adapter files from Supabase if not cached locally.
+            if not os.path.isdir(adapter_dir):
+                files = sb.storage.from_("adapters").list(m["id"])
+                if files:
+                    os.makedirs(adapter_dir, exist_ok=True)
+                    for f in files:
+                        data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
+                        with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
+                            fh.write(data if isinstance(data, (bytes, bytearray)) else data.read())
+            return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
+    return base_model, None
+
+
+@app.post("/compare")
+def compare(req: CompareRequest):
+    if not req.prompt or not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt is required")
+    base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
+    base_b, ad_b = _resolve_adapter(req.model_b, req.base_model)
+    try:
+        a_text = ft_generate(base_a, ad_a, req.prompt, req.max_new_tokens, req.temperature)
+        b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
+    except Exception as e:
+        logger.exception("compare failed")
+        raise HTTPException(status_code=500, detail=f"compare failed: {e}")
+    return {"prompt": req.prompt, "a": a_text, "b": b_text}
 
 
 @app.post("/generate", response_model=GenerateResponse)
