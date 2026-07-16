@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Visualizer from "./Visualizer";
-import { BaseStreamer } from "@huggingface/transformers";
 
 const MODEL_ID = "Xenova/musicgen-small";
 
@@ -44,20 +43,6 @@ function encodeWAV(samples: Float32Array, sampleRate = 16000) {
     view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
   return buffer;
-}
-
-class CallbackStreamer extends BaseStreamer {
-  callback_fn: (value?: any) => void;
-  constructor(callback_fn: (value?: any) => void) {
-    super();
-    this.callback_fn = callback_fn;
-  }
-  put(value: any) {
-    return this.callback_fn(value);
-  }
-  end() {
-    return this.callback_fn();
-  }
 }
 
 export default function MusicGen() {
@@ -135,16 +120,15 @@ export default function MusicGen() {
       model.generation_config?.max_length ?? 1500
     );
 
-    let numTokens = 0;
-    const streamer = new CallbackStreamer((value?: any) => {
-      if (value === undefined) {
-        setStatus("Encoding audio…");
-        return;
-      }
-      const percent = ++numTokens / maxLength;
-      setProgress(percent);
-      setStatus(`Generating (${(percent * 100).toFixed(0)}%)…`);
-    });
+    // Coarse progress while generation runs (no streamer to avoid
+    // interfering with MusicGen's delay-pattern decoding).
+    const start = Date.now();
+    const estMs = duration * 1000 * 3; // rough heuristic for UI feedback
+    const timer = setInterval(() => {
+      const p = Math.min(0.95, (Date.now() - start) / estMs);
+      setProgress(p);
+      setStatus(`Generating (${(p * 100).toFixed(0)}%)…`);
+    }, 500);
 
     try {
       const inputs = tokenizer(text);
@@ -153,18 +137,21 @@ export default function MusicGen() {
         max_length: maxLength,
         guidance_scale: guidanceScale,
         temperature,
-        streamer,
       });
 
+      clearInterval(timer);
+
       const samplingRate = model.config.audio_encoder.sampling_rate;
-      const data = audioValues?.data;
+      const data = audioValues?.data as Float32Array | undefined;
       console.log(
         "[MusicGen] audio_values dims:",
         audioValues?.dims,
         "type:",
         audioValues?.type,
         "dataLen:",
-        data?.length
+        data?.length,
+        "samplingRate:",
+        samplingRate
       );
       if (!data || data.length === 0) {
         setStatus("⚠️ Generation produced no audio. Try again.");
@@ -174,10 +161,10 @@ export default function MusicGen() {
       const blob = new Blob([wav], { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
       setAudioUrl(url);
-      if (audioRef.current) audioRef.current.src = url;
       setStatus("Done!");
       setProgress(1);
     } catch (err) {
+      clearInterval(timer);
       console.error(err);
       const msg = err instanceof Error ? err.message : String(err ?? "unknown");
       setStatus("⚠️ Generation error: " + msg);
