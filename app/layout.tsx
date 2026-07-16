@@ -11,14 +11,6 @@ export const metadata: Metadata = {
   },
 };
 
-const NAV = [
-  { href: "/", label: "Music" },
-  { href: "/chat", label: "Chat" },
-  { href: "/data", label: "Datasets" },
-  { href: "/train", label: "Train" },
-  { href: "/compare", label: "Compare" },
-];
-
 export default function RootLayout({
   children,
 }: {
@@ -26,16 +18,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <nav className="nav">
-          {NAV.map((n) => (
-            <a key={n.href} href={n.href}>
-              {n.label}
-            </a>
-          ))}
-        </nav>
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
