@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import Visualizer from "./Visualizer";
 
-const MODEL_ID = "Xenova/musicgen-small";
-
 const EXAMPLES = [
   "80s pop track with bassy drums and synth",
   "90s rock song with loud guitars and heavy drums",
@@ -13,38 +11,6 @@ const EXAMPLES = [
   "lofi slow bpm electro chill with organic samples",
 ];
 
-function encodeWAV(samples: Float32Array, sampleRate = 16000) {
-  const numSamples = samples.length;
-  const buffer = new ArrayBuffer(44 + numSamples * 2);
-  const view = new DataView(buffer);
-
-  const writeString = (offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++)
-      view.setUint8(offset + i, str.charCodeAt(i));
-  };
-
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + numSamples * 2, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // 16-bit PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, numSamples * 2, true);
-
-  let offset = 44;
-  for (let i = 0; i < numSamples; i++, offset += 2) {
-    let s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-  }
-  return buffer;
-}
-
 export default function MusicGen() {
   const [textInput, setTextInput] = useState(EXAMPLES[0]);
   const [status, setStatus] = useState("Loading model (~656MB)…");
@@ -52,55 +18,54 @@ export default function MusicGen() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const [duration, setDuration] = useState(10);
+  const [duration, setDuration] = useState(5);
   const [guidanceScale, setGuidanceScale] = useState(3);
   const [temperature, setTemperature] = useState(1);
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
-  const modelRef = useRef<any>(null);
-  const tokenizerRef = useRef<any>(null);
+  const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const worker = new Worker(
+      new URL("./musicgen.worker.ts", import.meta.url)
+    );
+    workerRef.current = worker;
 
-    async function init() {
-      try {
-        const T = await import("@huggingface/transformers");
-
-        setStatus("Loading model weights (~656MB, first run)…");
-
-        modelRef.current =
-          await T.MusicgenForConditionalGeneration.from_pretrained(MODEL_ID, {
-            dtype: {
-              text_encoder: "q8",
-              decoder_model_merged: "q8",
-              encodec_decode: "fp32",
-            },
-            device: "wasm",
-            progress_callback: (data: any) => {
-              if (data.status !== "progress") return;
-              if (typeof data.progress === "number") setProgress(data.progress);
-            },
-          } as any);
-
-        tokenizerRef.current = await T.AutoTokenizer.from_pretrained(MODEL_ID);
-
+    worker.onmessage = (e: MessageEvent) => {
+      const msg = e.data;
+      if (msg.type === "load-progress") {
+        setProgress(msg.progress);
+        setStatus(
+          msg.progress >= 1
+            ? "Finalizing model…"
+            : `Loading model (${(msg.progress * 100).toFixed(0)}% of ~656MB)…`
+        );
+      } else if (msg.type === "ready") {
         if (cancelled) return;
         setReady(true);
         setStatus("Ready. Describe the music you want.");
-      } catch (err) {
-        console.error(err);
-        setStatus(
-          "Failed to load model. You may be offline, or the model download failed."
-        );
+      } else if (msg.type === "result") {
+        const blob = new Blob([msg.buffer], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
+        setStatus("Done!");
+        setProgress(1);
+        setBusy(false);
+      } else if (msg.type === "error") {
+        setStatus("⚠️ " + msg.message);
+        setBusy(false);
       }
-    }
+    };
 
-    init();
+    worker.postMessage({ type: "init" });
+
     return () => {
       cancelled = true;
+      worker.terminate();
+      workerRef.current = null;
     };
   }, []);
 
@@ -112,63 +77,30 @@ export default function MusicGen() {
     setAudioUrl(null);
     if (audioRef.current) audioRef.current.src = "";
 
-    const model = modelRef.current;
-    const tokenizer = tokenizerRef.current;
-
-    const maxLength = Math.min(
-      Math.max(Math.floor(duration * 50) + 4, 1),
-      model.generation_config?.max_length ?? 1500
-    );
-
-    // Coarse progress while generation runs (no streamer to avoid
-    // interfering with MusicGen's delay-pattern decoding).
+    // Coarse progress while generation runs off the main thread (in the worker).
     const start = Date.now();
-    const estMs = duration * 1000 * 3; // rough heuristic for UI feedback
+    const estMs = Math.max(4000, duration * 1000 * 2.5);
     const timer = setInterval(() => {
       const p = Math.min(0.95, (Date.now() - start) / estMs);
       setProgress(p);
       setStatus(`Generating (${(p * 100).toFixed(0)}%)…`);
     }, 500);
 
+    const onResult = () => clearInterval(timer);
+    workerRef.current?.addEventListener("message", onResult, { once: true });
+
     try {
-      const inputs = tokenizer(text);
-      const audioValues = await model.generate({
-        ...inputs,
-        max_length: maxLength,
-        guidance_scale: guidanceScale,
+      workerRef.current?.postMessage({
+        type: "generate",
+        text,
+        duration,
+        guidanceScale,
         temperature,
       });
-
-      clearInterval(timer);
-
-      const samplingRate = model.config.audio_encoder.sampling_rate;
-      const data = audioValues?.data as Float32Array | undefined;
-      console.log(
-        "[MusicGen] audio_values dims:",
-        audioValues?.dims,
-        "type:",
-        audioValues?.type,
-        "dataLen:",
-        data?.length,
-        "samplingRate:",
-        samplingRate
-      );
-      if (!data || data.length === 0) {
-        setStatus("⚠️ Generation produced no audio. Try again.");
-        return;
-      }
-      const wav = encodeWAV(data, samplingRate);
-      const blob = new Blob([wav], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
-      setStatus("Done!");
-      setProgress(1);
     } catch (err) {
       clearInterval(timer);
-      console.error(err);
       const msg = err instanceof Error ? err.message : String(err ?? "unknown");
       setStatus("⚠️ Generation error: " + msg);
-    } finally {
       setBusy(false);
     }
   }
