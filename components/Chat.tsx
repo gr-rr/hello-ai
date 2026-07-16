@@ -31,7 +31,8 @@ export default function Chat() {
         const generator = await pipeline("text-generation", MODEL_ID, {
           dtype: "q4",
           device: "webgpu",
-        });
+          cache: false,
+        } as any);
 
         if (cancelled) return;
         generatorRef.current = generator;
@@ -74,12 +75,14 @@ export default function Chat() {
       const streamer = new TextStreamer(generator.tokenizer, {
         skip_prompt: true,
         skip_special_tokens: true,
-        callback_function: (t: string) => {
+        callback_function: (t: unknown) => {
+          if (t == null) return;
+          const piece = typeof t === "string" ? t : String(t);
           setMessages((m) => {
             const copy = [...m];
             copy[copy.length - 1] = {
               role: "assistant",
-              content: copy[copy.length - 1].content + t,
+              content: copy[copy.length - 1].content + piece,
             };
             return copy;
           });
@@ -98,9 +101,11 @@ export default function Chat() {
       console.error(err);
       setMessages((m) => {
         const copy = [...m];
+        const msg =
+          err instanceof Error ? err.message : String(err ?? "unknown error");
         copy[copy.length - 1] = {
           role: "assistant",
-          content: "⚠️ Generation error. See console for details.",
+          content: "⚠️ Generation error: " + msg,
         };
         return copy;
       });
