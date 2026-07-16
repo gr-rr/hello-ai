@@ -267,7 +267,7 @@ export default function MusicGen() {
 
       {audioUrl && (
         <div className="player">
-          <audio ref={audioRef} controls />
+          <audio ref={audioRef} controls src={audioUrl} />
           <Visualizer audioRef={audioRef} />
         </div>
       )}
