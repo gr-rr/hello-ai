@@ -1,0 +1,22 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.local
+    ports:
+      - "3000:3000"
+    # Hot-reload: mount source as a volume (node_modules excluded via .dockerignore-equivalent).
+    volumes:
+      - .:/app
+      - /app/node_modules
+      # Git + SSH so `git` works identically inside the container (read-only, secrets stay on host).
+      - ${HOME}/.ssh:/home/node/.ssh:ro
+      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+    environment:
+      # Tell git/ssh to use the mounted key.
+      - GIT_SSH_COMMAND=ssh -F /home/node/.ssh/config -i /home/node/.ssh/id_ed25519_gr
+    # Run as the non-root `node` user (already the image default) for least privilege.
+    user: "node"
+    command: sh -c "ssh-keyscan github.com >> /home/node/.ssh/known_hosts 2>/dev/null; npm run dev"

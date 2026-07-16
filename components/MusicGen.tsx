@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Visualizer from "./Visualizer";
+import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { getTracks, saveTrack, type Track } from "@/lib/db";
 
 const EXAMPLES = [
   "80s pop track with bassy drums and synth",
@@ -20,6 +22,14 @@ function saveAudio(url: string) {
   a.remove();
 }
 
+function audioFromBase64(b64: string): { url: string; blob: Blob } {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: "audio/wav" });
+  return { url: URL.createObjectURL(blob), blob };
+}
+
 export default function MusicGen() {
   const [textInput, setTextInput] = useState(EXAMPLES[0]);
   const [status, setStatus] = useState("Loading model (~656MB)…");
@@ -33,6 +43,11 @@ export default function MusicGen() {
   const [temperature, setTemperature] = useState(1);
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const [tracks, setTracks] = useState<Track[]>([]);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -61,6 +76,8 @@ export default function MusicGen() {
         const blob = new Blob([msg.buffer], { type: "audio/wav" });
         const url = URL.createObjectURL(blob);
         setAudioUrl(url);
+        setAudioBlob(blob);
+        setSaved(false);
         setStatus("Done!");
         setProgress(1);
         setIndeterminate(false);
@@ -74,12 +91,41 @@ export default function MusicGen() {
 
     worker.postMessage({ type: "init" });
 
+    if (isSupabaseConfigured) {
+      getTracks().then(setTracks).catch(() => {});
+    }
+
     return () => {
       cancelled = true;
       worker.terminate();
       workerRef.current = null;
     };
   }, []);
+
+  async function saveToGallery() {
+    if (!audioBlob || saving) return;
+    setSaving(true);
+    try {
+      const url = await saveTrack({
+        prompt: textInput.trim(),
+        blob: audioBlob,
+        duration,
+        guidanceScale,
+        temperature,
+      });
+      if (url) {
+        setSaved(true);
+        const refreshed = await getTracks();
+        setTracks(refreshed);
+        setStatus("Saved to gallery!");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err ?? "unknown");
+      setStatus("⚠️ Save failed: " + msg);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function generate() {
     const text = textInput.trim();
@@ -90,9 +136,51 @@ export default function MusicGen() {
     if (audioRef.current) audioRef.current.src = "";
     setProgress(0);
     setIndeterminate(true);
-    setStatus("Generating… (this can take 10–30s on your device)");
+    setStatus("Generating… (server-side on Oracle)");
 
     try {
+      // Try the FastAPI backend (Oracle) first; fall back to in-browser WASM.
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: text,
+          duration,
+          guidance_scale: guidanceScale,
+          temperature,
+          upload: true,
+        }),
+      });
+      if (!res.ok) throw new Error(`backend ${res.status}`);
+      const data = await res.json();
+      if (data.audio_base64) {
+        const { url, blob } = audioFromBase64(data.audio_base64);
+        setAudioUrl(url);
+        setAudioBlob(blob);
+        setSaved(false);
+        setStatus("Done! (server-generated)");
+        setProgress(1);
+        setIndeterminate(false);
+        setBusy(false);
+        return;
+      }
+      if (data.audio_url) {
+        // Server uploaded to Supabase; just play the URL (no local blob to save).
+        setAudioUrl(data.audio_url);
+        setAudioBlob(null);
+        setSaved(true);
+        setStatus("Done! (server-generated + saved)");
+        setProgress(1);
+        setIndeterminate(false);
+        setBusy(false);
+        // Refresh gallery.
+        if (isSupabaseConfigured) getTracks().then(setTracks).catch(() => {});
+        return;
+      }
+      throw new Error("no audio returned");
+    } catch {
+      // Fallback to in-browser WASM inference.
+      setStatus("Generating… (in-browser, this can take 10–30s)");
       workerRef.current?.postMessage({
         type: "generate",
         text,
@@ -100,11 +188,6 @@ export default function MusicGen() {
         guidanceScale,
         temperature,
       });
-    } catch (err) {
-      setIndeterminate(false);
-      const msg = err instanceof Error ? err.message : String(err ?? "unknown");
-      setStatus("⚠️ Generation error: " + msg);
-      setBusy(false);
     }
   }
 
@@ -190,12 +273,45 @@ export default function MusicGen() {
       {audioUrl && (
         <div className="player">
           <audio ref={audioRef} controls src={audioUrl} />
-          <button className="save" onClick={() => saveAudio(audioUrl!)}>
-            Save .wav
-          </button>
+          <div className="save-row">
+            <button className="save" onClick={() => saveAudio(audioUrl!)}>
+              Save .wav
+            </button>
+            {isSupabaseConfigured && (
+              <button
+                className="save"
+                onClick={saveToGallery}
+                disabled={saving || saved || !audioBlob}
+              >
+                {saved ? "Saved ✓" : saving ? "Saving…" : "Save to gallery"}
+              </button>
+            )}
+          </div>
           <Visualizer audioRef={audioRef} />
+        </div>
+      )}
+
+      {isSupabaseConfigured && tracks.length > 0 && (
+        <div className="gallery">
+          <h3>Gallery</h3>
+          <ul>
+            {tracks.map((t) => (
+              <li key={t.id}>
+                <audio controls src={supabaseAudioUrl(t.audio_path)} />
+                <span className="gallery-prompt">{t.prompt}</span>
+                <span className="gallery-meta">
+                  {t.duration}s · g{t.guidance_scale} · t{t.temperature}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
   );
+}
+
+function supabaseAudioUrl(path: string): string {
+  if (!supabase) return "";
+  return supabase.storage.from("audio").getPublicUrl(path).data.publicUrl;
 }
