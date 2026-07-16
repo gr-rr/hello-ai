@@ -4,12 +4,13 @@ export default function Home() {
   return (
     <main className="page">
       <div className="header">
-        <span className="badge">Browser · WebGPU · transformers.js</span>
+        <span className="badge">Server-side · Oracle · MusicGen</span>
         <h1>hello-ai · Music Studio</h1>
         <p>
-          Generate music from a text description, entirely in your browser. No
-          server, no API keys — the model runs locally on your GPU. Try the{" "}
-          <a href="/chat">LLM chat</a> too.
+          Generate music from a text description on the Oracle backend, then save
+          it to the Supabase gallery. Try the{" "}
+          <a href="/chat">LLM chat</a>, or the{" "}
+          <a href="/train">Finetune Lab</a>.
         </p>
       </div>
       <MusicGen />

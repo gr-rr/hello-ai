@@ -1,13 +1,16 @@
-# hello-ai · Music Studio
+# hello-ai · Music Studio + Finetune Lab
 
-An in-browser **text-to-music** studio that runs entirely on the client using
-[transformers.js](https://github.com/huggingface/transformers.js) and WebGPU.
-No server, no API keys — the model runs locally on your GPU.
+An **AI playground** with three studios, all backed by a small Oracle Cloud VM
+and Supabase:
+
+- 🎵 **Music Studio** (`/`) — text-to-music via **MusicGen** (server-side on Oracle, with an in-browser WASM reference fallback disabled).
+- 💬 **Chat** (`/chat`) — local LLM chat.
+- 🧪 **Finetune Lab** — prepare datasets (`/data`), train a LoRA (`/train`), and compare two models side-by-side (`/compare`).
 
 ## Features
 
-- 🎵 **Music Studio** (`/`) — text-to-music with **MusicGen** via transformers.js (WebGPU)
-- ⚡ Inference via **transformers.js** (WebGPU): `Xenova/musicgen-small`
+- 🎵 **Music Studio** (`/`) — text-to-music with **MusicGen**
+- 🧬 **Finetune Lab** — fine-tune small LLMs (TinyLlama / SmolLM2) with LoRA on the Oracle backend (CPU), persist adapters to Supabase, and compare outputs.
 - 📊 Live **waveform + spectrogram** visualizer (native Web Audio `AnalyserNode`)
 
 ## Local development
@@ -44,7 +47,7 @@ the included `vercel.json` (Next.js framework preset).
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/publishable key (public, browser-safe) |
 | `MUSIC_BACKEND_URL` | Oracle FastAPI backend base URL (e.g. `http://129.146.52.142`) |
 
-Without `MUSIC_BACKEND_URL` the app falls back to in-browser WASM inference.
+Without `MUSIC_BACKEND_URL` the app surfaces a generation error (no fallback).
 Without the Supabase vars the gallery is hidden and saving is local-only.
 
 ## Server-side generation (Oracle Cloud, always-free)
@@ -58,8 +61,8 @@ the backend is unreachable.
 
 ```
 Browser ──▶ Vercel (/api/generate) ──▶ Oracle VM
-                                     Caddy :80 ──▶ FastAPI :8000 (MusicGen)
-                                                  └─▶ Supabase (optional upload)
+                                     Caddy :443 (HTTPS/Let's Encrypt) ──▶ FastAPI :8000 (MusicGen)
+                                                                             └─▶ Supabase (upload)
 ```
 
 ### Provisioning (via `oci` CLI)
@@ -97,9 +100,51 @@ SUPABASE_SERVICE_ROLE_KEY=<service_role_jwt>       # secret, never exposed to br
 ```
 
 The `backend/` directory contains:
-- `main.py` — FastAPI app (`/health`, `/generate`)
+- `main.py` — FastAPI app (`/health`, `/generate`, `/train`, `/jobs/{id}`, `/compare`, `/models`, `/models/base`)
 - `musicgen_server.py` — MusicGen via `transformers` + `torch` (MPS/CUDA/CPU)
+- `finetune_server.py` — PEFT LoRA training + inference (Unsloth if CUDA, else vanilla `transformers`)
 - `requirements.txt`, `Dockerfile`, `docker-compose.yml` (Caddy + backend)
+
+> **Env gotcha:** `docker compose` only injects `.env` vars into the container
+> when run **from the `backend/` directory** (so it reads `backend/.env`). Running
+> `docker compose -f ~/backend/docker-compose.yml …` from elsewhere substitutes
+> empty strings and the backend silently runs with no Supabase config. Always
+> `cd ~/backend && docker compose up -d`. The `backend/.env` needs:
+> `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (secret), `ADAPTER_ROOT=/data/adapters`.
+
+## Finetune Lab (LoRA fine-tuning)
+
+Fine-tune small LLMs (TinyLlama-1.1B, SmolLM2-135M/1.7B — all Apache-2.0) with
+LoRA on the Oracle backend. Training runs on **CPU** (the always-free VM has no
+GPU), so keep datasets small and epochs low; a 1.1B model on a few rows takes a
+few minutes.
+
+### Flow
+
+1. **Datasets** (`/data`) — paste/upload JSONL (`instruction` / optional `input` /
+   `output`), or load the starter dataset / generate synthetic rows. Saved to the
+   Supabase `datasets` bucket.
+2. **Train** (`/train`) — pick base model + dataset, set LoRA hyperparams, start.
+   The job runs as a FastAPI `BackgroundTasks` coroutine; status is polled from the
+   Supabase `jobs` table every 3s. The resulting adapter is saved to the `adapters`
+   bucket and a `models` row is inserted.
+3. **Compare** (`/compare`) — same prompt through two models (base vs a fine-tuned
+   adapter) rendered side-by-side.
+
+### Architecture
+
+```
+Browser ──▶ Vercel (/api/train,/api/compare,/api/jobs) ──▶ Oracle VM
+          Caddy :443 ──▶ FastAPI :8000
+                            ├─ /train  → BackgroundTasks → PEFT LoRA → adapters bucket
+                            ├─ /compare → load base + adapter → generate twice
+                            └─ Supabase: jobs / models tables, datasets / adapters buckets
+```
+
+Unsloth is used automatically **only when CUDA is available** (its Triton kernels
+require a GPU). On CPU the code falls back to vanilla `transformers` + `peft`,
+which is the same ~10-line API — so the wrap is thin and a GPU shape is a drop-in
+later.
 
 ## Persistence (Supabase)
 
@@ -108,17 +153,47 @@ The `backend/` directory contains:
   Editor or `supabase db push --linked`).
 - Table `public.tracks` + `audio` storage bucket + RLS policies (public read/insert
   for the open demo — tighten with auth later).
+- Finetune tables: `supabase/migrations/20260716_finetune_studio.sql`
+  (`jobs`, `models` tables + `datasets` / `adapters` buckets + RLS).
+  Apply with: `supabase db query --linked -f supabase/migrations/20260716_finetune_studio.sql`
 
 ## ⚠️ License (important)
 
 The music model is `Xenova/musicgen-small`, derived from Meta's
 [`facebook/musicgen-small`](https://huggingface.co/facebook/musicgen-small),
 which is released under **`cc-by-nc-4.0` (non-commercial)**. This demo is for
-non-commercial experimentation only.
+non-commercial experimentation only. The finetune base models (TinyLlama,
+SmolLM2) are **Apache-2.0** and fine for commercial use.
+
+## Dev Diary / Learnings
+
+A running log of non-obvious things learned while building this. Useful when
+resuming agentic work on this repo.
+
+- **Server-only music generation.** We dropped the in-browser WASM fallback
+  (MusicGen ~656MB) — generation is server-side on Oracle. The worker file
+  (`musicgen.worker.ts`) is kept as reference only.
+- **Vercel deploys `main`, not PR branches.** Pushes to `feat/*` branches do NOT
+  auto-update `https://hello-ai-wheat.vercel.app` unless Vercel is pointed at that
+  branch or the PR is merged. The live site reflects the deployed production branch.
+- **Docker Compose `.env` injection.** Compose reads `.env` relative to the CWD it
+  is launched from. Run `cd ~/backend && docker compose up -d` or the container gets
+  empty env (silent Supabase misconfig → 500s). Verified root cause of a `/generate`
+  and `/train` 500.
+- **Oracle VM has no GPU.** Training uses CPU PEFT LoRA. Unsloth auto-selected only
+  with CUDA; otherwise vanilla `transformers`. Small models + small datasets only.
+- **Supabase migration apply:** `supabase db query --linked -f <migration.sql>`.
+  (`supabase link --project-ref <ref>` first; CLI v2.109 auto-links via device auth.)
+- **Caddy auto-TLS** via Let's Encrypt on the DuckDNS domain; no manual certs.
+- **Adapters persist** in a named Docker volume `backend_adapters` mounted at
+  `/data/adapters`; the backend also caches adapter files pulled from Supabase.
+- **Job status** is the source of truth in Supabase `jobs`; the backend keeps an
+  in-memory `loss_log` tail (last 4000 chars) for fast polling.
 
 ## Roadmap
 
 - 🔜 Reference-audio **melody conditioning** (upload a clip to guide the melody)
-- 🔜 Side-by-side **compare** of two generations
-- 🔜 **ACE-Step** local mode (Python/MPS, commercial-friendly) + LoRA fine-tuning
+- 🔜 **ACE-Step** local mode (Python/MPS, commercial-friendly)
+- 🔜 Optional **GPU shape** on Oracle for faster LoRA training (drop-in: enable Unsloth)
+- 🔜 Synthetic dataset generation via a small LLM (currently client-side templates)
 
