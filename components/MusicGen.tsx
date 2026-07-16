@@ -11,6 +11,15 @@ const EXAMPLES = [
   "lofi slow bpm electro chill with organic samples",
 ];
 
+function saveAudio(url: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `musicgen-${Date.now()}.wav`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export default function MusicGen() {
   const [textInput, setTextInput] = useState(EXAMPLES[0]);
   const [status, setStatus] = useState("Loading model (~656MB)…");
@@ -187,6 +196,9 @@ export default function MusicGen() {
       {audioUrl && (
         <div className="player">
           <audio ref={audioRef} controls src={audioUrl} />
+          <button className="save" onClick={() => saveAudio(audioUrl!)}>
+            Save .wav
+          </button>
           <Visualizer audioRef={audioRef} />
         </div>
       )}
