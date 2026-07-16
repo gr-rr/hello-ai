@@ -73,6 +73,7 @@ export default function Chat() {
 
       const streamer = new TextStreamer(generator.tokenizer, {
         skip_prompt: true,
+        skip_special_tokens: true,
         callback_function: (t: string) => {
           setMessages((m) => {
             const copy = [...m];
@@ -85,14 +86,10 @@ export default function Chat() {
         },
       });
 
-      const inputs = generator.tokenizer.apply_chat_template(next, {
-        add_generation_prompt: true,
-        return_dict: true,
-      });
-
-      await generator(inputs, {
+      await generator(next, {
         max_new_tokens: 256,
         do_sample: false,
+        return_full_text: false,
         streamer,
       });
 
