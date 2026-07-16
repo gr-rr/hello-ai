@@ -24,6 +24,7 @@ export default function MusicGen() {
   const [textInput, setTextInput] = useState(EXAMPLES[0]);
   const [status, setStatus] = useState("Loading model (~656MB)…");
   const [progress, setProgress] = useState(0);
+  const [indeterminate, setIndeterminate] = useState(false);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -62,9 +63,11 @@ export default function MusicGen() {
         setAudioUrl(url);
         setStatus("Done!");
         setProgress(1);
+        setIndeterminate(false);
         setBusy(false);
       } else if (msg.type === "error") {
         setStatus("⚠️ " + msg.message);
+        setIndeterminate(false);
         setBusy(false);
       }
     };
@@ -85,18 +88,9 @@ export default function MusicGen() {
     setBusy(true);
     setAudioUrl(null);
     if (audioRef.current) audioRef.current.src = "";
-
-    // Coarse progress while generation runs off the main thread (in the worker).
-    const start = Date.now();
-    const estMs = Math.max(4000, duration * 1000 * 2.5);
-    const timer = setInterval(() => {
-      const p = Math.min(0.95, (Date.now() - start) / estMs);
-      setProgress(p);
-      setStatus(`Generating (${(p * 100).toFixed(0)}%)…`);
-    }, 500);
-
-    const onResult = () => clearInterval(timer);
-    workerRef.current?.addEventListener("message", onResult, { once: true });
+    setProgress(0);
+    setIndeterminate(true);
+    setStatus("Generating… (this can take 10–30s on your device)");
 
     try {
       workerRef.current?.postMessage({
@@ -107,7 +101,7 @@ export default function MusicGen() {
         temperature,
       });
     } catch (err) {
-      clearInterval(timer);
+      setIndeterminate(false);
       const msg = err instanceof Error ? err.message : String(err ?? "unknown");
       setStatus("⚠️ Generation error: " + msg);
       setBusy(false);
@@ -185,10 +179,10 @@ export default function MusicGen() {
         {busy ? "Generating…" : "Generate Music"}
       </button>
 
-      <div className="progress">
+      <div className={`progress${indeterminate ? " indeterminate" : ""}`}>
         <div
           className="progress-bar"
-          style={{ width: `${Math.round(progress * 100)}%` }}
+          style={{ width: indeterminate ? undefined : `${Math.round(progress * 100)}%` }}
         />
       </div>
       <div className="status">{status}</div>

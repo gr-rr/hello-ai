@@ -264,6 +264,20 @@ a {
   transition: width 0.2s ease;
 }
 
+.progress.indeterminate .progress-bar {
+  width: 40% !important;
+  animation: indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% {
+    margin-left: -40%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
 .player {
   display: flex;
   flex-direction: column;
