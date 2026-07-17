@@ -130,29 +130,65 @@ def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Audio -> MIDI (basic-pitch)
+# Audio cleanup (ffmpeg pipeline, hidden preprocessing step)
 # ---------------------------------------------------------------------------
-def transcribe_audio(audio_bytes: bytes, fmt: str = "wav", onset_threshold: float = 0.5, frame_threshold: float = 0.3) -> dict:
-    """Transcribe audio to MIDI. Returns a dict with midi (bytes), wav (bytes),
-    notes (list of {pitch, start, end, velocity}), and duration_s."""
-    from basic_pitch.inference import predict
+def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
+    """Light, CPU-friendly cleanup of a raw recording: denoise (afftdn),
+    declip (adeclip), and EBU R128 normalize (loudnorm). Returns cleaned WAV.
 
+    Runs transparently before transcription so every upload/recording is
+    cleaned without the user opting in. No-op safe: returns input if ffmpeg
+    is unavailable or the pipeline fails.
+    """
     suffix = fmt if fmt.startswith(".") else f".{fmt}"
     with tempfile.TemporaryDirectory() as td:
         in_path = os.path.join(td, f"input{suffix}")
         with open(in_path, "wb") as f:
             f.write(audio_bytes)
-        # basic-pitch only reads wav/flac/ogg/mp3; convert anything else
-        # (e.g. webm from MediaRecorder) to wav via ffmpeg first.
+        src = in_path
+        # basic-pitch only reads wav/flac/ogg/mp3; convert other formats first.
         if suffix not in (".wav", ".flac", ".ogg", ".mp3", ".m4a", ".aac"):
-            wav_path = os.path.join(td, "input.wav")
             conv = subprocess.run(
-                ["ffmpeg", "-y", "-i", in_path, "-ac", "1", "-ar", "22050", wav_path],
+                ["ffmpeg", "-y", "-i", src, "-ac", "1", "-ar", "22050",
+                 os.path.join(td, "input_conv.wav")],
                 capture_output=True,
             )
-            if conv.returncode != 0 or not os.path.exists(wav_path):
-                raise RuntimeError("ffmpeg conversion failed: " + conv.stderr.decode()[:300])
-            in_path = wav_path
+            if conv.returncode != 0 or not os.path.exists(os.path.join(td, "input_conv.wav")):
+                logger.warning("enhance: pre-convert failed, using raw input")
+                return audio_bytes
+            src = os.path.join(td, "input_conv.wav")
+        out_path = os.path.join(td, "clean.wav")
+        cmd = [
+            "ffmpeg", "-y", "-i", src,
+            "-af", "afftdn=nr=12:nf=-30,adeclip,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar", "22050", "-ac", "1", out_path,
+        ]
+        res = subprocess.run(cmd, capture_output=True)
+        if res.returncode != 0 or not os.path.exists(out_path):
+            logger.warning("enhance pipeline failed, using source: " + res.stderr.decode()[:200])
+            # Fall back to the (already converted) source if cleanup failed.
+            if src != in_path:
+                with open(src, "rb") as f:
+                    return f.read()
+            return audio_bytes
+        with open(out_path, "rb") as f:
+            return f.read()
+
+
+# ---------------------------------------------------------------------------
+# Audio -> MIDI (basic-pitch)
+# ---------------------------------------------------------------------------
+def transcribe_audio(audio_bytes: bytes, fmt: str = "wav", onset_threshold: float = 0.5, frame_threshold: float = 0.3) -> dict:
+    """Transcribe audio to MIDI. Returns a dict with midi (bytes), wav (bytes),
+    notes (list of {pitch, start, end, velocity}), and duration_s.
+
+    Expects clean WAV (callers run enhance_audio first)."""
+    from basic_pitch.inference import predict
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, "input.wav")
+        with open(in_path, "wb") as f:
+            f.write(audio_bytes)
         # basic-pitch writes <input_stem>.mid + note events to out_dir.
         out_dir = os.path.join(td, "out")
         os.makedirs(out_dir, exist_ok=True)

@@ -16,7 +16,7 @@ from finetune_server import (
     train_lora,
     generate as ft_generate,
 )
-from music_features import transcribe_audio, midi_to_wav
+from music_features import transcribe_audio, midi_to_wav, enhance_audio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
@@ -359,6 +359,49 @@ async def upload_library(req: dict):
     path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
     url = _sb_upload("library", path, raw, f"audio/{fmt}")
     return {"path": path, "url": url}
+
+
+class EnhanceRequest(BaseModel):
+    audio_base64: Optional[str] = None
+    library_path: Optional[str] = None
+    fmt: str = "wav"
+    upload: bool = True
+
+
+@app.post("/music/enhance")
+def enhance(req: EnhanceRequest):
+    """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
+
+    This is the audio-quality preprocessing step, run before transcription or
+    storage so every uploaded/recorded clip is consistent. Returns cleaned
+    WAV (base64) and, when upload=True, a stored URL.
+    """
+    if req.audio_base64:
+        try:
+            audio = base64.b64decode(req.audio_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64")
+    elif req.library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        key = req.library_path.replace("library/", "")
+        data = sb.storage.from_("library").download(key)
+        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+    else:
+        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+    try:
+        cleaned = enhance_audio(audio, fmt=req.fmt)
+    except Exception as e:
+        logger.exception("enhance failed")
+        raise HTTPException(status_code=500, detail=f"enhance failed: {e}")
+
+    out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
+    if req.upload:
+        path = f"library/{uuid.uuid4().hex}-enhanced.wav"
+        out["url"] = _sb_upload("library", path, cleaned, "audio/wav")
+    return out
 
 
 @app.post("/music/transcribe")

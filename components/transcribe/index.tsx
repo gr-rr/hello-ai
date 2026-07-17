@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import {
   transcribeAudio,
-  uploadToLibrary,
+  enhanceAudio,
   wavToDataUrl,
   midiToDataUrl,
   type TranscribeResult,
@@ -29,24 +29,8 @@ export default function Transcribe() {
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setBusy(true);
-    setStatus("Transcribing… (basic-pitch on the Oracle backend)");
-    setResult(null);
     setAudioName(file.name);
-    try {
-      const buf = await file.arrayBuffer();
-      const b64 = btoa(
-        new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
-      );
-      const fmt = (file.name.split(".").pop() || "wav").toLowerCase();
-      const res = await transcribeAudio(b64, fmt);
-      setResult(res);
-      setStatus(`Done — ${res.num_notes} notes extracted.`);
-    } catch (err) {
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "transcription failed"));
-    } finally {
-      setBusy(false);
-    }
+    await processBlob(file);
   }
 
   async function startRecording() {
@@ -78,20 +62,28 @@ export default function Transcribe() {
   }
 
   async function handleRecording(blob: Blob) {
-    setBusy(true);
-    setResult(null);
     const name = `recording-${Date.now()}.webm`;
     setAudioName(name);
+    await processBlob(blob);
+  }
+
+  async function processBlob(blob: Blob) {
+    setBusy(true);
+    setResult(null);
     try {
-      setStatus("Saving recording to library…");
-      await uploadToLibrary(name, blob);
-      setStatus("Transcribing… (basic-pitch on the Oracle backend)");
       const buf = await blob.arrayBuffer();
       const b64 = btoa(
         new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
       );
-      const fmt = (blob.type.includes("ogg") ? "ogg" : blob.type.includes("mp4") ? "mp4" : "webm");
-      const res = await transcribeAudio(b64, fmt);
+      const fmt = blob.type.includes("ogg")
+        ? "ogg"
+        : blob.type.includes("mp4")
+          ? "mp4"
+          : "webm";
+      setStatus("Cleaning up audio… (denoise + normalize)");
+      const clean = await enhanceAudio(b64, fmt);
+      setStatus("Transcribing… (basic-pitch on the Oracle backend)");
+      const res = await transcribeAudio(clean.wav_base64, "wav");
       setResult(res);
       setStatus(`Done — ${res.num_notes} notes extracted.`);
     } catch (err) {

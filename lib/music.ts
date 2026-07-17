@@ -50,6 +50,21 @@ export async function transcribeAudio(
   return data as TranscribeResult;
 }
 
+/** Preprocess: denoise/declip/normalize a raw recording via the backend. */
+export async function enhanceAudio(
+  dataBase64: string,
+  fmt = "wav",
+): Promise<{ wav_base64: string; url?: string }> {
+  const res = await fetch("/api/music/enhance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audio_base64: dataBase64, fmt, upload: false }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "enhance failed");
+  return data;
+}
+
 export function midiToDataUrl(base64: string): string {
   return `data:audio/midi;base64,${base64}`;
 }
