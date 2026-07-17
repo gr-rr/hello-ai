@@ -1,0 +1,60 @@
+import { supabase } from "./supabase";
+
+/**
+ * Generic Supabase Storage helpers — single source of truth for all buckets
+ * (audio, library, midi, enhanced, analysis, datasets, adapters). Features
+ * should call these instead of touching supabase.storage directly.
+ */
+
+export async function uploadFile(
+  bucket: string,
+  path: string,
+  data: string | Blob | ArrayBuffer,
+  contentType?: string,
+  upsert = false,
+): Promise<void> {
+  if (!supabase) throw new Error("Supabase not configured");
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, data as any, {
+      contentType,
+      upsert,
+    });
+  if (error) throw error;
+}
+
+export async function listFiles(
+  bucket: string,
+  prefix = "",
+): Promise<{ name: string; id?: string; updated_at?: string }[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.storage
+    .from(bucket)
+    .list(prefix, { sortBy: { column: "created_at", order: "desc" } });
+  if (error) throw error;
+  return (data ?? []) as any[];
+}
+
+export async function downloadFile(
+  bucket: string,
+  path: string,
+): Promise<string> {
+  if (!supabase) throw new Error("Supabase not configured");
+  const key = path.replace(/^\/?/, "");
+  const { data, error } = await supabase.storage.from(bucket).download(key);
+  if (error) throw error;
+  return await (data as Blob).text();
+}
+
+export function getPublicUrl(bucket: string, path: string): string {
+  if (!supabase) return "";
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export function bucketPath(...parts: string[]): string {
+  return parts
+    .map((p) => p.replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/");
+}

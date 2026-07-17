@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL = process.env.MUSIC_BACKEND_URL || "http://129.146.52.142";
+const BACKEND_URL =
+  process.env.MUSIC_BACKEND_URL || "https://gricci-testing.duckdns.org";
 
 /**
  * Generic reverse-proxy to the Oracle FastAPI backend.
