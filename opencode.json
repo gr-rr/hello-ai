@@ -10,7 +10,10 @@
     "sentry": {
       "type": "remote",
       "url": "https://mcp.sentry.dev/mcp/giancarlo-ricci/javascript-nextjs",
-      "enabled": true
+      "enabled": true,
+      "headers": {
+        "Authorization": "Sentry-Bearer {env:SENTRY_ACCESS_TOKEN}"
+      }
     }
   }
 }
