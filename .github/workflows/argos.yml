@@ -32,8 +32,6 @@ jobs:
             sleep 1
           done
       - name: visual tests
-        # Skip upload if no token is configured; otherwise push to Argos.
-        if: ${{ secrets.ARGOS_TOKEN != '' }}
         run: npx playwright test
         env:
           ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}
