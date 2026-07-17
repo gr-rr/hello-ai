@@ -183,6 +183,11 @@ export default function MusicGen() {
     setAudioUrl(supabaseAudioUrl(t.audio_path));
     setAudioBlob(null);
     setSaved(true);
+    // Auto-play once the new src is applied (user gesture = ▶ Play click).
+    setTimeout(() => {
+      audioRef.current?.load();
+      audioRef.current?.play().catch(() => {});
+    }, 0);
   }
 
   async function generate() {
@@ -334,7 +339,7 @@ export default function MusicGen() {
 
       {audioUrl && (
         <div className="player">
-          <audio ref={audioRef} controls src={audioUrl} />
+          <audio ref={audioRef} controls src={audioUrl} crossOrigin="anonymous" />
           <div className="save-row">
             <button className="save" onClick={() => saveAudio(audioUrl!)}>
               Save .wav

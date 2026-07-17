@@ -167,6 +167,11 @@ def models_base():
 
 @app.post("/train")
 def train(req: TrainRequest, background_tasks: BackgroundTasks):
+    # Training is disabled by default: it runs on the CPU-only Oracle VM and can
+    # saturate all cores (no GPU). Set DISABLE_TRAINING=false to re-enable once a
+    # GPU shape / job queue is in place.
+    if os.environ.get("DISABLE_TRAINING", "true").lower() != "false":
+        raise HTTPException(status_code=503, detail="training is disabled")
     if not req.dataset_text and not req.dataset_path:
         raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
     job_id = uuid.uuid4().hex

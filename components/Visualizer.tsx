@@ -37,6 +37,14 @@ export default function Visualizer({ audioRef }: Props) {
       source.connect(analyser);
       analyser.connect(ctx.destination);
 
+      // Browsers create the AudioContext suspended until a user gesture.
+      // If it stays suspended, cross-origin audio routed through Web Audio is
+      // silenced. Resume it on play so gallery/saved playback actually sounds.
+      const resume = () => {
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      };
+      audioEl.addEventListener("play", resume);
+
       const bufferLength = analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
 

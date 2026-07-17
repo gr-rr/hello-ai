@@ -6,19 +6,47 @@ import Chat from "./Chat";
 import DataStudio from "./DataStudio";
 import TrainStudio from "./TrainStudio";
 import CompareStudio from "./CompareStudio";
+import Piano from "./Piano";
 
-export type Tab = "overview" | "music" | "chat" | "data" | "train" | "compare";
+export type Tab =
+  | "overview"
+  | "music"
+  | "chat"
+  | "piano"
+  | "data"
+  | "train"
+  | "compare";
+
+// Feature flags. LoRA training/compare is disabled for now — it runs on the
+// CPU-only Oracle VM and can saturate it (no GPU). Re-enable here when a GPU
+// shape or queue is in place.
+const FEATURES = {
+  data: true,
+  train: false,
+  compare: false,
+};
 
 const TABS: { id: Tab; label: string; desc: string }[] = [
   { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)" },
   { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)" },
+  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)" },
   { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL" },
-  { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA" },
-  { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs" },
+  ...(FEATURES.train
+    ? [{ id: "train" as Tab, label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA" }]
+    : []),
+  ...(FEATURES.compare
+    ? [{ id: "compare" as Tab, label: "⚖️ Compare", desc: "Side-by-side model outputs" }]
+    : []),
 ];
 
 export default function Studio({ initialTab = "overview" }: { initialTab?: Tab }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const safeInitial: Tab =
+    initialTab === "train" && !FEATURES.train
+      ? "overview"
+      : initialTab === "compare" && !FEATURES.compare
+      ? "overview"
+      : initialTab;
+  const [tab, setTab] = useState<Tab>(safeInitial);
 
   if (tab === "overview") {
     return (
@@ -68,6 +96,7 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: Tab }
 
       {tab === "music" && <MusicGen />}
       {tab === "chat" && <Chat />}
+      {tab === "piano" && <Piano />}
       {tab === "data" && <DataStudio />}
       {tab === "train" && <TrainStudio />}
       {tab === "compare" && <CompareStudio />}

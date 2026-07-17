@@ -29,7 +29,9 @@ export type DatasetRow = {
 
 export async function uploadDataset(name: string, jsonl: string): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
-  const path = `datasets/${Date.now()}-${name.replace(/[^a-z0-9]/gi, "_")}.jsonl`;
+  // Store at the bucket root (the bucket itself is "datasets"); a "datasets/"
+  // prefix would nest a folder and hide files from list("").
+  const path = `${Date.now()}-${name.replace(/[^a-z0-9]/gi, "_")}.jsonl`;
   const { error } = await supabase.storage
     .from("datasets")
     .upload(path, jsonl, { contentType: "application/json", upsert: false });
@@ -43,12 +45,17 @@ export async function listDatasets(): Promise<string[]> {
     sortBy: { column: "created_at", order: "desc" },
   });
   if (error) throw error;
-  return (data ?? []).map((f) => f.name);
+  const names = (data ?? [])
+    .filter((f) => f.name.endsWith(".jsonl"))
+    .map((f) => f.name);
+  return names;
 }
 
 export async function downloadDataset(path: string): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
-  const { data, error } = await supabase.storage.from("datasets").download(path);
+  // Accept either a bare filename or a "datasets/..." prefix.
+  const key = path.replace(/^datasets\//, "");
+  const { data, error } = await supabase.storage.from("datasets").download(key);
   if (error) throw error;
   return await (data as Blob).text();
 }
