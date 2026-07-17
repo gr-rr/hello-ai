@@ -30,6 +30,8 @@ os.makedirs(ADAPTER_ROOT, exist_ok=True)
 # when configured, this is the fallback for quick status updates).
 _job_logs: dict[str, str] = {}
 _job_lock = threading.Lock()
+# Single-slot training guard: only one training run at a time on the CPU VM.
+_training_slot = threading.Lock()
 
 
 class GenerateRequest(BaseModel):
@@ -103,54 +105,55 @@ def _run_training(job_id: str, req: TrainRequest):
     if sb:
         sb.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
     try:
-        # Resolve dataset text.
-        if req.dataset_text:
-            text = req.dataset_text
-        elif req.dataset_path:
-            sb2 = _sb()
-            if not sb2:
-                raise RuntimeError("Supabase not configured for dataset fetch")
-            data = sb2.storage.from_("datasets").download(req.dataset_path)
-            text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
-        else:
-            raise ValueError("no dataset provided")
+        with _training_slot:
+            # Resolve dataset text.
+            if req.dataset_text:
+                text = req.dataset_text
+            elif req.dataset_path:
+                sb2 = _sb()
+                if not sb2:
+                    raise RuntimeError("Supabase not configured for dataset fetch")
+                data = sb2.storage.from_("datasets").download(req.dataset_path)
+                text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+            else:
+                raise ValueError("no dataset provided")
 
-        rows = load_dataset_jsonl(text)
+            rows = load_dataset_jsonl(text)
 
-        adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
-        params = {
-            "lora_r": req.lora_r,
-            "lora_alpha": req.lora_alpha,
-            "epochs": req.epochs,
-            "learning_rate": req.learning_rate,
-            "max_seq_len": req.max_seq_len or 1024,
-            "batch_size": req.batch_size,
-        }
-        train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
+            adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
+            params = {
+                "lora_r": req.lora_r,
+                "lora_alpha": req.lora_alpha,
+                "epochs": req.epochs,
+                "learning_rate": req.learning_rate,
+                "max_seq_len": req.max_seq_len or 1024,
+                "batch_size": req.batch_size,
+            }
+            train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
 
-        # Persist adapter to Supabase if configured.
-        adapter_path = f"adapters/{job_id}"
-        sb3 = _sb()
-        if sb3:
-            for fname in os.listdir(adapter_dir):
-                with open(os.path.join(adapter_dir, fname), "rb") as f:
-                    sb3.storage.from_("adapters").upload(
-                        f"{job_id}/{fname}", f.read(),
-                        {"content-type": "application/octet-stream"}, upsert=True,
-                    )
-            sb3.table("models").insert({
-                "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
-                "base_model": req.base_model,
-                "job_id": job_id,
-                "adapter_path": adapter_path,
-            }).execute()
+            # Persist adapter to Supabase if configured.
+            adapter_path = f"adapters/{job_id}"
+            sb3 = _sb()
+            if sb3:
+                for fname in os.listdir(adapter_dir):
+                    with open(os.path.join(adapter_dir, fname), "rb") as f:
+                        sb3.storage.from_("adapters").upload(
+                            f"{job_id}/{fname}", f.read(),
+                            file_options={"content-type": "application/octet-stream"},
+                        )
+                sb3.table("models").insert({
+                    "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
+                    "base_model": req.base_model,
+                    "job_id": job_id,
+                    "adapter_path": adapter_path,
+                }).execute()
 
-        if sb:
-            sb.table("jobs").update({
-                "status": "done", "finished_at": "now()",
-                "loss_log": _job_logs.get(job_id, ""),
-            }).eq("id", job_id).execute()
-        _append_log(job_id, "DONE")
+            if sb:
+                sb.table("jobs").update({
+                    "status": "done", "finished_at": "now()",
+                    "loss_log": _job_logs.get(job_id, ""),
+                }).eq("id", job_id).execute()
+            _append_log(job_id, "DONE")
     except Exception as e:
         logger.exception("training failed")
         _append_log(job_id, f"ERROR: {e}")
@@ -167,11 +170,16 @@ def models_base():
 
 @app.post("/train")
 def train(req: TrainRequest, background_tasks: BackgroundTasks):
-    # Training is disabled by default: it runs on the CPU-only Oracle VM and can
-    # saturate all cores (no GPU). Set DISABLE_TRAINING=false to re-enable once a
-    # GPU shape / job queue is in place.
-    if os.environ.get("DISABLE_TRAINING", "true").lower() != "false":
+    # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
+    if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
+    # Single-slot guard: only one training run at a time on the CPU-only VM.
+    if not _training_slot.acquire(blocking=False):
+        raise HTTPException(
+            status_code=409,
+            detail="a training job is already running — wait for it to finish",
+        )
+    _training_slot.release()  # _run_training re-acquires it for the actual run.
     if not req.dataset_text and not req.dataset_path:
         raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
     job_id = uuid.uuid4().hex

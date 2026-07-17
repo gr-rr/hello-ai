@@ -13,8 +13,10 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       # Persisted trained LoRA adapters (survive container restarts).
       ADAPTER_ROOT: /data/adapters
-      # CPU-only VM: disable LoRA training so it can't saturate all cores.
-      DISABLE_TRAINING: "true"
+      # CPU-only VM: training is ENABLED but guarded (thread cap + single-slot
+      # lock + wall-clock budget in finetune_server.train_lora). Set "true" to
+      # hard-disable.
+      DISABLE_TRAINING: "false"
     volumes:
       - adapters:/data/adapters
     networks:

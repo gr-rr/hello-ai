@@ -17,13 +17,13 @@ export type Tab =
   | "train"
   | "compare";
 
-// Feature flags. LoRA training/compare is disabled for now — it runs on the
-// CPU-only Oracle VM and can saturate it (no GPU). Re-enable here when a GPU
-// shape or queue is in place.
+// Feature flags. LoRA training/compare re-enabled: the backend now caps CPU
+// threads (half the cores), enforces a single training slot, and aborts a run
+// after a wall-clock budget — so it can no longer saturate the CPU-only VM.
 const FEATURES = {
   data: true,
-  train: false,
-  compare: false,
+  train: true,
+  compare: true,
 };
 
 const TABS: { id: Tab; label: string; desc: string }[] = [

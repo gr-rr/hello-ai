@@ -11,9 +11,29 @@ import io
 import json
 import logging
 import os
+import time
 import uuid
 
 logger = logging.getLogger("finetune_server")
+
+# CPU compute guardrails. The Oracle VM is 4 ARM cores with no GPU; training on
+# all cores starves /generate + Caddy and can make the box unresponsive. Cap the
+# threads torch/OpenMP will use so at least 2 cores stay free for the rest.
+def _cap_threads(n: int | None = None):
+    import torch
+
+    if n is None:
+        total = os.cpu_count() or 4
+        # Reserve ~half the cores (min 1) for the rest of the system.
+        n = max(1, total // 2)
+    os.environ.setdefault("OMP_NUM_THREADS", str(n))
+    os.environ.setdefault("MKL_NUM_THREADS", str(n))
+    try:
+        torch.set_num_threads(n)
+    except Exception:
+        pass
+    return n
+
 
 # Base models available in the UI. Apache-2.0 where possible.
 BASE_MODELS = {
@@ -82,9 +102,14 @@ def train_lora(
     `log_fn(message)` is called with progress lines (captured into jobs.loss_log).
     """
     import torch
+
+    n_threads = _cap_threads()
+    log_fn(f"cpu thread cap: {n_threads} (of {os.cpu_count() or 4})")
+
     from transformers import (
         TrainingArguments,
         Trainer,
+        TrainerCallback,
         DataCollatorForLanguageModeling,
     )
     from peft import LoraConfig, get_peft_model
@@ -93,10 +118,11 @@ def train_lora(
     if base_model not in BASE_MODELS:
         raise ValueError(f"unknown base model: {base_model}")
 
-    max_seq_len = int(params.get("max_seq_len", BASE_MODELS[base_model]["max_seq_len"]))
+    # Bound the workload so a single job can't run forever / OOM the box.
+    max_seq_len = min(int(params.get("max_seq_len", BASE_MODELS[base_model]["max_seq_len"])), 1024)
     r = int(params.get("lora_r", 16))
     lora_alpha = int(params.get("lora_alpha", 32))
-    epochs = float(params.get("epochs", 3))
+    epochs = min(float(params.get("epochs", 3)), 3.0)
     lr = float(params.get("learning_rate", 2e-4))
     batch_size = int(params.get("batch_size", 4))
 
@@ -182,7 +208,21 @@ def train_lora(
         data_collator=data_collator,
     )
 
-    log_fn(f"training on {len(ds)} examples, {epochs} epochs")
+    # Wall-clock budget: abort the run if it exceeds the cap so a single job
+    # can never peg the CPU indefinitely. Default 25 min (CPU-only VM).
+    budget_s = float(os.environ.get("TRAIN_TIMEOUT_S", "1500"))
+
+    class _TimeBudgetCallback(TrainerCallback):
+        def on_step_end(self, args, state, control, **kwargs):
+            if time.monotonic() - _t0 > budget_s:
+                log_fn(f"wall-clock budget {budget_s}s exceeded — stopping")
+                control.should_training_stop = True
+            return control
+
+    _t0 = time.monotonic()
+    trainer.add_callback(_TimeBudgetCallback())
+
+    log_fn(f"training on {len(ds)} examples, {epochs} epochs (budget {budget_s:.0f}s)")
     result = trainer.train()
     log_fn(f"train loss: {result.metrics.get('train_loss'):.4f}")
 
