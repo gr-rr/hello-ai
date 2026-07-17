@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { listDatasets, downloadDataset, type Job } from "@/lib/finetune";
+import {
+  listDatasets,
+  downloadDataset,
+  rowsToJsonl,
+  STARTER_DATASET,
+  type Job,
+} from "@/lib/finetune";
 
 type BaseModel = { id: string; label: string; max_seq_len: number };
 
@@ -62,15 +68,19 @@ export default function TrainStudio() {
   }
 
   async function start() {
-    if (!baseModel || !dataset) {
-      setStatus("⚠️ Pick a base model and a dataset.");
+    if (!baseModel) {
+      setStatus("⚠️ Pick a base model.");
       return;
     }
     setBusy(true);
     setStatus("Starting job…");
     setJob(null);
     try {
-      const dataset_text = await downloadDataset(dataset);
+      // Fall back to the built-in starter dataset if none is selected, so the
+      // flow always works even when the Supabase datasets bucket is empty.
+      const dataset_text = dataset
+        ? await downloadDataset(dataset)
+        : rowsToJsonl(STARTER_DATASET);
       const res = await fetch("/api/train", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
