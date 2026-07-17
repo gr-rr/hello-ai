@@ -3,6 +3,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# System libs needed by soundfile (libsndfile) and audio ML deps.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

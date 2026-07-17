@@ -7,6 +7,8 @@ import Piano from "./Piano";
 import DataStudio from "./DataStudio";
 import TrainStudio from "./TrainStudio";
 import CompareStudio from "./CompareStudio";
+import Library from "./library";
+import Transcribe from "./transcribe";
 
 /**
  * Feature registry — the single place that defines which studios exist.
@@ -26,6 +28,8 @@ const FEATURES: Feature[] = [
   { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)", enabled: true, Component: MusicGen },
   { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)", enabled: true, Component: Chat },
   { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)", enabled: true, Component: Piano },
+  { id: "library", label: "📁 Library", desc: "Upload + manage your audio files", enabled: true, Component: Library },
+  { id: "transcribe", label: "🎼 Transcribe", desc: "Audio → MIDI (basic-pitch)", enabled: true, Component: Transcribe },
   { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL", enabled: true, Component: DataStudio },
   { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA", enabled: true, Component: TrainStudio },
   { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs", enabled: true, Component: CompareStudio },
