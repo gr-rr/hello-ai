@@ -1,0 +1,42 @@
+services:
+  backend:
+    image: hello-ai-backend:latest
+    build: .
+    container_name: music-backend
+    restart: unless-stopped
+    environment:
+      # Server-side Supabase (service role — secret, never exposed to browser).
+      # Sourced from ~/backend/.env via `cd ~/backend && docker compose up -d`.
+      # IMPORTANT: never `rsync --delete` the VM backend dir — it would wipe
+      # .env and break Supabase config on next restart. See .env.example.
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      # Persisted trained LoRA adapters (survive container restarts).
+      ADAPTER_ROOT: /data/adapters
+      # CPU-only VM: training is ENABLED but guarded (thread cap + single-slot
+      # lock + wall-clock budget in finetune_server.train_lora). Set "true" to
+      # hard-disable.
+      DISABLE_TRAINING: "false"
+    volumes:
+      - adapters:/data/adapters
+    networks:
+      - proxy
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+
+volumes:
+  adapters:

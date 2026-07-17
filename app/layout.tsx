@@ -2,9 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "hello-ai — In-Browser Music Studio & Local LLM Chat",
+  title: "hello-ai — Music Studio, Finetune & Compare",
   description:
-    "Generate music from text and chat with a local LLM, entirely in your browser via WebGPU and transformers.js.",
+    "Generate music, fine-tune small LLMs, and compare model outputs — with a server backend on Oracle and Supabase.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
