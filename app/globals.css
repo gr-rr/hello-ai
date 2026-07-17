@@ -1,12 +1,72 @@
+/*
+ * Design System — tokens (single source of truth).
+ * Mirror of design/tokens.json. Keep both in sync.
+ * Flow: design/tokens.json (mockups) -> here (implementation) -> Playwright QA diff.
+ */
 :root {
+  /* Color — surfaces */
   --bg: #0b0d12;
   --panel: #141821;
   --panel-2: #1b2030;
+  --panel-3: #232a3a;
+
+  /* Color — text */
   --text: #e6e9ef;
   --muted: #9aa4b2;
+
+  /* Color — brand / accents */
   --accent: #6ea8fe;
   --accent-2: #7c5cff;
+  --accent-soft: rgba(110, 168, 254, 0.14);
+  --danger: #dc2626;
+  --success: #34d399;
+
+  /* Color — lines */
   --border: #232a3a;
+  --border-strong: #2f3850;
+
+  /* Radius scale */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 999px;
+
+  /* Spacing scale (4px base) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* Typography */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 17px;
+  --fs-lg: 22px;
+  --fs-xl: 30px;
+  --fs-2xl: 42px;
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --ring: 0 0 0 3px var(--accent-soft);
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur: 160ms;
 }
 
 * {
@@ -787,3 +847,114 @@ a {
   font-size: 12px;
   font-family: var(--mono, ui-monospace, monospace);
 }
+
+/* ───────────────────────────────────────────────────────────
+ * Design System primitives — use these instead of ad-hoc styles.
+ * Driven by tokens in :root (mirror: design/tokens.json).
+ * ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 8px 14px;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  font-family: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+.btn:hover:not(:disabled) {
+  background: var(--panel-3);
+  border-color: var(--border-strong);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border-color: transparent;
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px 12px;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease);
+}
+.chip.ghost {
+  background: transparent;
+}
+.chip:hover {
+  background: var(--panel-3);
+}
+
+.panel-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+  box-shadow: var(--shadow-sm);
+}
+
+.surface-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+.surface-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: var(--fs-base);
+  font-family: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
