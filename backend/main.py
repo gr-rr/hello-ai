@@ -16,7 +16,7 @@ from finetune_server import (
     train_lora,
     generate as ft_generate,
 )
-from music_features import transcribe_audio, midi_to_wav, enhance_audio
+from music_features import transcribe_audio, enhance_audio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")

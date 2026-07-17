@@ -1,0 +1,33 @@
+language: "en-US"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  path_instructions:
+    - path: "components/**/*.tsx"
+      instructions: |
+        Check for proper use of design tokens (CSS variables from globals.css).
+        No hardcoded colors, font sizes, or spacing.
+        Components must use "use client" only when needed.
+    - path: "lib/**/*.ts"
+      instructions: |
+        TypeScript types must be explicit. Avoid `any`.
+        Prefer server actions over API routes when possible.
+    - path: "backend/**/*.py"
+      instructions: |
+        FastAPI best practices. No dead imports. Type hints required.
+    - path: "tests/**/*.spec.ts"
+      instructions: |
+        Playwright tests must be deterministic. Mock external APIs.
+        No network calls to real backends.
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+chat:
+  auto_reply: true

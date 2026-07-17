@@ -1,97 +1,100 @@
 "use client";
 
 import { useState } from "react";
-import MusicGen from "./MusicGen";
-import Chat from "./Chat";
-import Piano from "./Piano";
-import DataStudio from "./DataStudio";
-import TrainStudio from "./TrainStudio";
-import CompareStudio from "./CompareStudio";
 import Library from "./library";
 import Transcribe from "./transcribe";
+import type { TranscribeResult } from "@/lib/music";
 
-/**
- * Feature registry — the single place that defines which studios exist.
- * New features (transcription, analysis, playground, …) register here as a
- * module under components/<feature>/ exporting a default component. The tab
- * bar and router are generated from this list, so adding a feature is one entry.
- */
-type Feature = {
-  id: string;
-  label: string;
-  desc: string;
-  enabled: boolean;
-  Component: React.ComponentType;
-};
+const STEPS = [
+  { id: "library", label: "Library", num: 1 },
+  { id: "transcribe", label: "Transcribe", num: 2 },
+  { id: "analyze", label: "Analyze", num: 3 },
+] as const;
 
-const FEATURES: Feature[] = [
-  { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)", enabled: false, Component: MusicGen },
-  { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)", enabled: false, Component: Chat },
-  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)", enabled: false, Component: Piano },
-  { id: "library", label: "📁 Library", desc: "Upload + manage your audio files", enabled: true, Component: Library },
-  { id: "transcribe", label: "🎼 Transcribe", desc: "Audio → MIDI (basic-pitch)", enabled: true, Component: Transcribe },
-  { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL", enabled: false, Component: DataStudio },
-  { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA", enabled: false, Component: TrainStudio },
-  { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs", enabled: false, Component: CompareStudio },
-];
+type StepId = (typeof STEPS)[number]["id"];
 
-const TABS = FEATURES.filter((f) => f.enabled);
+export default function Studio({ initialTab = "transcribe" }: { initialTab?: string }) {
+  const safeStep = STEPS.some((s) => s.id === initialTab) ? initialTab : "transcribe";
+  const [step, setStep] = useState<StepId>(safeStep as StepId);
+  const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
+  const [audioName, setAudioName] = useState("");
 
-export default function Studio({ initialTab = "overview" }: { initialTab?: string }) {
-  const safeInitial = TABS.some((t) => t.id === initialTab) ? initialTab : "overview";
-  const [tab, setTab] = useState<string>(safeInitial);
-
-  const active = tab !== "overview" ? FEATURES.find((f) => f.id === tab) : undefined;
-  const ActiveComponent = active?.Component;
+  function onTranscribed(result: TranscribeResult, name: string) {
+    setLastResult(result);
+    setAudioName(name);
+  }
 
   return (
-    <main className="page">
-      <div className="header">
-        <span className="badge">hello-ai · music studio</span>
-        <h1>Audio → Sheet Music</h1>
-        <p>
-          Upload or record audio and turn it into MIDI and playable sheet
-          music. Start from your Library, then Transcribe.
-        </p>
-      </div>
-
-      {tab === "overview" ? (
-        <div className="cards">
-          {TABS.map((t) => (
-            <button key={t.id} className="card" onClick={() => setTab(t.id)}>
-              <span className="card-title">{t.label}</span>
-              <span className="card-desc">{t.desc}</span>
+    <div className="page">
+      <div className="topbar">
+        <div className="stepper">
+          {STEPS.map((s) => (
+            <button
+              key={s.id}
+              className={`stepper-step ${step === s.id ? "active" : ""}`}
+              onClick={() => setStep(s.id)}
+            >
+              <span className="stepper-num">{s.num}</span>
+              {s.label}
             </button>
           ))}
         </div>
-      ) : (
-        <>
-          <div className="tabbar">
-            <button className="back" onClick={() => setTab("overview")}>
-              ← Back
-            </button>
-            <div className="tabs">
-              {TABS.map((t) => (
-                <button
-                  key={t.id}
-                  className={`tab ${tab === t.id ? "active" : ""}`}
-                  onClick={() => setTab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          {ActiveComponent && <ActiveComponent />}
-        </>
-      )}
+      </div>
 
-      {tab === "overview" && (
-        <div className="footer">
-          Powered by basic-pitch, FluidSynth &amp; abcjs, backed by an Oracle
-          backend and Supabase.
+      {step === "library" && (
+        <div className="app-grid">
+          <div className="stage">
+            <Library compact />
+          </div>
         </div>
       )}
-    </main>
+
+      {step === "transcribe" && (
+        <div className="app-grid">
+          <div className="stage">
+            <Transcribe compact onTranscribed={onTranscribed} onGoToAnalyze={() => setStep("analyze")} />
+          </div>
+        </div>
+      )}
+
+      {step === "analyze" && (
+        <div className="app-grid">
+          <div className="stage">
+            <h3 className="stage-h3">📊 Analysis</h3>
+            {lastResult?.analysis ? (
+              <>
+                <p className="muted" style={{ marginBottom: 16 }}>{audioName} · {lastResult.num_notes} notes</p>
+                <div className="analysis-grid">
+                  <div className="analysis-card fade-in">
+                    <span className="analysis-label">Key</span>
+                    <span className="analysis-value">{lastResult.analysis.key.tonic} {lastResult.analysis.key.mode}</span>
+                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.key.confidence * 100)}%` }} /></div>
+                    <span className="confidence-pct">{Math.round(lastResult.analysis.key.confidence * 100)}%</span>
+                  </div>
+                  <div className="analysis-card fade-in" style={{ animationDelay: "0.05s" }}>
+                    <span className="analysis-label">Tempo</span>
+                    <span className="analysis-value">{lastResult.analysis.tempo.bpm} BPM</span>
+                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.tempo.confidence * 100)}%` }} /></div>
+                    <span className="confidence-pct">{Math.round(lastResult.analysis.tempo.confidence * 100)}%</span>
+                  </div>
+                  <div className="analysis-card fade-in" style={{ animationDelay: "0.1s" }}>
+                    <span className="analysis-label">Time signature</span>
+                    <span className="analysis-value">{lastResult.analysis.time_signature.numerator}/{lastResult.analysis.time_signature.denominator}</span>
+                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.time_signature.confidence * 100)}%` }} /></div>
+                    <span className="confidence-pct">{Math.round(lastResult.analysis.time_signature.confidence * 100)}%</span>
+                  </div>
+                </div>
+              </>
+            ) : lastResult ? (
+              <p className="muted">This transcription has no analysis data.</p>
+            ) : (
+              <p className="muted">Transcribe an audio file first, then view its analysis here.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="footer">basic-pitch · FluidSynth · abcjs</div>
+    </div>
   );
 }

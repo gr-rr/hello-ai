@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { uploadFile, getPublicUrl, listFiles, bucketPath } from "./storage";
+import { uploadFile, getPublicUrl, listFiles, deleteFile, bucketPath } from "./storage";
 
 export type TranscribeResult = {
   notes: { pitch: number; start: number; end: number; velocity: number }[];
@@ -8,6 +8,11 @@ export type TranscribeResult = {
   wav_base64?: string;
   midi_url?: string;
   wav_url?: string;
+  analysis?: {
+    key: { tonic: string; mode: string; confidence: number };
+    tempo: { bpm: number; confidence: number };
+    time_signature: { numerator: number; denominator: number; confidence: number };
+  };
 };
 
 const LIBRARY_BUCKET = "library";
@@ -20,19 +25,29 @@ const MIDI_BUCKET = "midi";
 export async function uploadToLibrary(name: string, blob: Blob): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
   const fmt = (name.split(".").pop() || "wav").toLowerCase();
-  const path = bucketPath("library", `${Date.now()}-${name.replace(/[^a-z0-9.\-_]/gi, "_")}`);
+  const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
+  const path = bucketPath("library", `${Date.now()}-${safeName}`);
   await uploadFile(LIBRARY_BUCKET, path, blob, `audio/${fmt}`, true);
   return getPublicUrl(LIBRARY_BUCKET, path);
 }
 
-export async function listLibrary(): Promise<{ name: string; url: string }[]> {
+export async function listLibrary(): Promise<{ name: string; url: string; id: string }[]> {
   const files = await listFiles(LIBRARY_BUCKET, "library");
   return files
     .filter((f) => !f.name.endsWith("/"))
-    .map((f) => ({
-      name: f.name,
-      url: getPublicUrl(LIBRARY_BUCKET, bucketPath("library", f.name)),
-    }));
+    .map((f) => {
+      const path = bucketPath("library", f.name);
+      const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
+      return {
+        name: displayName,
+        url: getPublicUrl(LIBRARY_BUCKET, path),
+        id: f.name,
+      };
+    });
+}
+
+export async function deleteFromLibrary(id: string): Promise<void> {
+  await deleteFile(LIBRARY_BUCKET, bucketPath("library", id));
 }
 
 /** Call the backend to transcribe audio bytes -> MIDI (+ synthesized WAV). */

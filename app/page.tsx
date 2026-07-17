@@ -6,6 +6,6 @@ export default async function Home({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const sp = await searchParams;
-  const tab = (sp.tab as any) || "overview";
+  const tab = (sp.tab as string) || "overview";
   return <Studio initialTab={tab} />;
 }
