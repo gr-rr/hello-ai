@@ -3,9 +3,9 @@
 - transcribe_audio: arbitrary audio (wav/mp3/ogg/flac) -> MIDI (basic-pitch,
   Apache-2.0). Also returns a synthesized WAV rendering of that MIDI (so the
   user gets a corresponding audio<->text pair) and the raw note events.
-- midi_to_wav: render a MIDI file to a WAV using a self-contained numpy piano
-  synthesizer (additive sine partials + ADSR), so we avoid pulling in fluidsynth
-  or a large soundfont dependency.
+- midi_to_wav: render a MIDI file to a WAV using FluidSynth + a bundled piano
+  SoundFont for a natural instrument timbre. Falls back to a self-contained
+  numpy piano synth if FluidSynth / the SoundFont is unavailable.
 
 Runs on CPU (Oracle always-free ARM VM). Suitable for short clips (seconds to a
 couple minutes).
@@ -21,21 +21,56 @@ import soundfile as sf
 
 logger = logging.getLogger("music_features")
 
+# Location of the bundled GM SoundFont used for synthesis. A real-instrument
+# SoundFont (FluidR3_GM) is downloaded at image build time (see Dockerfile).
+SOUNDFONT_PATH = os.environ.get("SOUNDFONT_PATH", "/app/soundfonts/FluidR3_GM.sf2")
+
 
 # ---------------------------------------------------------------------------
-# MIDI -> WAV (self-contained numpy piano synth, no soundfont)
+# MIDI -> WAV (FluidSynth + SoundFont, numpy fallback)
 # ---------------------------------------------------------------------------
+def _midi_to_wav_fluidsynth(midi_bytes: bytes, sr: int = 22050) -> bytes | None:
+    """Render MIDI to WAV via FluidSynth using a bundled SoundFont.
+
+    Returns None if FluidSynth or the SoundFont is unavailable so the caller can
+    fall back to the numpy synth.
+    """
+    if not os.path.exists(SOUNDFONT_PATH):
+        return None
+    try:
+        import fluidsynth  # pyfluidsynth
+    except Exception as e:
+        logger.warning(f"fluidsynth unavailable, falling back to numpy synth: {e}")
+        return None
+
+    with tempfile.TemporaryDirectory() as td:
+        midi_path = os.path.join(td, "input.mid")
+        wav_path = os.path.join(td, "input.wav")
+        with open(midi_path, "wb") as f:
+            f.write(midi_bytes)
+        fs = fluidsynth.Synth(samplerate=float(sr))
+        try:
+            sfid = fs.sfload(SOUNDFONT_PATH)
+            fs.program_select(0, sfid, 0, 0)  # bank 0, piano (prog 0)
+            fs.midi2audio(midi_path, wav_path)
+        finally:
+            fs.delete()
+        if not os.path.exists(wav_path):
+            return None
+        with open(wav_path, "rb") as f:
+            return f.read()
+
+
 def _note_to_freq(midi_note: int) -> float:
     return 440.0 * (2.0 ** ((midi_note - 69) / 12.0))
 
 
-def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
-    """Render MIDI bytes to a 16-bit PCM WAV (mono). Simple polyphonic piano."""
+def _midi_to_wav_numpy(midi_bytes: bytes, sr: int = 22050) -> bytes:
+    """Self-contained polyphonic piano synth (additive sines + ADSR)."""
     import pretty_midi
 
     midi = pretty_midi.PrettyMIDI(io.BytesIO(midi_bytes))
     duration = max(midi.get_end_time(), 0.1)
-    # Small tail for note release.
     n = int((duration + 0.5) * sr)
     out = np.zeros(n, dtype=np.float64)
 
@@ -47,7 +82,6 @@ def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
             if end <= start:
                 end = start + int(0.2 * sr)
             seg = np.arange(end - start) / sr
-            # ADSR-ish envelope.
             env = np.ones_like(seg)
             attack = int(0.01 * sr)
             release = int(0.15 * sr)
@@ -55,7 +89,6 @@ def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
                 env[:attack] = np.linspace(0, 1, attack)
             if len(env) > release:
                 env[-release:] = np.linspace(1, 0, release)
-            # Fundamental + a few partials for a piano-ish timbre.
             sig = np.zeros_like(seg)
             for mult, amp in [(1, 1.0), (2, 0.3), (3, 0.12), (4, 0.06)]:
                 sig += amp * np.sin(2 * np.pi * f * mult * seg)
@@ -67,6 +100,15 @@ def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
     buf = io.BytesIO()
     sf.write(buf, pcm, sr, format="WAV", subtype="PCM_16")
     return buf.getvalue()
+
+
+def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
+    """Render MIDI bytes to a 16-bit PCM WAV. Prefers FluidSynth (natural
+    timbre) and falls back to the numpy synth if unavailable."""
+    wav = _midi_to_wav_fluidsynth(midi_bytes, sr)
+    if wav is not None:
+        return wav
+    return _midi_to_wav_numpy(midi_bytes, sr)
 
 
 # ---------------------------------------------------------------------------
