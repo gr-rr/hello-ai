@@ -25,14 +25,14 @@ type Feature = {
 };
 
 const FEATURES: Feature[] = [
-  { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)", enabled: true, Component: MusicGen },
-  { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)", enabled: true, Component: Chat },
-  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)", enabled: true, Component: Piano },
+  { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)", enabled: false, Component: MusicGen },
+  { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)", enabled: false, Component: Chat },
+  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)", enabled: false, Component: Piano },
   { id: "library", label: "📁 Library", desc: "Upload + manage your audio files", enabled: true, Component: Library },
   { id: "transcribe", label: "🎼 Transcribe", desc: "Audio → MIDI (basic-pitch)", enabled: true, Component: Transcribe },
-  { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL", enabled: true, Component: DataStudio },
-  { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA", enabled: true, Component: TrainStudio },
-  { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs", enabled: true, Component: CompareStudio },
+  { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL", enabled: false, Component: DataStudio },
+  { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA", enabled: false, Component: TrainStudio },
+  { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs", enabled: false, Component: CompareStudio },
 ];
 
 const TABS = FEATURES.filter((f) => f.enabled);
@@ -45,11 +45,11 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: strin
     return (
       <main className="page">
         <div className="header">
-          <span className="badge">hello-ai · unified studio</span>
-          <h1>Pick a studio</h1>
+          <span className="badge">hello-ai · music studio</span>
+          <h1>Audio → Sheet Music</h1>
           <p>
-            Music generation, a local LLM chat, and a finetune lab — all in one
-            place, backed by an Oracle backend and Supabase.
+            Upload or record audio and turn it into MIDI and playable sheet
+            music. Start from your Library, then Transcribe.
           </p>
         </div>
         <div className="cards">
@@ -61,8 +61,8 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: strin
           ))}
         </div>
         <div className="footer">
-          Powered by MusicGen, transformers.js, PEFT/LoRA, Oracle Cloud &amp;
-          Supabase.
+          Powered by basic-pitch, FluidSynth &amp; abcjs, backed by an Oracle
+          backend and Supabase.
         </div>
       </main>
     );
