@@ -16,6 +16,7 @@ from finetune_server import (
     train_lora,
     generate as ft_generate,
 )
+from music_features import transcribe_audio, midi_to_wav, enhance_audio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
@@ -79,6 +80,16 @@ class CompareRequest(BaseModel):
     base_model: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     max_new_tokens: int = 128
     temperature: float = 0.7
+
+
+class TranscribeRequest(BaseModel):
+    # Raw audio as base64 (browser upload) OR a path in the `library` bucket.
+    audio_base64: Optional[str] = None
+    library_path: Optional[str] = None
+    fmt: str = "wav"
+    onset_threshold: float = 0.5
+    frame_threshold: float = 0.3
+    upload: bool = True  # store midi + wav to Supabase
 
 
 def _sb():
@@ -315,3 +326,126 @@ def _upload_to_supabase(wav_bytes: bytes, req: GenerateRequest) -> str:
     }).execute()
     public = sb.storage.from_("audio").get_public_url(path)
     return public if isinstance(public, str) else public.get("publicUrl", "")
+
+
+def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
+    """Upload bytes to a Supabase bucket (service role) and return public URL."""
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured on server")
+    sb.storage.from_(bucket).upload(path, data, {"content-type": content_type})
+    public = sb.storage.from_(bucket).get_public_url(path)
+    return public if isinstance(public, str) else public.get("publicUrl", "")
+
+
+# ---------------------------------------------------------------------------
+# Music features: library + transcription
+# ---------------------------------------------------------------------------
+@app.post("/music/library")
+async def upload_library(req: dict):
+    """Store a raw audio file in the `library` bucket.
+
+    Body: { name, data_base64, fmt }. Returns { path, url }.
+    """
+    name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
+    fmt = (req.get("fmt") or "wav").lstrip(".")
+    data_b64 = req.get("data_base64")
+    if not data_b64:
+        raise HTTPException(status_code=400, detail="data_base64 required")
+    try:
+        raw = base64.b64decode(data_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid base64")
+    path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
+    url = _sb_upload("library", path, raw, f"audio/{fmt}")
+    return {"path": path, "url": url}
+
+
+class EnhanceRequest(BaseModel):
+    audio_base64: Optional[str] = None
+    library_path: Optional[str] = None
+    fmt: str = "wav"
+    upload: bool = True
+
+
+@app.post("/music/enhance")
+def enhance(req: EnhanceRequest):
+    """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
+
+    This is the audio-quality preprocessing step, run before transcription or
+    storage so every uploaded/recorded clip is consistent. Returns cleaned
+    WAV (base64) and, when upload=True, a stored URL.
+    """
+    if req.audio_base64:
+        try:
+            audio = base64.b64decode(req.audio_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64")
+    elif req.library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        key = req.library_path.replace("library/", "")
+        data = sb.storage.from_("library").download(key)
+        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+    else:
+        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+    try:
+        cleaned = enhance_audio(audio, fmt=req.fmt)
+    except Exception as e:
+        logger.exception("enhance failed")
+        raise HTTPException(status_code=500, detail=f"enhance failed: {e}")
+
+    out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
+    if req.upload:
+        path = f"library/{uuid.uuid4().hex}-enhanced.wav"
+        out["url"] = _sb_upload("library", path, cleaned, "audio/wav")
+    return out
+
+
+@app.post("/music/transcribe")
+def transcribe(req: TranscribeRequest):
+    """Transcribe audio -> MIDI (+ synthesized WAV + note events).
+
+    Accepts raw audio as base64, or a path in the `library` bucket.
+    Stores midi + wav to Supabase when upload=True.
+    """
+    if req.audio_base64:
+        try:
+            audio = base64.b64decode(req.audio_base64)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64")
+    elif req.library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        key = req.library_path.replace("library/", "")
+        data = sb.storage.from_("library").download(key)
+        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+    else:
+        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+    try:
+        result = transcribe_audio(audio, fmt=req.fmt,
+                                  onset_threshold=req.onset_threshold,
+                                  frame_threshold=req.frame_threshold)
+    except Exception as e:
+        logger.exception("transcription failed")
+        raise HTTPException(status_code=500, detail=f"transcription failed: {e}")
+
+    midi = result["midi"]
+    wav = result["wav"]
+    out = {
+        "notes": result["notes"],
+        "num_notes": result["num_notes"],
+        "midi_base64": base64.b64encode(midi).decode("ascii"),
+        "wav_base64": base64.b64encode(wav).decode("ascii"),
+    }
+    if req.upload:
+        midi_path = f"midi/{uuid.uuid4().hex}.mid"
+        wav_path = f"midi/{uuid.uuid4().hex}.wav"
+        out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
+        out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
+    return out
+

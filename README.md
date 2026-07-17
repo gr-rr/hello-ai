@@ -148,7 +148,7 @@ later.
 
 ## Persistence (Supabase)
 
-- `lib/supabase.ts` / `lib/db.ts` — client + `saveTrack` / `getTracks`.
+- `lib/supabase.ts` — client singleton. `lib/storage.ts` — generic bucket helpers (single source for uploads). `lib/audio.ts` — `saveTrack` / `getTracks` on top of storage. `lib/backend.ts` — single reverse-proxy to the Oracle backend.
 - Migration: `supabase/migrations/20260716_init_tracks.sql` (apply via the SQL
   Editor or `supabase db push --linked`).
 - Table `public.tracks` + `audio` storage bucket + RLS policies (public read/insert
