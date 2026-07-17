@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import "abcjs/abcjs-audio.css";
 import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -22,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    <html lang="en" className={`font-sans ${geist.variable}`}>
       <body>{children}</body>
     </html>
   );
