@@ -7,14 +7,15 @@ API surface is identical either way, so this is a thin conditional wrap.
 Runs on CPU by default (Oracle always-free ARM VM has no GPU). Small models
 only: TinyLlama-1.1B, SmolLM2-135M/1.7B.
 """
-import io
+
+import contextlib
 import json
 import logging
 import os
 import time
-import uuid
 
 logger = logging.getLogger("finetune_server")
+
 
 # CPU compute guardrails. The Oracle VM is 4 ARM cores with no GPU; training on
 # all cores starves /generate + Caddy and can make the box unresponsive. Cap the
@@ -28,10 +29,8 @@ def _cap_threads(n: int | None = None):
         n = max(1, total // 2)
     os.environ.setdefault("OMP_NUM_THREADS", str(n))
     os.environ.setdefault("MKL_NUM_THREADS", str(n))
-    try:
+    with contextlib.suppress(Exception):
         torch.set_num_threads(n)
-    except Exception:
-        pass
     return n
 
 
@@ -77,7 +76,7 @@ def load_dataset_jsonl(text: str):
         try:
             obj = json.loads(line)
         except json.JSONDecodeError as e:
-            raise ValueError(f"invalid JSONL: {e}")
+            raise ValueError(f"invalid JSONL: {e}") from e
         # Accept common field names.
         instr = obj.get("instruction") or obj.get("prompt") or obj.get("input") or ""
         inp = obj.get("input") or obj.get("context") or ""
@@ -106,14 +105,14 @@ def train_lora(
     n_threads = _cap_threads()
     log_fn(f"cpu thread cap: {n_threads} (of {os.cpu_count() or 4})")
 
+    from datasets import Dataset
+    from peft import LoraConfig, get_peft_model
     from transformers import (
-        TrainingArguments,
+        DataCollatorForLanguageModeling,
         Trainer,
         TrainerCallback,
-        DataCollatorForLanguageModeling,
+        TrainingArguments,
     )
-    from peft import LoraConfig, get_peft_model
-    from datasets import Dataset
 
     if base_model not in BASE_MODELS:
         raise ValueError(f"unknown base model: {base_model}")
@@ -145,7 +144,15 @@ def train_lora(
             model,
             r=r,
             lora_alpha=lora_alpha,
-            target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            target_modules=[
+                "q_proj",
+                "v_proj",
+                "k_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
             lora_dropout=0,
             bias="none",
             use_gradient_checkpointing="unsloth",
@@ -157,13 +164,19 @@ def train_lora(
         tokenizer = AutoTokenizer.from_pretrained(base_model)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-        model = AutoModelForCausalLM.from_pretrained(
-            base_model, torch_dtype=dtype
-        )
+        model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype=dtype)
         lora_config = LoraConfig(
             r=r,
             lora_alpha=lora_alpha,
-            target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+            target_modules=[
+                "q_proj",
+                "v_proj",
+                "k_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
             lora_dropout=0.0,
             bias="none",
             task_type="CAUSAL_LM",
@@ -172,12 +185,8 @@ def train_lora(
 
     # Tokenize dataset.
     def tokenize(example):
-        text = build_prompt(
-            example["instruction"], example["input"], example["output"]
-        )
-        tok = tokenizer(
-            text, truncation=True, padding="max_length", max_length=max_seq_len
-        )
+        text = build_prompt(example["instruction"], example["input"], example["output"])
+        tok = tokenizer(text, truncation=True, padding="max_length", max_length=max_seq_len)
         tok["labels"] = tok["input_ids"].copy()
         return tok
 

@@ -10,6 +10,7 @@
 Runs on CPU (Oracle always-free ARM VM). Suitable for short clips (seconds to a
 couple minutes).
 """
+
 import io
 import logging
 import os
@@ -131,6 +132,14 @@ def midi_to_wav(midi_bytes: bytes, sr: int = 22050) -> bytes:
 # ---------------------------------------------------------------------------
 # Audio cleanup (ffmpeg pipeline, hidden preprocessing step)
 # ---------------------------------------------------------------------------
+_ALLOWED_AUDIO_FORMATS = frozenset({".wav", ".flac", ".ogg", ".mp3", ".m4a", ".aac", ".webm"})
+
+
+def _sanitize_fmt(fmt: str) -> str:
+    ext = fmt if fmt.startswith(".") else f".{fmt}"
+    return ext if ext in _ALLOWED_AUDIO_FORMATS else ".wav"
+
+
 def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
     """Light, CPU-friendly cleanup of a raw recording: denoise (afftdn),
     declip (adeclip), and EBU R128 normalize (loudnorm). Returns cleaned WAV.
@@ -139,7 +148,7 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
     cleaned without the user opting in. No-op safe: returns input if ffmpeg
     is unavailable or the pipeline fails.
     """
-    suffix = fmt if fmt.startswith(".") else f".{fmt}"
+    suffix = _sanitize_fmt(fmt)
     with tempfile.TemporaryDirectory() as td:
         in_path = os.path.join(td, f"input{suffix}")
         with open(in_path, "wb") as f:
@@ -148,8 +157,17 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
         # basic-pitch only reads wav/flac/ogg/mp3; convert other formats first.
         if suffix not in (".wav", ".flac", ".ogg", ".mp3", ".m4a", ".aac"):
             conv = subprocess.run(
-                ["ffmpeg", "-y", "-i", src, "-ac", "1", "-ar", "22050",
-                 os.path.join(td, "input_conv.wav")],
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    src,
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "22050",
+                    os.path.join(td, "input_conv.wav"),
+                ],
                 capture_output=True,
             )
             if conv.returncode != 0 or not os.path.exists(os.path.join(td, "input_conv.wav")):
@@ -158,9 +176,17 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
             src = os.path.join(td, "input_conv.wav")
         out_path = os.path.join(td, "clean.wav")
         cmd = [
-            "ffmpeg", "-y", "-i", src,
-            "-af", "afftdn=nr=12:nf=-30,adeclip,loudnorm=I=-16:TP=-1.5:LRA=11",
-            "-ar", "22050", "-ac", "1", out_path,
+            "ffmpeg",
+            "-y",
+            "-i",
+            src,
+            "-af",
+            "afftdn=nr=12:nf=-30,adeclip,loudnorm=I=-16:TP=-1.5:LRA=11",
+            "-ar",
+            "22050",
+            "-ac",
+            "1",
+            out_path,
         ]
         res = subprocess.run(cmd, capture_output=True)
         if res.returncode != 0 or not os.path.exists(out_path):
@@ -177,7 +203,12 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
 # ---------------------------------------------------------------------------
 # Audio -> MIDI (basic-pitch)
 # ---------------------------------------------------------------------------
-def transcribe_audio(audio_bytes: bytes, fmt: str = "wav", onset_threshold: float = 0.5, frame_threshold: float = 0.3) -> dict:
+def transcribe_audio(
+    audio_bytes: bytes,
+    fmt: str = "wav",
+    onset_threshold: float = 0.5,
+    frame_threshold: float = 0.3,
+) -> dict:
     """Transcribe audio to MIDI. Returns a dict with midi (bytes), wav (bytes),
     notes (list of {pitch, start, end, velocity}), and duration_s.
 
@@ -206,12 +237,14 @@ def transcribe_audio(audio_bytes: bytes, fmt: str = "wav", onset_threshold: floa
     try:
         for ev in note_events or []:
             start, end, pitch, velocity, _ = ev
-            notes.append({
-                "pitch": int(pitch),
-                "start": float(start),
-                "end": float(end),
-                "velocity": int(velocity),
-            })
+            notes.append(
+                {
+                    "pitch": int(pitch),
+                    "start": float(start),
+                    "end": float(end),
+                    "velocity": int(velocity),
+                }
+            )
     except Exception as e:
         logger.warning(f"note event serialization skipped: {e}")
 
