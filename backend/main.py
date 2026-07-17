@@ -66,6 +66,18 @@ def health(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/health/live")
+def health_live(request: Request):
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def health_ready(request: Request):
+    sb = _sb()
+    status = "ready" if sb else "degraded"
+    return {"status": status, "supabase": sb is not None}
+
+
 # ---------------------------------------------------------------------------
 # Finetune studio
 # ---------------------------------------------------------------------------
