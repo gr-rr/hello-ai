@@ -3,50 +3,39 @@
 import { useState } from "react";
 import MusicGen from "./MusicGen";
 import Chat from "./Chat";
+import Piano from "./Piano";
 import DataStudio from "./DataStudio";
 import TrainStudio from "./TrainStudio";
 import CompareStudio from "./CompareStudio";
-import Piano from "./Piano";
 
-export type Tab =
-  | "overview"
-  | "music"
-  | "chat"
-  | "piano"
-  | "data"
-  | "train"
-  | "compare";
-
-// Feature flags. LoRA training/compare re-enabled: the backend now caps CPU
-// threads (half the cores), enforces a single training slot, and aborts a run
-// after a wall-clock budget — so it can no longer saturate the CPU-only VM.
-const FEATURES = {
-  data: true,
-  train: true,
-  compare: true,
+/**
+ * Feature registry — the single place that defines which studios exist.
+ * New features (transcription, analysis, playground, …) register here as a
+ * module under components/<feature>/ exporting a default component. The tab
+ * bar and router are generated from this list, so adding a feature is one entry.
+ */
+type Feature = {
+  id: string;
+  label: string;
+  desc: string;
+  enabled: boolean;
+  Component: React.ComponentType;
 };
 
-const TABS: { id: Tab; label: string; desc: string }[] = [
-  { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)" },
-  { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)" },
-  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)" },
-  { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL" },
-  ...(FEATURES.train
-    ? [{ id: "train" as Tab, label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA" }]
-    : []),
-  ...(FEATURES.compare
-    ? [{ id: "compare" as Tab, label: "⚖️ Compare", desc: "Side-by-side model outputs" }]
-    : []),
+const FEATURES: Feature[] = [
+  { id: "music", label: "🎵 Music", desc: "Text-to-music with MusicGen (server-side)", enabled: true, Component: MusicGen },
+  { id: "chat", label: "💬 Chat", desc: "Local LLM chat in your browser (WebGPU)", enabled: true, Component: Chat },
+  { id: "piano", label: "🎹 Piano", desc: "Play a mini synthesizer (Web Audio)", enabled: true, Component: Piano },
+  { id: "data", label: "📚 Datasets", desc: "Prepare instruction/response JSONL", enabled: true, Component: DataStudio },
+  { id: "train", label: "🧬 Train", desc: "Fine-tune a small LLM with LoRA", enabled: true, Component: TrainStudio },
+  { id: "compare", label: "⚖️ Compare", desc: "Side-by-side model outputs", enabled: true, Component: CompareStudio },
 ];
 
-export default function Studio({ initialTab = "overview" }: { initialTab?: Tab }) {
-  const safeInitial: Tab =
-    initialTab === "train" && !FEATURES.train
-      ? "overview"
-      : initialTab === "compare" && !FEATURES.compare
-      ? "overview"
-      : initialTab;
-  const [tab, setTab] = useState<Tab>(safeInitial);
+const TABS = FEATURES.filter((f) => f.enabled);
+
+export default function Studio({ initialTab = "overview" }: { initialTab?: string }) {
+  const safeInitial = TABS.some((t) => t.id === initialTab) ? initialTab : "overview";
+  const [tab, setTab] = useState<string>(safeInitial);
 
   if (tab === "overview") {
     return (
@@ -75,6 +64,9 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: Tab }
     );
   }
 
+  const active = FEATURES.find((f) => f.id === tab);
+  const ActiveComponent = active?.Component;
+
   return (
     <main className="page">
       <div className="tabbar">
@@ -94,12 +86,7 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: Tab }
         </div>
       </div>
 
-      {tab === "music" && <MusicGen />}
-      {tab === "chat" && <Chat />}
-      {tab === "piano" && <Piano />}
-      {tab === "data" && <DataStudio />}
-      {tab === "train" && <TrainStudio />}
-      {tab === "compare" && <CompareStudio />}
+      {ActiveComponent && <ActiveComponent />}
     </main>
   );
 }
