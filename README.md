@@ -180,6 +180,13 @@ resuming agentic work on this repo.
   is launched from. Run `cd ~/backend && docker compose up -d` or the container gets
   empty env (silent Supabase misconfig → 500s). Verified root cause of a `/generate`
   and `/train` 500.
+- **Don't `rsync --delete` the VM backend dir.** A `rsync --delete` from a local
+  `backend/` (which has no `.env`) **deletes the VM's `~/backend/.env`**, taking down
+  Supabase config on next restart. The compose file now hardcodes the env vars
+  (see `backend/.env.example`) so reboots/rsyncs can't silently break the backend.
+- **`Caddyfile` must stay a file.** After a reboot it appeared as a *directory* on the
+  VM, crashing Caddy (`mount ... not a directory`). If Caddy won't start, `rm -rf
+  ~/backend/Caddyfile` and recreate it as the file in `backend/docker-compose.yml`.
 - **Oracle VM has no GPU.** Training uses CPU PEFT LoRA. Unsloth auto-selected only
   with CUDA; otherwise vanilla `transformers`. Small models + small datasets only.
 - **Supabase migration apply:** `supabase db query --linked -f <migration.sql>`.

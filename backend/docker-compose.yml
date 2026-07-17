@@ -6,10 +6,15 @@ services:
     restart: unless-stopped
     environment:
       # Server-side Supabase (service role — secret, never exposed to browser).
+      # Sourced from ~/backend/.env via `cd ~/backend && docker compose up -d`.
+      # IMPORTANT: never `rsync --delete` the VM backend dir — it would wipe
+      # .env and break Supabase config on next restart. See .env.example.
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       # Persisted trained LoRA adapters (survive container restarts).
       ADAPTER_ROOT: /data/adapters
+      # CPU-only VM: disable LoRA training so it can't saturate all cores.
+      DISABLE_TRAINING: "true"
     volumes:
       - adapters:/data/adapters
     networks:
