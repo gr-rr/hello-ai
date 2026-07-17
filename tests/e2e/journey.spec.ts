@@ -37,11 +37,11 @@ test.describe("User journeys", () => {
     await mockBackend(page);
     await page.goto("/?tab=transcribe");
     await page.waitForFunction(
-      () => typeof window !== "undefined" && document.querySelector('.app-col:first-child input[type="file"]') !== null,
+      () => typeof window !== "undefined" && document.querySelector('.stage input[type="file"]') !== null,
       { timeout: 15_000 },
     );
 
-    const input = page.locator(".app-col").first().locator('input[type="file"]');
+    const input = page.locator(".stage input[type=\"file\"]");
     await input.setInputFiles({
       name: "test.wav",
       mimeType: "audio/wav",
@@ -68,14 +68,14 @@ test.describe("User journeys", () => {
     const dropZone = page.locator(".drop-zone");
     await expect(dropZone).toBeVisible();
 
-    const fileInput = page.locator(".app-col").nth(1).locator('input[type="file"]');
+    const fileInput = page.locator(".stage input[type=\"file\"]");
     await fileInput.setInputFiles({
       name: "clip.m4a",
       mimeType: "audio/mp4",
       buffer: Buffer.from("xxxx"),
     });
 
-    await expect(page.locator(".app-col").nth(1).locator(".status")).toHaveText(/Saved ✓/, {
+    await expect(page.locator(".stage .status")).toHaveText(/Saved ✓/, {
       timeout: 15_000,
     });
   });
