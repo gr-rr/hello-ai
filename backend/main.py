@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
@@ -8,6 +8,11 @@ import base64
 import os
 import logging
 import threading
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from musicgen_server import generate_audio
 from finetune_server import (
@@ -21,7 +26,11 @@ from music_features import transcribe_audio, enhance_audio
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(title="hello-ai backend", version="0.2.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Local cache for trained adapters (persisted on the VM volume).
 ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
@@ -53,7 +62,7 @@ class GenerateResponse(BaseModel):
 
 
 @app.get("/health")
-def health():
+def health(request: Request):
     return {"status": "ok"}
 
 
@@ -180,7 +189,8 @@ def models_base():
 
 
 @app.post("/train")
-def train(req: TrainRequest, background_tasks: BackgroundTasks):
+@limiter.limit("1/minute")
+def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks):
     # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
     if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
@@ -260,7 +270,8 @@ def _resolve_adapter(model_ref: str, base_model: str):
 
 
 @app.post("/compare")
-def compare(req: CompareRequest):
+@limiter.limit("5/minute")
+def compare(req: CompareRequest, request: Request):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
     base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
@@ -275,7 +286,8 @@ def compare(req: CompareRequest):
 
 
 @app.post("/generate", response_model=GenerateResponse)
-def generate(req: GenerateRequest):
+@limiter.limit("5/minute")
+def generate(req: GenerateRequest, request: Request):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
@@ -342,7 +354,8 @@ def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
 # Music features: library + transcription
 # ---------------------------------------------------------------------------
 @app.post("/music/library")
-async def upload_library(req: dict):
+@limiter.limit("10/minute")
+async def upload_library(req: dict, request: Request):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
@@ -369,7 +382,8 @@ class EnhanceRequest(BaseModel):
 
 
 @app.post("/music/enhance")
-def enhance(req: EnhanceRequest):
+@limiter.limit("20/minute")
+def enhance(req: EnhanceRequest, request: Request):
     """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
 
     This is the audio-quality preprocessing step, run before transcription or
@@ -405,7 +419,8 @@ def enhance(req: EnhanceRequest):
 
 
 @app.post("/music/transcribe")
-def transcribe(req: TranscribeRequest):
+@limiter.limit("10/minute")
+def transcribe(req: TranscribeRequest, request: Request):
     """Transcribe audio -> MIDI (+ synthesized WAV + note events).
 
     Accepts raw audio as base64, or a path in the `library` bucket.

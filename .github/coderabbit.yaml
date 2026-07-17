@@ -20,6 +20,9 @@ reviews:
     - path: "backend/**/*.py"
       instructions: |
         FastAPI best practices. No dead imports. Type hints required.
+        Check for missing auth checks, SQL injection, insecure crypto.
+        Rate limits should be applied to all ML endpoints.
+        File upload routes must validate size and content-type.
     - path: "tests/**/*.spec.ts"
       instructions: |
         Playwright tests must be deterministic. Mock external APIs.
@@ -29,5 +32,16 @@ reviews:
     drafts: false
     base_branches:
       - "main"
+  checklist:
+    - "**Authentication**: Do all protected routes verify auth server-side?"
+    - "**Authorization**: Are permissions checked server-side, not just in the client?"
+    - "**Rate limiting**: Are ML/upload endpoints rate-limited?"
+    - "**Input validation**: Are request payloads validated with Pydantic/marshmallow?"
+    - "**File uploads**: Are upload size and type restricted?"
+    - "**Secrets**: Any hardcoded API keys, tokens, or passwords?"
+    - "**Error handling**: Are stack traces sanitized in production responses?"
+    - "**Timeouts**: Do external API calls have configured timeouts and retries?"
+    - "**Database**: Are Supabase RLS policies tested? Migrations included?"
+    - "**Dependencies**: Any known-vulnerable packages added?"
 chat:
   auto_reply: true
