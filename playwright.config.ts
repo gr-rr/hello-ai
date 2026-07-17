@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 import { createArgosReporterOptions } from "@argos-ci/playwright/reporter";
 
 export default defineConfig({
-  testDir: "./tests/visual",
+  testDir: "./tests",
   timeout: 30_000,
   reporter: [
     process.env.CI ? ["dot"] : ["list"],
