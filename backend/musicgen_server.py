@@ -3,8 +3,10 @@
 Runs on the host's best available device (MPS on Mac, CUDA if present, else CPU).
 Weights come from facebook/musicgen-small (cc-by-nc-4.0 — non-commercial).
 """
+
 import io
 import logging
+
 import numpy as np
 import torch
 from scipy.io.wavfile import write as write_wav
@@ -22,8 +24,11 @@ def _load():
     if _model is not None:
         return
     logger.info("loading %s", _MODEL_ID)
-    device = "mps" if torch.backends.mps.is_available() else (
-        "cuda" if torch.cuda.is_available() else "cpu")
+    device = (
+        "mps"
+        if torch.backends.mps.is_available()
+        else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
     logger.info("device: %s", device)
     _processor = AutoProcessor.from_pretrained(_MODEL_ID)
     _model = MusicgenForConditionalGeneration.from_pretrained(_MODEL_ID).to(device)

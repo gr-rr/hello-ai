@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { uploadToLibrary, listLibrary } from "@/lib/music";
+import { uploadToLibrary, listLibrary, deleteFromLibrary } from "@/lib/music";
 
-export default function Library() {
+type LibFile = { name: string; url: string; id: string };
+
+export default function Library({ compact }: { compact?: boolean }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [files, setFiles] = useState<{ name: string; url: string }[]>([]);
+  const [files, setFiles] = useState<LibFile[]>([]);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     if (!isSupabaseConfigured) return;
@@ -22,14 +28,12 @@ export default function Library() {
     refresh();
   }, []);
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadFile(file: File) {
     setBusy(true);
     setStatus("Uploading…");
     try {
-      const url = await uploadToLibrary(file.name, file);
-      setStatus("Saved ✓ " + file.name);
+      await uploadToLibrary(file.name, file);
+      setStatus(`Saved ✓ ${file.name}`);
       await refresh();
     } catch (err) {
       setStatus("⚠️ " + (err instanceof Error ? err.message : "upload failed"));
@@ -38,22 +42,91 @@ export default function Library() {
     }
   }
 
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file);
+    e.target.value = "";
+  }
+
+  async function onDelete(id: string, name: string) {
+    setBusy(true);
+    try {
+      await deleteFromLibrary(id);
+      setStatus(`Deleted ${name}`);
+      if (playing === id) setPlaying(null);
+      await refresh();
+    } catch (err) {
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "delete failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function togglePlay(id: string, url: string) {
+    if (playing === id) {
+      audioRef.current?.pause();
+      setPlaying(null);
+    } else {
+      audioRef.current?.pause();
+      const audio = new Audio(url);
+      audio.onended = () => setPlaying(null);
+      audio.play();
+      audioRef.current = audio;
+      setPlaying(id);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    dropRef.current?.classList.add("drag-over");
+  }
+
+  function handleDragLeave() {
+    dropRef.current?.classList.remove("drag-over");
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dropRef.current?.classList.remove("drag-over");
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
+  }
+
   return (
     <>
-      <div className="header">
-        <span className="badge">Finetune Studio · Library</span>
-        <h1>Your music library</h1>
-        <p>
-          Upload audio files (WAV, MP3, …) to transcribe and analyze later.
-          Stored in Supabase and available to the Transcribe tab.
-        </p>
-      </div>
+      {!compact && (
+        <div className="header">
+          <span className="badge">Audio Library</span>
+          <h1>Your audio files</h1>
+          <p>
+            Upload or drag audio files to transcribe. Files are stored in Supabase
+            and available from the Transcribe tab.
+          </p>
+        </div>
+      )}
+      {compact && <h3 className="stage-h3">📁 Library</h3>}
 
-      <div className="panel">
-        <label>Upload audio</label>
-        <input type="file" accept="audio/*" onChange={onUpload} disabled={busy} />
-        <span className="status">{status}</span>
+      <div
+        ref={dropRef}
+        className="drop-zone"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="audio/*"
+          onChange={onUpload}
+          disabled={busy}
+          style={{ display: "none" }}
+        />
+        <span className="drop-icon">+</span>
+        <span className="muted">Drop audio here or click to browse</span>
       </div>
+      <span className="status">{status}</span>
 
       <div className="panel">
         <h3>Saved files</h3>
@@ -65,11 +138,25 @@ export default function Library() {
         )}
         <ul className="filelist">
           {files.map((f) => (
-            <li key={f.name}>
-              <span>{f.name}</span>
-              <a className="chip ghost" href={f.url} target="_blank" rel="noreferrer">
-                Open
-              </a>
+            <li key={f.id}>
+              <div className="file-info">
+                <span className="file-name">{f.name}</span>
+              </div>
+              <div className="file-actions">
+                <button
+                  className="chip"
+                  onClick={() => togglePlay(f.id, f.url)}
+                >
+                  {playing === f.id ? "⏸ Pause" : "▶ Play"}
+                </button>
+                <button
+                  className="chip ghost danger"
+                  onClick={() => onDelete(f.id, f.name)}
+                  disabled={busy}
+                >
+                  ✕ Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>

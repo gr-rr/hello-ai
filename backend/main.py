@@ -1,27 +1,34 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from typing import Optional, List
-import uuid
-import io
-import json
 import base64
-import os
 import logging
+import os
 import threading
+import uuid
 
-from musicgen_server import generate_audio
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from finetune_server import (
+    generate as ft_generate,
+)
 from finetune_server import (
     list_base_models,
     load_dataset_jsonl,
     train_lora,
-    generate as ft_generate,
 )
-from music_features import transcribe_audio, midi_to_wav, enhance_audio
+from music_features import enhance_audio, transcribe_audio
+from musicgen_server import generate_audio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(title="hello-ai backend", version="0.2.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Local cache for trained adapters (persisted on the VM volume).
 ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
@@ -46,15 +53,27 @@ class GenerateRequest(BaseModel):
 
 
 class GenerateResponse(BaseModel):
-    audio_base64: Optional[str] = None
-    audio_url: Optional[str] = None
+    audio_base64: str | None = None
+    audio_url: str | None = None
     format: str = "wav"
     duration: int
 
 
 @app.get("/health")
-def health():
+def health(request: Request):
     return {"status": "ok"}
+
+
+@app.get("/health/live")
+def health_live(request: Request):
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def health_ready(request: Request):
+    sb = _sb()
+    status = "ready" if sb else "degraded"
+    return {"status": status, "supabase": sb is not None}
 
 
 # ---------------------------------------------------------------------------
@@ -62,14 +81,14 @@ def health():
 # ---------------------------------------------------------------------------
 class TrainRequest(BaseModel):
     base_model: str
-    dataset_text: Optional[str] = None  # raw JSONL
-    dataset_path: Optional[str] = None  # path in Supabase 'datasets' bucket
-    name: Optional[str] = None
+    dataset_text: str | None = None  # raw JSONL
+    dataset_path: str | None = None  # path in Supabase 'datasets' bucket
+    name: str | None = None
     lora_r: int = 16
     lora_alpha: int = 32
     epochs: float = 3.0
     learning_rate: float = 2e-4
-    max_seq_len: Optional[int] = None
+    max_seq_len: int | None = None
     batch_size: int = 4
 
 
@@ -84,8 +103,8 @@ class CompareRequest(BaseModel):
 
 class TranscribeRequest(BaseModel):
     # Raw audio as base64 (browser upload) OR a path in the `library` bucket.
-    audio_base64: Optional[str] = None
-    library_path: Optional[str] = None
+    audio_base64: str | None = None
+    library_path: str | None = None
     fmt: str = "wav"
     onset_threshold: float = 0.5
     frame_threshold: float = 0.3
@@ -93,8 +112,9 @@ class TranscribeRequest(BaseModel):
 
 
 def _sb():
-    from supabase import create_client
     import os
+
+    from supabase import create_client
 
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -149,29 +169,39 @@ def _run_training(job_id: str, req: TrainRequest):
                 for fname in os.listdir(adapter_dir):
                     with open(os.path.join(adapter_dir, fname), "rb") as f:
                         sb3.storage.from_("adapters").upload(
-                            f"{job_id}/{fname}", f.read(),
+                            f"{job_id}/{fname}",
+                            f.read(),
                             file_options={"content-type": "application/octet-stream"},
                         )
-                sb3.table("models").insert({
-                    "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
-                    "base_model": req.base_model,
-                    "job_id": job_id,
-                    "adapter_path": adapter_path,
-                }).execute()
+                sb3.table("models").insert(
+                    {
+                        "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
+                        "base_model": req.base_model,
+                        "job_id": job_id,
+                        "adapter_path": adapter_path,
+                    }
+                ).execute()
 
             if sb:
-                sb.table("jobs").update({
-                    "status": "done", "finished_at": "now()",
-                    "loss_log": _job_logs.get(job_id, ""),
-                }).eq("id", job_id).execute()
+                sb.table("jobs").update(
+                    {
+                        "status": "done",
+                        "finished_at": "now()",
+                        "loss_log": _job_logs.get(job_id, ""),
+                    }
+                ).eq("id", job_id).execute()
             _append_log(job_id, "DONE")
     except Exception as e:
         logger.exception("training failed")
         _append_log(job_id, f"ERROR: {e}")
         if sb:
-            sb.table("jobs").update({
-                "status": "error", "error": str(e), "finished_at": "now()",
-            }).eq("id", job_id).execute()
+            sb.table("jobs").update(
+                {
+                    "status": "error",
+                    "error": str(e),
+                    "finished_at": "now()",
+                }
+            ).eq("id", job_id).execute()
 
 
 @app.get("/models/base")
@@ -180,7 +210,8 @@ def models_base():
 
 
 @app.post("/train")
-def train(req: TrainRequest, background_tasks: BackgroundTasks):
+@limiter.limit("1/minute")
+def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks):
     # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
     if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
@@ -195,17 +226,25 @@ def train(req: TrainRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
     job_id = uuid.uuid4().hex
     params = {
-        "lora_r": req.lora_r, "lora_alpha": req.lora_alpha,
-        "epochs": req.epochs, "learning_rate": req.learning_rate,
-        "max_seq_len": req.max_seq_len or 1024, "batch_size": req.batch_size,
+        "lora_r": req.lora_r,
+        "lora_alpha": req.lora_alpha,
+        "epochs": req.epochs,
+        "learning_rate": req.learning_rate,
+        "max_seq_len": req.max_seq_len or 1024,
+        "batch_size": req.batch_size,
         "name": req.name,
     }
     sb = _sb()
     if sb:
-        sb.table("jobs").insert({
-            "id": job_id, "base_model": req.base_model,
-            "params": params, "dataset_path": req.dataset_path, "status": "queued",
-        }).execute()
+        sb.table("jobs").insert(
+            {
+                "id": job_id,
+                "base_model": req.base_model,
+                "params": params,
+                "dataset_path": req.dataset_path,
+                "status": "queued",
+            }
+        ).execute()
     _job_logs[job_id] = "queued"
     background_tasks.add_task(_run_training, job_id, req)
     return {"job_id": job_id, "status": "queued"}
@@ -260,7 +299,8 @@ def _resolve_adapter(model_ref: str, base_model: str):
 
 
 @app.post("/compare")
-def compare(req: CompareRequest):
+@limiter.limit("5/minute")
+def compare(req: CompareRequest, request: Request):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
     base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
@@ -270,17 +310,23 @@ def compare(req: CompareRequest):
         b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
     except Exception as e:
         logger.exception("compare failed")
-        raise HTTPException(status_code=500, detail=f"compare failed: {e}")
+        raise HTTPException(status_code=500, detail=f"compare failed: {e}") from e
     return {"prompt": req.prompt, "a": a_text, "b": b_text}
 
 
 @app.post("/generate", response_model=GenerateResponse)
-def generate(req: GenerateRequest):
+@limiter.limit("5/minute")
+def generate(req: GenerateRequest, request: Request):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
-    logger.info("generating: %s (%.1fs, g=%.1f, t=%.1f)",
-                req.prompt, req.duration, req.guidance_scale, req.temperature)
+    logger.info(
+        "generating: %s (%.1fs, g=%.1f, t=%.1f)",
+        req.prompt,
+        req.duration,
+        req.guidance_scale,
+        req.temperature,
+    )
 
     try:
         wav_bytes = generate_audio(
@@ -292,7 +338,7 @@ def generate(req: GenerateRequest):
         )
     except Exception as e:
         logger.exception("generation failed")
-        raise HTTPException(status_code=500, detail=f"generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"generation failed: {e}") from e
 
     if req.upload:
         url = _upload_to_supabase(wav_bytes, req)
@@ -304,8 +350,9 @@ def generate(req: GenerateRequest):
 
 def _upload_to_supabase(wav_bytes: bytes, req: GenerateRequest) -> str:
     # Server-side upload using the service-role key (kept on the server, never the browser).
-    from supabase import create_client
     import os
+
+    from supabase import create_client
 
     url = os.environ.get("SUPABASE_URL")
     key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -316,14 +363,16 @@ def _upload_to_supabase(wav_bytes: bytes, req: GenerateRequest) -> str:
     path = f"tracks/{uuid.uuid4().hex}.wav"
     sb.storage.from_("audio").upload(path, wav_bytes, {"content-type": "audio/wav"})
     # Insert metadata row.
-    sb.table("tracks").insert({
-        "prompt": req.prompt.strip(),
-        "model": req.model,
-        "duration": req.duration,
-        "guidance_scale": req.guidance_scale,
-        "temperature": req.temperature,
-        "audio_path": path,
-    }).execute()
+    sb.table("tracks").insert(
+        {
+            "prompt": req.prompt.strip(),
+            "model": req.model,
+            "duration": req.duration,
+            "guidance_scale": req.guidance_scale,
+            "temperature": req.temperature,
+            "audio_path": path,
+        }
+    ).execute()
     public = sb.storage.from_("audio").get_public_url(path)
     return public if isinstance(public, str) else public.get("publicUrl", "")
 
@@ -342,7 +391,8 @@ def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
 # Music features: library + transcription
 # ---------------------------------------------------------------------------
 @app.post("/music/library")
-async def upload_library(req: dict):
+@limiter.limit("10/minute")
+async def upload_library(req: dict, request: Request):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
@@ -355,21 +405,22 @@ async def upload_library(req: dict):
     try:
         raw = base64.b64decode(data_b64)
     except Exception:
-        raise HTTPException(status_code=400, detail="invalid base64")
+        raise HTTPException(status_code=400, detail="invalid base64") from None
     path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
     url = _sb_upload("library", path, raw, f"audio/{fmt}")
     return {"path": path, "url": url}
 
 
 class EnhanceRequest(BaseModel):
-    audio_base64: Optional[str] = None
-    library_path: Optional[str] = None
+    audio_base64: str | None = None
+    library_path: str | None = None
     fmt: str = "wav"
     upload: bool = True
 
 
 @app.post("/music/enhance")
-def enhance(req: EnhanceRequest):
+@limiter.limit("20/minute")
+def enhance(req: EnhanceRequest, request: Request):
     """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
 
     This is the audio-quality preprocessing step, run before transcription or
@@ -380,7 +431,7 @@ def enhance(req: EnhanceRequest):
         try:
             audio = base64.b64decode(req.audio_base64)
         except Exception:
-            raise HTTPException(status_code=400, detail="invalid base64")
+            raise HTTPException(status_code=400, detail="invalid base64") from None
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -395,7 +446,7 @@ def enhance(req: EnhanceRequest):
         cleaned = enhance_audio(audio, fmt=req.fmt)
     except Exception as e:
         logger.exception("enhance failed")
-        raise HTTPException(status_code=500, detail=f"enhance failed: {e}")
+        raise HTTPException(status_code=500, detail=f"enhance failed: {e}") from e
 
     out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
     if req.upload:
@@ -405,7 +456,8 @@ def enhance(req: EnhanceRequest):
 
 
 @app.post("/music/transcribe")
-def transcribe(req: TranscribeRequest):
+@limiter.limit("10/minute")
+def transcribe(req: TranscribeRequest, request: Request):
     """Transcribe audio -> MIDI (+ synthesized WAV + note events).
 
     Accepts raw audio as base64, or a path in the `library` bucket.
@@ -415,7 +467,7 @@ def transcribe(req: TranscribeRequest):
         try:
             audio = base64.b64decode(req.audio_base64)
         except Exception:
-            raise HTTPException(status_code=400, detail="invalid base64")
+            raise HTTPException(status_code=400, detail="invalid base64") from None
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -427,12 +479,15 @@ def transcribe(req: TranscribeRequest):
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
     try:
-        result = transcribe_audio(audio, fmt=req.fmt,
-                                  onset_threshold=req.onset_threshold,
-                                  frame_threshold=req.frame_threshold)
+        result = transcribe_audio(
+            audio,
+            fmt=req.fmt,
+            onset_threshold=req.onset_threshold,
+            frame_threshold=req.frame_threshold,
+        )
     except Exception as e:
         logger.exception("transcription failed")
-        raise HTTPException(status_code=500, detail=f"transcription failed: {e}")
+        raise HTTPException(status_code=500, detail=f"transcription failed: {e}") from e
 
     midi = result["midi"]
     wav = result["wav"]
@@ -448,4 +503,3 @@ def transcribe(req: TranscribeRequest):
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
-

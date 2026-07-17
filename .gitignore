@@ -24,3 +24,6 @@ playwright-report/
 .playwright/
 .preview/
 test-results/
+
+# Playwright MCP
+.playwright-mcp/

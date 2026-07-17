@@ -5,26 +5,31 @@ import {
   transcribeAudio,
   enhanceAudio,
   wavToDataUrl,
+  midiToDataUrl,
   type TranscribeResult,
 } from "@/lib/music";
 import Score from "@/components/Score";
+import PianoRoll from "@/components/PianoRoll";
 
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
-function pitchToName(p: number): string {
-  const name = NOTE_NAMES[((p % 12) + 12) % 12];
-  const octave = Math.floor(p / 12) - 1;
-  return `${name}${octave}`;
-}
-
-export default function Transcribe() {
-  const [status, setStatus] = useState("");
-  const [busy, setBusy] = useState(false);
+export default function Transcribe({
+  compact,
+  onTranscribed,
+  onGoToAnalyze,
+}: {
+  compact?: boolean;
+  onTranscribed?: (result: TranscribeResult, name: string) => void;
+  onGoToAnalyze?: () => void;
+}) {
+  const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
+  const [status, setStatus] = useState("");
   const [recording, setRecording] = useState(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -49,9 +54,9 @@ export default function Transcribe() {
       rec.start();
       mediaRef.current = rec;
       setRecording(true);
-      setStatus("Recording… click Stop when done.");
+      setStatus("Recording…");
     } catch (err) {
-      setStatus("⚠️ Mic access denied: " + (err instanceof Error ? err.message : ""));
+      setStatus("⚠️ Mic access denied");
     }
   }
 
@@ -68,93 +73,143 @@ export default function Transcribe() {
   }
 
   async function processBlob(blob: Blob) {
-    setBusy(true);
     setResult(null);
     try {
       const buf = await blob.arrayBuffer();
       const b64 = btoa(
         new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
       );
-      const fmt = blob.type.includes("ogg")
-        ? "ogg"
-        : blob.type.includes("mp4")
-          ? "mp4"
-          : "webm";
-      setStatus("Cleaning up audio… (denoise + normalize)");
+      const fmt = blob.type.includes("ogg") ? "ogg"
+        : blob.type.includes("mp4") ? "mp4" : "webm";
+
+      setState("enhancing");
+      setStatus("Cleaning audio…");
       const clean = await enhanceAudio(b64, fmt);
-      setStatus("Transcribing… (basic-pitch on the Oracle backend)");
+
+      setState("transcribing");
+      setStatus("Transcribing…");
       const res = await transcribeAudio(clean.wav_base64, "wav");
       setResult(res);
-      setStatus(`Done — ${res.num_notes} notes extracted.`);
+      setState("populated");
+      setStatus(`${res.num_notes} notes extracted`);
+      onTranscribed?.(res, audioName);
     } catch (err) {
+      setState("error");
       setStatus("⚠️ " + (err instanceof Error ? err.message : "transcription failed"));
-    } finally {
-      setBusy(false);
     }
+  }
+
+  function reset() {
+    setState("idle");
+    setResult(null);
+    setAudioName("");
+    setStatus("");
   }
 
   return (
     <>
-      <div className="header">
-        <span className="badge">Music Studio · Transcribe</span>
-        <h1>Audio → MIDI</h1>
-        <p>
-          Transcribe audio to a symbolic score with basic-pitch (Spotify, Apache-2.0),
-          then hear a synthesized rendering. The extracted notes are your linked
-          audio/text representation for later analysis.
-        </p>
-      </div>
+      {state === "idle" && (
+        <div>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
 
-      <div className="panel">
-        <label>Audio file</label>
-        <input type="file" accept="audio/*" onChange={onFile} disabled={busy} />
-        <span className="status">{status}</span>
-      </div>
-
-      <div className="panel">
-        <label>Or record live audio</label>
-        {!recording ? (
-          <button className="chip" onClick={startRecording} disabled={busy}>
-            ● Record
-          </button>
-        ) : (
-          <button className="chip ghost" onClick={stopRecording}>
-            ■ Stop
-          </button>
-        )}
-        <span className="muted">
-          Recordings are saved to your library, then transcribed.
-        </span>
-      </div>
-
-      {result && (
-        <div className="panel">
-          <h3>Transcription of {audioName}</h3>
-          <p className="muted">{result.num_notes} notes</p>
-          <h4>Synthesized MIDI (WAV)</h4>
-          {result.wav_url && <audio controls src={result.wav_url} />}
-          {result.wav_base64 && !result.wav_url && (
-            <audio controls src={wavToDataUrl(result.wav_base64)} />
-          )}
-          <h4>MIDI file</h4>
-          {result.midi_url && (
-            <a className="chip ghost" href={result.midi_url} target="_blank" rel="noreferrer">
-              Download .mid
-            </a>
-          )}
-          <h4>Note events</h4>
-          <div className="notes-grid">
-            {result.notes.slice(0, 64).map((n, i) => (
-              <span key={i} className="note-chip">
-                {pitchToName(n.pitch)} @ {n.start.toFixed(2)}s
-              </span>
-            ))}
+          <div className="drop-zone" onClick={() => inputRef.current?.click()}>
+            <div className="drop-icon">🎵</div>
+            <div style={{ fontWeight: 500, fontSize: 14 }}>Drop audio here or click to browse</div>
+            <div className="muted">WAV, MP3, M4A</div>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="audio/*"
+              onChange={onFile}
+              style={{ display: "none" }}
+            />
           </div>
-          <h4>Sheet Music</h4>
-          <p className="muted">
-            Rendered with abcjs. Hit Play to hear it with a moving cursor.
-          </p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+            {!recording ? (
+              <button className="btn" onClick={startRecording}>
+                <span style={{ color: "#ef4444" }}>●</span> Record
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={stopRecording}>
+                ■ Stop
+              </button>
+            )}
+            <span className="muted">Record live audio from your microphone</span>
+          </div>
+        </div>
+      )}
+
+      {(state === "enhancing" || state === "transcribing") && (
+        <div>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div className="chip" style={{ background: "var(--panel-3)", cursor: "default" }}>
+              {audioName || "audio"}
+            </div>
+            <span className="muted">{status}</span>
+          </div>
+
+          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
+          <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20 }}>
+            <span style={{ fontSize: 13 }}>Processing audio…</span>
+          </div>
+
+          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
+          <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20, marginTop: 8 }}>
+            <span style={{ fontSize: 13 }}>Processing audio…</span>
+          </div>
+        </div>
+      )}
+
+      {state === "populated" && result && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <h3 className="stage-h3" style={{ margin: 0 }}>🎼 {audioName}</h3>
+              <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {result.analysis && onGoToAnalyze && (
+                <button className="btn btn-primary" onClick={onGoToAnalyze}>
+                  📊 View Analysis
+                </button>
+              )}
+              <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
+            </div>
+          </div>
+
+          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Audio</h4>
+          {result.wav_url && <audio controls src={result.wav_url} style={{ width: "100%" }} />}
+          {result.wav_base64 && !result.wav_url && (
+            <audio controls src={wavToDataUrl(result.wav_base64)} style={{ width: "100%" }} />
+          )}
+
+          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
+          <div className="panel">
+            <PianoRoll notes={result.notes} />
+          </div>
+
+          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
+            {result.midi_url ? (
+              <a className="chip ghost" href={result.midi_url} target="_blank" rel="noreferrer">⬇ Download MIDI</a>
+            ) : result.midi_base64 ? (
+              <a className="chip ghost" href={midiToDataUrl(result.midi_base64)} download="transcription.mid">⬇ Download MIDI</a>
+            ) : null}
+          </div>
+
+          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
           <Score notes={result.notes} />
+        </div>
+      )}
+
+      {state === "error" && (
+        <div>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
+          <div className="panel" style={{ borderColor: "rgba(239,68,68,0.3)" }}>
+            <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
+            <button className="btn" onClick={reset}>Try again</button>
+          </div>
         </div>
       )}
     </>

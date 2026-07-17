@@ -7,9 +7,9 @@ How hello-ai is put together, and how to ship changes safely without manual QA.
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Browser (Next.js app on Vercel)                                       │
-│   - app/page.tsx → <Studio> tab router (FEATURES registry)             │
-│   - Live features: Library (Supabase), Transcribe (→ MIDI + sheet)     │
-│   - Disabled: Music, Chat, Piano, Datasets, Train, Compare             │
+│   - app/page.tsx → <Studio> layout (single-page 2‑column grid)        │
+│   - Left column: Transcribe (→ MIDI + sheet music)                     │
+│   - Right column: Library (Supabase Storage)                           │
 │                                                                        │
 │   Talks to:                                                            │
 │     (a) Supabase  — directly from the browser (anon key) for storage  │
@@ -24,10 +24,9 @@ How hello-ai is put together, and how to ship changes safely without manual QA.
         │               │          │  - basic-pitch transcription         │
         │  buckets:     │          │  - FluidSynth MIDI→WAV               │
         │   library/midi│          │  - ffmpeg enhance                    │
-        │   audio/tracks│          │  - MusicGen / LoRA finetune (torch)  │
-        │   datasets/   │          │                                     │
-        │   adapters    │          │  Uses Supabase SERVICE-ROLE key for  │
-        │               │          │  server-side storage.               │
+        │   audio/tracks│          │                                     │
+        │   datasets/   │          │  Uses Supabase SERVICE-ROLE key for  │
+        │   adapters    │          │  server-side storage.               │
         └───────────────┘          └─────────────────────────────────────┘
 ```
 
@@ -50,9 +49,9 @@ with no manual clicking:
  └────────┬─────────┘  (edit these, not ad-hoc CSS, when the look must change)
           ▼
  ┌──────────────────┐
- │ 2. Implement     │  Components read design tokens (app/globals.css :root) +
- │                  │  primitive classes (.btn .card .chip .panel-box ...).
- │                  │  New feature = one entry in FEATURES (components/Studio.tsx).
+ │ 2. Implement     │  Components read design tokens (app/globals.css :root)
+ │                  │  + primitive classes (.btn .chip .panel .drop-zone …).
+ │                  │  New feature = new component in components/<feature>/.
  └────────┬─────────┘
           ▼
  ┌──────────────────────────────────────────────────────────────────┐
@@ -62,8 +61,8 @@ with no manual clicking:
  │       - npm run build                                              │
  │       - starts the app, runs Playwright E2E journeys               │
  │         (tests/e2e/journey.spec.ts):                               │
- │           - Transcribe upload → sheet music renders + synth ready  │
- │           - Library upload → "Saved ✓"  (guards RLS anon-insert)   │
+ │           - Transcribe upload → sheet music renders + MIDI download│
+ │           - Library upload via drop zone → "Saved ✓"               │
  │       → if a core user flow breaks, the PR CANNOT merge.          │
  │                                                                    │
  │   • argos  (NON-blocking, informational)                           │
@@ -95,9 +94,9 @@ with no manual clicking:
 
 | Concern            | Path |
 |--------------------|------|
-| Tab router / registry | `components/Studio.tsx` (`FEATURES`) |
-| Live: Transcribe   | `components/transcribe/index.tsx`, `components/Score.tsx`, `lib/abc.ts` |
-| Live: Library      | `components/library/index.tsx`, `lib/storage.ts` |
+| Page shell         | `components/Studio.tsx` (topbar + hero + 2‑column grid) |
+| Transcribe         | `components/transcribe/index.tsx`, `components/Score.tsx`, `lib/abc.ts` |
+| Library            | `components/library/index.tsx`, `lib/storage.ts` |
 | Backend proxy      | `lib/backend.ts`, `app/api/**/route.ts` |
 | Supabase client    | `lib/supabase.ts` (browser, anon; graceful fallback) |
 | Design SOT         | `design/tokens.json`, `design/mockups/*` |
@@ -107,14 +106,16 @@ with no manual clicking:
 | Backend (VM code)  | `backend/` (FastAPI) — separate deploy, not on Vercel |
 
 ## 4. Adding a feature
+
 1. Create `components/<feature>/index.tsx` exporting a default component.
-2. Add one `FEATURES` entry in `components/Studio.tsx` (set `enabled`).
+2. Add it to the grid in `components/Studio.tsx` (or add a new column).
 3. If it needs backend work, add an `app/api/<feature>/route.ts` proxy + backend
    endpoint. If it needs storage, add a bucket + RLS policy in Supabase.
 4. Add an E2E journey in `tests/e2e/journey.spec.ts` if it's a core flow.
 5. Open PR → `build` must pass.
 
 ## 5. Data model (Supabase)
+
 Storage buckets (RLS allows anon insert/select so the app works without login):
 `library`, `midi`, `audio`, `tracks`, `datasets`, `adapters`.
 DB tables (backend-written, service-role): `jobs`, `models`.

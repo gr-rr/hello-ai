@@ -1,0 +1,24 @@
+[extend]
+# Extends the default Gitleaks config.
+useDefault = true
+
+[allowlist]
+description = "Global allowlist — test tokens, example values, known safe paths"
+paths = [
+    # Test / fixture files
+    "(fixtures|test|tests|__test__|__tests__)/",
+    ".spec.ts$",
+    ".test.ts$",
+    # Example / template files
+    ".env.example$",
+    # Package lock / generated
+    "package-lock.json$",
+    "yarn.lock$",
+]
+
+# Override the OpenAI / generic API key rule to be less noisy (we use OpenRouter).
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(?:sk-or-v[0-9a-z]{10,}|sk-[a-z0-9]{20,})(?:['\"`\s]|$)'''
+keywords = ["sk-or-", "sk-"]

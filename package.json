@@ -7,10 +7,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint --max-warnings 200",
+    "lint:fix": "eslint . --fix --max-warnings 200",
+    "commit": "aicommits",
+    "ci": "npm run build && npm run lint",
+    "check": "bash scripts/check.sh",
+    "db:types": "supabase gen types typescript --linked > lib/database.types.ts"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.3.3",
+    "@sentry/nextjs": "^10.66.0",
     "@supabase/supabase-js": "^2.45.0",
     "abcjs": "^6.6.4",
     "next": "15.5.20",
@@ -19,14 +24,25 @@
   },
   "devDependencies": {
     "@argos-ci/playwright": "^7.3.6",
+    "@eslint/eslintrc": "^3.3.6",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
+    "aicommits": "^3.4.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "globals": "^17.7.0",
+    "msw": "^2.15.0",
     "playwright": "^1.61.1",
     "postcss": "^8.5.19",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
