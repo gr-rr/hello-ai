@@ -1,0 +1,35 @@
+name: Argos
+
+# Visual review loop for PRs.
+# Argos captures the design mockup (SOT) + the real built app and diffs every
+# PR build against the `main` baseline, posting results on the PR.
+# Requires: a project at https://app.argos-ci.com and ARGOS_TOKEN in repo secrets.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  argos:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run start &
+      - name: wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 && break
+            sleep 1
+          done
+      - name: visual tests
+        run: npx playwright test
+        env:
+          ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}
+          # Tokenless/OIDC also supported — see Argos GitHub Actions auth docs.
