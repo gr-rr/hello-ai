@@ -8,6 +8,7 @@ import {
   midiToDataUrl,
   type TranscribeResult,
 } from "@/lib/music";
+import Score from "@/components/Score";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -150,6 +151,11 @@ export default function Transcribe() {
               </span>
             ))}
           </div>
+          <h4>Sheet Music</h4>
+          <p className="muted">
+            Rendered with abcjs. Hit Play to hear it with a moving cursor.
+          </p>
+          <Score notes={result.notes} />
         </div>
       )}
     </>

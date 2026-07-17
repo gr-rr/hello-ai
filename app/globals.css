@@ -839,7 +839,7 @@ a {
   margin-top: 8px;
 }
 
-.note-chip {
+ .note-chip {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -958,3 +958,52 @@ a {
   font-size: var(--fs-sm);
 }
 
+.score {
+  margin-top: 8px;
+}
+
+.score-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.score-controls button {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.score-controls button:hover:not(:disabled) {
+  background: var(--panel-3);
+  border-color: var(--border-strong);
+}
+
+.score-controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.score-abc {
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.score-abc svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.abcjs-cursor {
+  fill: rgba(220, 38, 38, 0.25);
+  stroke: rgba(220, 38, 38, 0.7);
+  stroke-width: 1;
+}
