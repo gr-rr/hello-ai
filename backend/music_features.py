@@ -14,6 +14,7 @@ import io
 import json
 import logging
 import os
+import subprocess
 import tempfile
 
 import numpy as np
@@ -52,13 +53,30 @@ def _midi_to_wav_fluidsynth(midi_bytes: bytes, sr: int = 22050) -> bytes | None:
         try:
             sfid = fs.sfload(SOUNDFONT_PATH)
             fs.program_select(0, sfid, 0, 0)  # bank 0, piano (prog 0)
+            # Light reverb + chorus for a less dry, more natural render.
+            fs.set_reverb(0.25, 0.4, 0.6, 0.12)
+            fs.set_chorus(2, 0.04, 0.6, 4.0, 0)
             fs.midi2audio(midi_path, wav_path)
         finally:
             fs.delete()
         if not os.path.exists(wav_path):
             return None
         with open(wav_path, "rb") as f:
-            return f.read()
+            raw = f.read()
+        # Peak-normalize the rendered audio (FluidSynth output is quiet).
+        return _normalize_wav(raw)
+
+
+def _normalize_wav(wav_bytes: bytes, peak: float = 0.95) -> bytes:
+    """Peak-normalize a 16-bit PCM WAV in memory (no extra deps)."""
+    data, sr = sf.read(io.BytesIO(wav_bytes))
+    max_abs = float(np.max(np.abs(data))) if data.size else 0.0
+    if max_abs > 0.0:
+        gain = min(peak / max_abs, 10.0)
+        data = np.clip(data * gain, -1.0, 1.0)
+    buf = io.BytesIO()
+    sf.write(buf, data, sr, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
 
 
 def _note_to_freq(midi_note: int) -> float:
@@ -124,6 +142,17 @@ def transcribe_audio(audio_bytes: bytes, fmt: str = "wav", onset_threshold: floa
         in_path = os.path.join(td, f"input{suffix}")
         with open(in_path, "wb") as f:
             f.write(audio_bytes)
+        # basic-pitch only reads wav/flac/ogg/mp3; convert anything else
+        # (e.g. webm from MediaRecorder) to wav via ffmpeg first.
+        if suffix not in (".wav", ".flac", ".ogg", ".mp3", ".m4a", ".aac"):
+            wav_path = os.path.join(td, "input.wav")
+            conv = subprocess.run(
+                ["ffmpeg", "-y", "-i", in_path, "-ac", "1", "-ar", "22050", wav_path],
+                capture_output=True,
+            )
+            if conv.returncode != 0 or not os.path.exists(wav_path):
+                raise RuntimeError("ffmpeg conversion failed: " + conv.stderr.decode()[:300])
+            in_path = wav_path
         # basic-pitch writes <input_stem>.mid + note events to out_dir.
         out_dir = os.path.join(td, "out")
         os.makedirs(out_dir, exist_ok=True)
