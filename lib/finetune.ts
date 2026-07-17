@@ -41,14 +41,24 @@ export async function uploadDataset(name: string, jsonl: string): Promise<string
 
 export async function listDatasets(): Promise<string[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase.storage.from("datasets").list("", {
-    sortBy: { column: "created_at", order: "desc" },
-  });
-  if (error) throw error;
-  const names = (data ?? [])
-    .filter((f) => f.name.endsWith(".jsonl"))
-    .map((f) => f.name);
-  return names;
+  // List both the bucket root and the legacy "datasets/" folder (older uploads
+  // nested there). Flatten to just the filenames.
+  const [root, nested] = await Promise.all([
+    supabase.storage.from("datasets").list("", {
+      sortBy: { column: "created_at", order: "desc" },
+    }),
+    supabase.storage.from("datasets").list("datasets", {
+      sortBy: { column: "created_at", order: "desc" },
+    }).catch(() => ({ data: [], error: null })),
+  ]);
+  const names = new Set<string>();
+  for (const f of (root?.data ?? []) as any[]) {
+    if (f.name.endsWith(".jsonl")) names.add(f.name);
+  }
+  for (const f of (nested?.data ?? []) as any[]) {
+    if (f.name.endsWith(".jsonl")) names.add(`datasets/${f.name}`);
+  }
+  return [...names];
 }
 
 export async function downloadDataset(path: string): Promise<string> {
