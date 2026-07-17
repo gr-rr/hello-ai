@@ -10,6 +10,7 @@
     "lint": "next lint",
     "commit": "aicommits",
     "ci": "npm run build && npm run lint",
+    "check": "bash scripts/check.sh",
     "db:types": "supabase gen types typescript --linked > lib/database.types.ts"
   },
   "dependencies": {
