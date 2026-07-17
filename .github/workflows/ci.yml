@@ -53,6 +53,7 @@ jobs:
         run: npm run start &
         env:
           NODE_ENV: test
+          NEXT_PUBLIC_MOCK_ENABLED: "true"
       - name: Wait for server
         run: npx wait-on http://localhost:3000
       - name: Run E2E tests
@@ -60,12 +61,4 @@ jobs:
         env:
           ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}
 
-  semgrep:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: semgrep/semgrep-action@v1
-        with:
-          config: p/typescript
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+

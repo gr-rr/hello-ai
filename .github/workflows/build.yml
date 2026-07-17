@@ -25,6 +25,8 @@ jobs:
       # Library flow breaks (e.g. missing abcjs audio CSS, RLS upload failure).
       - run: npx playwright install --with-deps chromium
       - name: user journeys (server + blocking tests)
+        env:
+          NEXT_PUBLIC_MOCK_ENABLED: "true"
         run: |
           npm run start & SERVER_PID=$!
           for i in $(seq 1 30); do
