@@ -6,17 +6,25 @@ so the coding agent builds against an approved look instead of inventing UI ad h
 ## Flow
 
 ```
-Requirements ──▶ Design Agent ──▶ Mockup (PNG + tokens.json)
-                                     │
+Requirements ──▶ Design Agent ──▶ Mockup (design/mockups/*.html + tokens.json)
+                                     │  source of truth (SOT)
                                      ▼
                             Implementation Agent (reads design/, not the prompt)
                                      │
                                      ▼
-                                  Website (globals.css tokens + .btn/.card/.chip primitives)
+                  Website (globals.css tokens + .btn/.card/.chip primitives)
                                      │
                                      ▼
-                       Playwright screenshot ──▶ Vision QA diff vs mock ──▶ fixes
+   Argos CI (.github/workflows/argos.yml) ──▶ captures mockup + app ──▶ diff vs main baseline on every PR
+                                     │
+                                     ▼
+                          PR check: review visual changes, approve/reject, iterate
 ```
+
+Argos is the feedback loop: it screenshots the **design mockup** (SOT) and the
+**real built app** on every PR and diffs them against the `main` baseline, posting
+results as a PR check. Edit the mockup (design) or components (implementation) and
+push — Argos shows what changed visually so you can iterate.
 
 1. **Design** produces `design/tokens.json` + a mockup HTML/PNG (see `mockups/`).
 2. **Implement** consumes the tokens (mirrored in `app/globals.css :root`) and the
@@ -31,19 +39,21 @@ Requirements ──▶ Design Agent ──▶ Mockup (PNG + tokens.json)
 - `mockups/audio-to-sheet-music.png` — rendered reference image for the focused product flow.
 - `app/globals.css` — `:root` block is the CSS mirror of `tokens.json`; primitive classes below it.
 
-## Regenerating the mockup PNG
+## Visual QA loop (Argos)
+Set up once:
+1. Create a project at https://app.argos-ci.com.
+2. Add `ARGOS_TOKEN` to repo **Settings → Secrets → Actions** (or use tokenless OIDC — see Argos GH Actions auth docs).
+
+Then every PR automatically:
+- builds the app, starts it,
+- runs `tests/visual/preview.spec.ts` (design mockup + app overview + app transcribe),
+- uploads screenshots to Argos, which diffs against the `main` baseline and reports on the PR.
+
+Local run (no upload): `npx playwright test` (screenshots land in `./screenshots`, gitignored).
+
+Regenerating the mockup PNG (for local preview only):
 ```bash
-# from repo root
-cat > shot.mjs <<'EOF'
-import { chromium } from 'playwright';
-const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 1180, height: 900 }, deviceScaleFactor: 2 });
-await p.goto('file://' + process.cwd() + '/design/mockups/audio-to-sheet-music.html');
-await p.waitForTimeout(300);
-await p.screenshot({ path: 'design/mockups/audio-to-sheet-music.png', fullPage: true });
-await b.close();
-EOF
-node shot.mjs && rm shot.mjs
+npx playwright test preview.spec.ts:5   # or open design/mockups/audio-to-sheet-music.html in a browser
 ```
 
 ## Tokens → usage
