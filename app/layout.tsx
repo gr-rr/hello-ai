@@ -5,6 +5,10 @@ export const metadata: Metadata = {
   title: "hello-ai — In-Browser Music Studio & Local LLM Chat",
   description:
     "Generate music from text and chat with a local LLM, entirely in your browser via WebGPU and transformers.js.",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

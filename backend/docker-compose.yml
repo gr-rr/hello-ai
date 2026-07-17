@@ -1,0 +1,28 @@
+services:
+  backend:
+    image: hello-ai-backend:latest
+    build: .
+    container_name: music-backend
+    restart: unless-stopped
+    environment:
+      # Server-side Supabase (service role — secret, never exposed to browser).
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    networks:
+      - proxy
+
+  caddy:
+    image: caddy:latest
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
