@@ -17,3 +17,10 @@ backend/__pycache__/
 
 *.tsbuildinfo
 .env*
+
+# Argos / Playwright visual tests
+screenshots/
+playwright-report/
+.playwright/
+.preview/
+test-results/
