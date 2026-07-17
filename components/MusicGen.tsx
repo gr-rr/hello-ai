@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Visualizer from "./Visualizer";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
-import { getTracks, saveTrack, type Track } from "@/lib/audio";
+import { getTracks, saveTrack, type Track } from "@/lib/db";
 
 const SEED_EXAMPLES = [
   "80s pop track with bassy drums and synth",
@@ -73,6 +73,8 @@ export default function MusicGen() {
   const [status, setStatus] = useState("Ready. Describe the music you want.");
   const [progress, setProgress] = useState(0);
   const [indeterminate, setIndeterminate] = useState(false);
+  // Server-side generation: the backend is always "ready" (no client model load).
+  const [ready, setReady] = useState(true);
   const [busy, setBusy] = useState(false);
 
   const [duration, setDuration] = useState(5);
@@ -87,11 +89,63 @@ export default function MusicGen() {
   const [tracks, setTracks] = useState<Track[]>([]);
 
   const audioRef = useRef<HTMLAudioElement>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const workerInit = useRef(false);
+
+  // Lazily spin up the in-browser WASM worker only when we actually fall back
+  // to client-side generation (avoids downloading the ~656MB model upfront
+  // when the server backend is available).
+  function ensureWorker(): Promise<void> {
+    if (workerInit.current) return Promise.resolve();
+    return new Promise((resolve) => {
+      const worker = new Worker(
+        new URL("./musicgen.worker.ts", import.meta.url)
+      );
+      workerRef.current = worker;
+      worker.onmessage = (e: MessageEvent) => {
+        const msg = e.data;
+        if (msg.type === "load-progress") {
+          setProgress(msg.progress);
+          setStatus(
+            msg.progress >= 1
+              ? "Finalizing model…"
+              : `Loading model (${(msg.progress * 100).toFixed(0)}% of ~656MB)…`
+          );
+        } else if (msg.type === "ready") {
+          setReady(true);
+          setStatus("Ready. Describe the music you want.");
+        } else if (msg.type === "result") {
+          const blob = new Blob([msg.buffer], { type: "audio/wav" });
+          const url = URL.createObjectURL(blob);
+          setAudioUrl(url);
+          setAudioBlob(blob);
+          setSaved(false);
+          setStatus("Done!");
+          setProgress(1);
+          setIndeterminate(false);
+          setBusy(false);
+        } else if (msg.type === "error") {
+          setStatus("⚠️ " + msg.message);
+          setIndeterminate(false);
+          setBusy(false);
+        }
+      };
+      worker.postMessage({ type: "init" });
+      workerInit.current = true;
+      // Give the worker a moment to start; readiness is handled via messages.
+      setTimeout(resolve, 300);
+    });
+  }
 
   useEffect(() => {
     if (isSupabaseConfigured) {
       getTracks().then(setTracks).catch(() => {});
     }
+
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
   }, []);
 
   async function saveToGallery() {
@@ -138,7 +192,7 @@ export default function MusicGen() {
 
   async function generate() {
     const text = textInput.trim();
-    if (!text || busy) return;
+    if (!text || busy || !ready) return;
 
     setBusy(true);
     setAudioUrl(null);
@@ -188,6 +242,9 @@ export default function MusicGen() {
       }
       throw new Error("no audio returned");
     } catch (err) {
+      // Server-side generation failed. The in-browser WASM worker exists as a
+      // reference fallback (see ensureWorker) but is intentionally disabled so
+      // we don't pull the ~656MB model into the browser. Just surface the error.
       const msg = err instanceof Error ? err.message : String(err ?? "unknown");
       setStatus("⚠️ Generation failed: " + msg);
       setIndeterminate(false);
@@ -267,7 +324,7 @@ export default function MusicGen() {
       <button
         className="generate"
         onClick={generate}
-        disabled={busy || !textInput.trim()}
+        disabled={!ready || busy || !textInput.trim()}
       >
         {busy ? "Generating…" : "Generate Music"}
       </button>

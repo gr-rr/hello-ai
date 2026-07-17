@@ -771,19 +771,3 @@ a {
     height: 12rem;
   }
 }
-
-.notes-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.note-chip {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 12px;
-  font-family: var(--mono, ui-monospace, monospace);
-}
