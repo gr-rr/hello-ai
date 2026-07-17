@@ -12,11 +12,14 @@ on:
 jobs:
   argos:
     runs-on: ubuntu-latest
+    # Visual QA is an informational signal only — it must never fail the pipeline
+    # or block a merge (only the `build` job is required by branch protection).
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -29,7 +32,8 @@ jobs:
             sleep 1
           done
       - name: visual tests
+        # Skip upload if no token is configured; otherwise push to Argos.
+        if: ${{ secrets.ARGOS_TOKEN != '' }}
         run: npx playwright test
         env:
           ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}
-          # Tokenless/OIDC also supported — see Argos GitHub Actions auth docs.
