@@ -1,3 +1,9 @@
+@import "tailwindcss";
+/*
+ ---break---
+ */
+@custom-variant dark (&:is(.dark *));
+
 /*
  * Design System — tokens (single source of truth).
  * Mirror of design/tokens.json. Keep both in sync.
@@ -12,17 +18,17 @@
 
   /* Color — text */
   --text: #e6e9ef;
-  --muted: #9aa4b2;
+  --muted: oklch(0.97 0 0);
 
   /* Color — brand / accents */
-  --accent: #6ea8fe;
+  --accent: oklch(0.97 0 0);
   --accent-2: #7c5cff;
   --accent-soft: rgba(110, 168, 254, 0.14);
   --danger: #dc2626;
   --success: #34d399;
 
   /* Color — lines */
-  --border: #232a3a;
+  --border: oklch(0.922 0 0);
   --border-strong: #2f3850;
 
   /* Radius scale */
@@ -62,7 +68,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.35);
   --shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.45);
-  --ring: 0 0 0 3px var(--accent-soft);
+  --ring: oklch(0.708 0 0);
 
   /* Motion */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -914,45 +920,6 @@ a {
   background: var(--panel-3);
 }
 
-.panel-box {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--s-5);
-  box-shadow: var(--shadow-sm);
-}
-
-.surface-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--s-5);
-  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-.surface-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.input {
-  width: 100%;
-  padding: 8px 12px;
-  font-size: var(--fs-base);
-  font-family: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
-}
-.input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--ring);
-}
-
 .muted {
   color: var(--muted);
   font-size: var(--fs-sm);
@@ -969,26 +936,6 @@ a {
   flex-wrap: wrap;
 }
 
-.score-controls button {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.score-controls button:hover:not(:disabled) {
-  background: var(--panel-3);
-  border-color: var(--border-strong);
-}
-
-.score-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .score-abc {
   overflow-x: auto;
   background: #fff;
@@ -1000,6 +947,10 @@ a {
 .score-abc svg {
   max-width: 100%;
   height: auto;
+}
+
+.score-audio {
+  margin-top: 8px;
 }
 
 .abcjs-cursor {

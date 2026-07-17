@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "abcjs/abcjs-audio.css";
+import { Geist } from "next/font/google";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: "hello-ai — Music Studio, Finetune & Compare",
@@ -17,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`font-sans ${geist.variable}`}>
       <body>{children}</body>
     </html>
   );

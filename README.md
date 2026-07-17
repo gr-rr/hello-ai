@@ -1,17 +1,27 @@
-# hello-ai · Music Studio + Finetune Lab
+# hello-ai · Audio → Sheet Music
 
-An **AI playground** with three studios, all backed by a small Oracle Cloud VM
-and Supabase:
+Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a
+transcription (basic-pitch on an Oracle VM), and a synthesized, cursor-highlighted
+score you can play back in the browser (abcjs). Files persist to Supabase.
 
-- 🎵 **Music Studio** (`/`) — text-to-music via **MusicGen** (server-side on Oracle, with an in-browser WASM reference fallback disabled).
-- 💬 **Chat** (`/chat`) — local LLM chat.
-- 🧪 **Finetune Lab** — prepare datasets (`/data`), train a LoRA (`/train`), and compare two models side-by-side (`/compare`).
+## Live features
 
-## Features
+- 📁 **Library** (`/?tab=library`) — upload + manage audio in Supabase.
+- 🎼 **Transcribe** (`/?tab=transcribe`) — audio → MIDI (basic-pitch) → rendered
+  sheet music with playback.
 
-- 🎵 **Music Studio** (`/`) — text-to-music with **MusicGen**
-- 🧬 **Finetune Lab** — fine-tune small LLMs (TinyLlama / SmolLM2) with LoRA on the Oracle backend (CPU), persist adapters to Supabase, and compare outputs.
-- 📊 Live **waveform + spectrogram** visualizer (native Web Audio `AnalyserNode`)
+Other studios (Music, Chat, Piano, Datasets, Train, Compare) are implemented but
+**disabled** in the `FEATURES` registry (`components/Studio.tsx`) — flip
+`enabled: true` to bring them back.
+
+## Documentation
+
+| Doc | What it covers |
+|-----|----------------|
+| [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) | Local setup on the free/OSS stack (Vercel + Oracle + Supabase) |
+| [docs/TOOLING.md](docs/TOOLING.md) | Libraries, services, and config files |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram + the design→build→test→ship loop |
+| [design/README.md](design/README.md) | Design system (tokens, mockups, Argos visual QA) |
 
 ## Local development
 
@@ -20,24 +30,20 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. See [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) for the
+full setup (env, tests, backend, Supabase RLS).
 
-> Requires a WebGPU-capable browser (recent Chrome/Edge). Without WebGPU the
-> model will fail to load.
+## CI / merge gate
 
-### Headless WebGPU verification
-
-`npm run debug` drives the live (or local) URL with headless Chromium using
-SwiftShader WebGPU and prints console logs. Set `URL` to test another target:
-
-```bash
-URL=http://localhost:3000 npm run debug
-```
+- **`build`** (required) — builds the app and runs the blocking Playwright user
+  journeys in `tests/e2e/journey.spec.ts` (Transcribe + Library). A broken core
+  flow cannot merge.
+- **`argos`** (non-blocking) — visual diff vs `main` baseline, for review.
 
 ## Deploy
 
-Deploy to [Vercel](https://vercel.com) — connect the repo and it builds with
-the included `vercel.json` (Next.js framework preset).
+Deploy to [Vercel](https://vercel.com) — connect the repo; it builds with the
+included `vercel.json` (Next.js framework preset).
 
 ### Environment variables (Vercel + local `.env.local`)
 
@@ -45,17 +51,16 @@ the included `vercel.json` (Next.js framework preset).
 |-----|---------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (public) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/publishable key (public, browser-safe) |
-| `MUSIC_BACKEND_URL` | Oracle FastAPI backend base URL (e.g. `http://129.146.52.142`) |
+| `MUSIC_BACKEND_URL` | Oracle FastAPI backend base URL (default `https://gricci-testing.duckdns.org`) |
 
-Without `MUSIC_BACKEND_URL` the app surfaces a generation error (no fallback).
-Without the Supabase vars the gallery is hidden and saving is local-only.
+Without the Supabase vars the app falls back to built-in demo values; without the
+backend, Transcribe can't return notes.
 
 ## Server-side generation (Oracle Cloud, always-free)
 
-Generation can also run on an Oracle Cloud **Ampere A1** VM (4 OCPU / 24 GB ARM,
-Ubuntu 22.04) instead of — or in addition to — the browser. The Next.js
-`/api/generate` route proxies to the backend; the UI auto-falls back to WASM if
-the backend is unreachable.
+Transcription runs on an Oracle Cloud **Ampere A1** VM (4 OCPU / 24 GB ARM,
+Ubuntu 22.04) behind Caddy TLS. The Next.js `/api/music/*` routes proxy to the
+backend. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ### Architecture
 

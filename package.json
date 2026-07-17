@@ -7,8 +7,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "debug": "node scripts/debug-webgpu.mjs"
+    "lint": "next lint"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.3.3",
@@ -21,10 +20,13 @@
   "devDependencies": {
     "@argos-ci/playwright": "^7.3.6",
     "@playwright/test": "^1.61.1",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "playwright": "^1.61.1",
+    "postcss": "^8.5.19",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3"
   }
 }

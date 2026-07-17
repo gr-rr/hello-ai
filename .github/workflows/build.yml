@@ -9,11 +9,29 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Public Supabase creds so the Library/Transcribe journeys hit real storage.
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Blocking user-journey check: a PR cannot merge if the Transcribe or
+      # Library flow breaks (e.g. missing abcjs audio CSS, RLS upload failure).
+      - run: npx playwright install --with-deps chromium
+      - name: user journeys (server + blocking tests)
+        run: |
+          npm run start & SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:3000 && break
+            sleep 1
+          done
+          npx playwright test tests/e2e/journey.spec.ts
+          TEST_STATUS=$?
+          kill $SERVER_PID 2>/dev/null || true
+          exit $TEST_STATUS

@@ -5,7 +5,6 @@ import {
   transcribeAudio,
   enhanceAudio,
   wavToDataUrl,
-  midiToDataUrl,
   type TranscribeResult,
 } from "@/lib/music";
 import Score from "@/components/Score";
@@ -97,7 +96,7 @@ export default function Transcribe() {
   return (
     <>
       <div className="header">
-        <span className="badge">Finetune Studio · Transcribe</span>
+        <span className="badge">Music Studio · Transcribe</span>
         <h1>Audio → MIDI</h1>
         <p>
           Transcribe audio to a symbolic score with basic-pitch (Spotify, Apache-2.0),

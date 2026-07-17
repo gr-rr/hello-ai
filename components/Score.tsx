@@ -7,8 +7,12 @@ import { midiNotesToAbc } from "@/lib/abc";
 
 type Note = TranscribeResult["notes"][number];
 
+const SOUNDFONT_URL =
+  "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/";
+
 export default function Score({ notes }: { notes: Note[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLDivElement>(null);
   const cursorControlRef = useRef<abcjs.CursorControl | null>(null);
   const synthControlRef = useRef<abcjs.SynthObjectController | null>(null);
   const visualObjRef = useRef<abcjs.TuneObject | null>(null);
@@ -61,22 +65,24 @@ export default function Score({ notes }: { notes: Note[] }) {
 
     const synth = new abcjs.synth.SynthController();
     synthControlRef.current = synth;
-    synth.load(
-      containerRef.current,
-      cursorControlRef.current,
-      {
+    if (audioRef.current) {
+      synth.load(
+        audioRef.current,
+        cursorControlRef.current,
+        {
         displayLoop: false,
         displayRestart: false,
         displayPlay: true,
         displayProgress: true,
         displayWarp: false,
       },
-    );
+      );
+    }
 
     const setup = async () => {
       try {
         await synth.setTune(visualObj, false, {
-          soundFontUrl: "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/acoustic_grand_piano-mp3.js",
+          soundFontUrl: SOUNDFONT_URL,
         });
         setReady(true);
       } catch {
@@ -99,29 +105,21 @@ export default function Score({ notes }: { notes: Note[] }) {
   return (
     <div className="score">
       <div className="score-controls">
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.play()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.play()}>
           ▶ Play
         </button>
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.pause()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.pause()}>
           ⏸ Pause
         </button>
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.restart()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.restart()}>
           ⏹ Stop
         </button>
-        <button disabled={!abc} onClick={downloadAbc}>
+        <button className="btn" disabled={!abc} onClick={downloadAbc}>
           ⬇ ABC
         </button>
       </div>
       <div ref={containerRef} className="score-abc" />
+      <div ref={audioRef} className="score-audio" />
     </div>
   );
 }
