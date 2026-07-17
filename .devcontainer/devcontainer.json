@@ -1,0 +1,15 @@
+{
+  "name": "Music AI Studio",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "opencode",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ms-python.python",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  }
+}
