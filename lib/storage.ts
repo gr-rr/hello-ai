@@ -35,17 +35,6 @@ export async function listFiles(
   return (data ?? []) as any[];
 }
 
-export async function downloadFile(
-  bucket: string,
-  path: string,
-): Promise<string> {
-  if (!supabase) throw new Error("Supabase not configured");
-  const key = path.replace(/^\/?/, "");
-  const { data, error } = await supabase.storage.from(bucket).download(key);
-  if (error) throw error;
-  return await (data as Blob).text();
-}
-
 export function getPublicUrl(bucket: string, path: string): string {
   if (!supabase) return "";
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);

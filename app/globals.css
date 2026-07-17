@@ -920,45 +920,6 @@ a {
   background: var(--panel-3);
 }
 
-.panel-box {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--s-5);
-  box-shadow: var(--shadow-sm);
-}
-
-.surface-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--s-5);
-  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
-}
-.surface-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.input {
-  width: 100%;
-  padding: 8px 12px;
-  font-size: var(--fs-base);
-  font-family: inherit;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
-}
-.input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--ring);
-}
-
 .muted {
   color: var(--muted);
   font-size: var(--fs-sm);
@@ -975,26 +936,6 @@ a {
   flex-wrap: wrap;
 }
 
-.score-controls button {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
-  color: var(--text);
-}
-
-.score-controls button:hover:not(:disabled) {
-  background: var(--panel-3);
-  border-color: var(--border-strong);
-}
-
-.score-controls button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .score-abc {
   overflow-x: auto;
   background: #fff;
@@ -1006,6 +947,10 @@ a {
 .score-abc svg {
   max-width: 100%;
   height: auto;
+}
+
+.score-audio {
+  margin-top: 8px;
 }
 
 .abcjs-cursor {

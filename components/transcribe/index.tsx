@@ -5,7 +5,6 @@ import {
   transcribeAudio,
   enhanceAudio,
   wavToDataUrl,
-  midiToDataUrl,
   type TranscribeResult,
 } from "@/lib/music";
 import Score from "@/components/Score";

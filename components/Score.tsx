@@ -7,6 +7,9 @@ import { midiNotesToAbc } from "@/lib/abc";
 
 type Note = TranscribeResult["notes"][number];
 
+const SOUNDFONT_URL =
+  "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/";
+
 export default function Score({ notes }: { notes: Note[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLDivElement>(null);
@@ -79,7 +82,7 @@ export default function Score({ notes }: { notes: Note[] }) {
     const setup = async () => {
       try {
         await synth.setTune(visualObj, false, {
-          soundFontUrl: "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/",
+          soundFontUrl: SOUNDFONT_URL,
         });
         setReady(true);
       } catch {
@@ -102,25 +105,16 @@ export default function Score({ notes }: { notes: Note[] }) {
   return (
     <div className="score">
       <div className="score-controls">
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.play()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.play()}>
           ▶ Play
         </button>
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.pause()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.pause()}>
           ⏸ Pause
         </button>
-        <button
-          disabled={!ready}
-          onClick={() => synthControlRef.current?.restart()}
-        >
+        <button className="btn" disabled={!ready} onClick={() => synthControlRef.current?.restart()}>
           ⏹ Stop
         </button>
-        <button disabled={!abc} onClick={downloadAbc}>
+        <button className="btn" disabled={!abc} onClick={downloadAbc}>
           ⬇ ABC
         </button>
       </div>

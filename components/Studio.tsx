@@ -41,17 +41,21 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: strin
   const safeInitial = TABS.some((t) => t.id === initialTab) ? initialTab : "overview";
   const [tab, setTab] = useState<string>(safeInitial);
 
-  if (tab === "overview") {
-    return (
-      <main className="page">
-        <div className="header">
-          <span className="badge">hello-ai · music studio</span>
-          <h1>Audio → Sheet Music</h1>
-          <p>
-            Upload or record audio and turn it into MIDI and playable sheet
-            music. Start from your Library, then Transcribe.
-          </p>
-        </div>
+  const active = tab !== "overview" ? FEATURES.find((f) => f.id === tab) : undefined;
+  const ActiveComponent = active?.Component;
+
+  return (
+    <main className="page">
+      <div className="header">
+        <span className="badge">hello-ai · music studio</span>
+        <h1>Audio → Sheet Music</h1>
+        <p>
+          Upload or record audio and turn it into MIDI and playable sheet
+          music. Start from your Library, then Transcribe.
+        </p>
+      </div>
+
+      {tab === "overview" ? (
         <div className="cards">
           {TABS.map((t) => (
             <button key={t.id} className="card" onClick={() => setTab(t.id)}>
@@ -60,37 +64,34 @@ export default function Studio({ initialTab = "overview" }: { initialTab?: strin
             </button>
           ))}
         </div>
+      ) : (
+        <>
+          <div className="tabbar">
+            <button className="back" onClick={() => setTab("overview")}>
+              ← Back
+            </button>
+            <div className="tabs">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  className={`tab ${tab === t.id ? "active" : ""}`}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {ActiveComponent && <ActiveComponent />}
+        </>
+      )}
+
+      {tab === "overview" && (
         <div className="footer">
           Powered by basic-pitch, FluidSynth &amp; abcjs, backed by an Oracle
           backend and Supabase.
         </div>
-      </main>
-    );
-  }
-
-  const active = FEATURES.find((f) => f.id === tab);
-  const ActiveComponent = active?.Component;
-
-  return (
-    <main className="page">
-      <div className="tabbar">
-        <button className="back" onClick={() => setTab("overview")}>
-          ← Back
-        </button>
-        <div className="tabs">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              className={`tab ${tab === t.id ? "active" : ""}`}
-              onClick={() => setTab(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {ActiveComponent && <ActiveComponent />}
+      )}
     </main>
   );
 }
