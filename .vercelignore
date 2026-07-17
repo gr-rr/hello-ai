@@ -1,0 +1,4 @@
+soundfonts/
+backend/
+.vercel/
+.env.local
