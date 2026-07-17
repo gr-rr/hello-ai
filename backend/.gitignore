@@ -1,5 +1,0 @@
-# Bundled GM SoundFont for natural MIDI rendering (FluidSynth).
-# 141MB binary — not committed to keep the repo lean. Fetch it before building:
-#   curl -fsSL -L -o soundfonts/FluidR3_GM.sf2 \
-#     "https://github.com/urish/cinto/raw/refs/heads/master/media/FluidR3%20GM.sf2"
-soundfonts/

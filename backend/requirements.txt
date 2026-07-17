@@ -7,7 +7,3 @@ scipy==1.14.1
 supabase==2.31.0
 peft==0.13.2
 datasets==3.0.1
-basic-pitch[tf]==0.4.0
-pretty_midi==0.2.10
-soundfile==0.12.1
-pyfluidsynth==1.4.0
