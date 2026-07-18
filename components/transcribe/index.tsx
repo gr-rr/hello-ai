@@ -145,7 +145,7 @@ export default function Transcribe({
     <>
       {state === "idle" && (
         <div>
-          <h3 className="stage-h3">\uD83C\uDFBC Transcribe</h3>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
 
           {user ? (
             <>
@@ -159,11 +159,11 @@ export default function Transcribe({
                   onChange={(e) => onSelectLibrary(e.target.value)}
                   style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: "var(--panel-2)", color: "var(--fg)", border: "1px solid var(--border)", fontSize: 14 }}
                 >
-                  <option value="">\u2014 Choose a file \u2014</option>
+                  <option value="">— Choose a file —</option>
                   {libFiles.map((f) => (
                     <option key={f.id} value={f.id}>{f.name}</option>
                   ))}
-                  <option value="__upload_new__">\u2795 Upload new\u2026</option>
+                  <option value="__upload_new__">➕ Upload new…</option>
                 </select>
               </div>
 
@@ -195,18 +195,18 @@ export default function Transcribe({
                   onChange={onUploadNew}
                   style={{ display: "none" }}
                 />
-                <span style={{ fontSize: 16, fontWeight: 500 }}>\u2B06 Upload audio</span>
+                <span style={{ fontSize: 16, fontWeight: 500 }}>⬆ Upload audio</span>
                 <span className="muted" style={{ fontSize: 13 }}>Click to browse files</span>
               </div>
 
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 {!recording ? (
                   <button className="btn" onClick={startRecording} disabled={state !== "idle"} style={{ minWidth: 100 }}>
-                    <span style={{ color: "#ef4444" }}>\u25CF</span> Record
+                    <span style={{ color: "var(--danger)" }}>●</span> Record
                   </button>
                 ) : (
                   <button className="btn btn-primary" onClick={stopRecording}>
-                    \u23F9 Stop Recording
+                    ⏹ Stop Recording
                   </button>
                 )}
               </div>
@@ -217,7 +217,7 @@ export default function Transcribe({
 
       {(state === "enhancing" || state === "transcribing") && (
         <div>
-          <h3 className="stage-h3">\uD83C\uDFBC Transcribe</h3>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
             <div className="chip" style={{ background: "var(--panel-3)", cursor: "default" }}>
               {audioName || "audio"}
@@ -227,12 +227,12 @@ export default function Transcribe({
 
           <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
           <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20 }}>
-            <span style={{ fontSize: 13 }}>Processing audio\u2026</span>
+            <span style={{ fontSize: 13 }}>Processing audio…</span>
           </div>
 
           <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
           <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20, marginTop: 8 }}>
-            <span style={{ fontSize: 13 }}>Processing audio\u2026</span>
+            <span style={{ fontSize: 13 }}>Processing audio…</span>
           </div>
         </div>
       )}
@@ -241,16 +241,16 @@ export default function Transcribe({
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div>
-              <h3 className="stage-h3" style={{ margin: 0 }}>\uD83C\uDFBC {audioName}</h3>
+              <h3 className="stage-h3" style={{ margin: 0 }}>🎼 {audioName}</h3>
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {result.analysis && onGoToAnalyze && (
                 <button className="btn btn-primary" onClick={onGoToAnalyze}>
-                  \uD83D\uDCCA View Analysis
+                  📊 View Analysis
                 </button>
               )}
-              <button className="btn btn-ghost" onClick={reset}>\u2715 Clear</button>
+              <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
             </div>
           </div>
 
@@ -260,16 +260,20 @@ export default function Transcribe({
             <audio controls src={wavToDataUrl(result.wav_base64)} style={{ width: "100%" }} />
           )}
 
-          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
-          <div className="panel">
-            <PianoRoll notes={result.notes} />
-          </div>
+          {result.analysis && (
+            <>
+              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
+              <div className="panel">
+                <PianoRoll notes={result.notes} />
+              </div>
+            </>
+          )}
 
           <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
             {result.midi_url ? (
-              <a className="chip ghost" href={result.midi_url} target="_blank" rel="noreferrer">\u2B07 Download MIDI</a>
+              <a className="chip ghost" href={result.midi_url} target="_blank" rel="noreferrer">⬇ Download MIDI</a>
             ) : result.midi_base64 ? (
-              <a className="chip ghost" href={midiToDataUrl(result.midi_base64)} download="transcription.mid">\u2B07 Download MIDI</a>
+              <a className="chip ghost" href={midiToDataUrl(result.midi_base64)} download="transcription.mid">⬇ Download MIDI</a>
             ) : null}
           </div>
 
@@ -280,7 +284,7 @@ export default function Transcribe({
 
       {state === "error" && (
         <div>
-          <h3 className="stage-h3">\uD83C\uDFBC Transcribe</h3>
+          <h3 className="stage-h3">🎼 Transcribe</h3>
           <div className="panel" style={{ borderColor: "rgba(239,68,68,0.3)" }}>
             <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
             <button className="btn" onClick={reset}>Try again</button>

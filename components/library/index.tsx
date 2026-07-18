@@ -275,7 +275,7 @@ export default function Library({ compact }: { compact?: boolean }) {
           </p>
         </div>
       )}
-      {compact && <h3 className="stage-h3">\uD83D\uDCC1 Library</h3>}
+      {compact && <h3 className="stage-h3">📁 Library</h3>}
 
       <div
         ref={dropRef}
@@ -301,11 +301,11 @@ export default function Library({ compact }: { compact?: boolean }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 8 }}>
         {!recording ? (
           <button className="btn" onClick={startRecording} disabled={busy} style={{ minWidth: 100 }}>
-            <span style={{ color: "#ef4444" }}>\u25CF</span> Record
+            <span style={{ color: "var(--danger)" }}>●</span> Record
           </button>
         ) : (
           <button className="btn btn-primary" onClick={stopRecording}>
-            \u25A0 Stop
+            ■ Stop
           </button>
         )}
         {recording && (
@@ -345,7 +345,7 @@ export default function Library({ compact }: { compact?: boolean }) {
               >
                 <div style={{ fontSize: 13, lineHeight: 1.4 }}>
                   <span style={{ fontWeight: 500 }}>{w.composer}</span>
-                  <span className="muted"> \u2014 </span>
+                  <span className="muted"> — </span>
                   <span>{w.title}</span>
                   <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>
                     {w.epoch}
@@ -411,7 +411,7 @@ export default function Library({ compact }: { compact?: boolean }) {
               onClick={stopAudio}
               style={{ fontSize: 12 }}
             >
-              \u25A0 Stop
+              ■ Stop
             </button>
           </div>
         </div>
@@ -422,7 +422,7 @@ export default function Library({ compact }: { compact?: boolean }) {
       <div className="panel">
         <h3>Saved files</h3>
         {!isSupabaseConfigured && (
-          <p className="muted">Supabase not configured \u2014 connect to enable storage.</p>
+          <p className="muted">Supabase not configured — connect to enable storage.</p>
         )}
         {isSupabaseConfigured && files.length === 0 && (
           <p className="muted">No files yet.</p>
@@ -449,7 +449,7 @@ export default function Library({ compact }: { compact?: boolean }) {
                   onClick={() => onDelete(f.id, f.name)}
                   disabled={busy}
                 >
-                  \u2715 Delete
+                  ✕ Delete
                 </button>
               </div>
             </li>
@@ -463,7 +463,7 @@ export default function Library({ compact }: { compact?: boolean }) {
           width: 10px;
           height: 10px;
           border-radius: 50%;
-          background: #ef4444;
+          background: var(--danger);
           animation: pulse-record 1s ease-in-out infinite;
         }
         @keyframes pulse-record {
