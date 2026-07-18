@@ -11,7 +11,7 @@ vi.mock('@/components/Auth', () => ({
 
 vi.mock('@/components/AuthProvider', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useAuth: () => ({ user: null, session: null, loading: false, signOut: vi.fn() }),
+  useAuth: () => ({ user: { id: "test" }, session: {}, loading: false, signOut: vi.fn() }),
 }))
 
 vi.mock('next/navigation', () => ({
@@ -19,7 +19,7 @@ vi.mock('next/navigation', () => ({
 }))
 
 describe('Home (page)', () => {
-  it('renders Studio when unauthenticated (dev bypass)', () => {
+  it('renders Studio when authenticated', () => {
     render(<Home />)
     expect(screen.getByTestId('studio-mock')).toBeInTheDocument()
   })
