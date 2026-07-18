@@ -58,6 +58,7 @@ export default function PianoRoll({
           {/* beat grid lines */}
           {Array.from({ length: Math.floor(totalBeats) + 1 }, (_, i) => {
             const x = labelW + i * PPQ;
+            const isMeasure = i % 4 === 0;
             return (
               <line
                 key={i}
@@ -65,8 +66,8 @@ export default function PianoRoll({
                 y1={0}
                 x2={x}
                 y2={h}
-                stroke="rgba(255,255,255,0.04)"
-                strokeWidth={i % 4 === 0 ? 1 : 0.5}
+                stroke={isMeasure ? "var(--border-strong)" : "var(--border)"}
+                strokeWidth={isMeasure ? 1.5 : 0.5}
               />
             );
           })}
@@ -100,9 +101,9 @@ export default function PianoRoll({
                       height={14}
                       rx={3}
                       fill={color}
-                      opacity={0.8}
+                      opacity={0.3 + (n.velocity / 127) * 0.6}
                     >
-                      <title>{row.label} @ {n.start.toFixed(2)}s</title>
+                      <title>{row.label} @ {n.start.toFixed(2)}s · vel {n.velocity}</title>
                     </rect>
                   );
                 })}
