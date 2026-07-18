@@ -60,6 +60,7 @@ for i, root in enumerate(_NOTES):
 
 def _load_audio(file_path: str) -> tuple[np.ndarray, int]:
     import librosa
+
     return librosa.load(file_path, sr=None, mono=True)
 
 
@@ -115,7 +116,7 @@ def detect_time_signature(y: np.ndarray, sr: int) -> TimeSigResult:
 
     onset_env = librosa.onset.onset_strength(y=y, sr=sr)
     ac = np.correlate(onset_env, onset_env, mode="full")
-    ac = ac[len(ac) // 2:]
+    ac = ac[len(ac) // 2 :]
     if len(ac) < 8:
         return TimeSigResult(numerator=4, denominator=4, confidence=0.1)
 
@@ -144,9 +145,7 @@ def detect_chords(y: np.ndarray, sr: int) -> list[ChordResult]:
     import librosa
 
     hop_length = 512
-    chroma = librosa.feature.chroma_cqt(
-        y=y, sr=sr, hop_length=hop_length, n_chroma=12
-    )
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length, n_chroma=12)
     n_frames = chroma.shape[1]
     if n_frames == 0:
         return []
@@ -178,12 +177,14 @@ def detect_chords(y: np.ndarray, sr: int) -> list[ChordResult]:
 
         if best_label != current_label:
             if current_label and t - current_start > 0.1:
-                chords.append(ChordResult(
-                    root=current_root,
-                    quality=current_quality,
-                    start=round(current_start, 3),
-                    end=round(t, 3),
-                ))
+                chords.append(
+                    ChordResult(
+                        root=current_root,
+                        quality=current_quality,
+                        start=round(current_start, 3),
+                        end=round(t, 3),
+                    )
+                )
             current_label = best_label
             current_start = t
             current_root = root
@@ -191,12 +192,14 @@ def detect_chords(y: np.ndarray, sr: int) -> list[ChordResult]:
 
     if current_label:
         total_duration = n_frames * hop_duration
-        chords.append(ChordResult(
-            root=current_root,
-            quality=current_quality,
-            start=round(current_start, 3),
-            end=round(total_duration, 3),
-        ))
+        chords.append(
+            ChordResult(
+                root=current_root,
+                quality=current_quality,
+                start=round(current_start, 3),
+                end=round(total_duration, 3),
+            )
+        )
 
     return chords
 

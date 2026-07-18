@@ -166,7 +166,7 @@ def _run_training(job_id: str, req: TrainRequest):
                 if not sb2:
                     raise RuntimeError("Supabase not configured for dataset fetch")
                 data = sb2.storage.from_("datasets").download(req.dataset_path)
-                text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+                text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
             else:
                 raise ValueError("no dataset provided")
 
@@ -319,7 +319,7 @@ def _resolve_adapter(model_ref: str, base_model: str):
                     for f in files:
                         data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
                         with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
-                            fh.write(data if isinstance(data, (bytes, bytearray)) else data.read())
+                            fh.write(data if isinstance(data, bytes | bytearray) else data.read())
             return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
     return base_model, None
 
@@ -464,7 +464,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
             raise HTTPException(status_code=500, detail="Supabase not configured")
         key = req.library_path.replace("library/", "")
         data = sb.storage.from_("library").download(key)
-        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
@@ -500,7 +500,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
             raise HTTPException(status_code=500, detail="Supabase not configured")
         key = req.library_path.replace("library/", "")
         data = sb.storage.from_("library").download(key)
-        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
