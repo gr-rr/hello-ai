@@ -1,11 +1,9 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import Auth from "@/components/Auth";
 import Studio from "@/components/Studio";
-import Landing from "@/components/Landing";
 
 const BYPASS_AUTH =
   process.env.NODE_ENV === "development" ||
@@ -16,7 +14,6 @@ function HomeInner() {
   const params = useSearchParams();
   const router = useRouter();
   const tab = params.get("tab") || undefined;
-  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     const code = params.get("code");
@@ -33,12 +30,7 @@ function HomeInner() {
     );
   }
 
-  if (!BYPASS_AUTH && !user) {
-    if (showAuth) return <Auth />;
-    return <Landing />;
-  }
-
-  return <Studio initialTab={tab} />;
+  return <Studio initialTab={tab} signedIn={BYPASS_AUTH || !!user} />;
 }
 
 export default function HomeClient() {

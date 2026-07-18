@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import {
   transcribeAudio,
   enhanceAudio,
+  analyzeAudio,
   wavToDataUrl,
   midiToDataUrl,
   listLibrary,
@@ -19,12 +20,16 @@ type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
 export default function Transcribe({
   compact,
+  signedIn,
   onTranscribed,
   onGoToAnalyze,
+  onAnalyze,
 }: {
   compact?: boolean;
+  signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
+  onAnalyze?: (audioBase64: string, fmt: string, name: string) => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -34,6 +39,8 @@ export default function Transcribe({
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [recording, setRecording] = useState(false);
+  const [cleanAudio, setCleanAudio] = useState<{ b64: string; fmt: string } | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -57,6 +64,7 @@ export default function Transcribe({
       setState("enhancing");
       setStatus("Cleaning audio\u2026");
       const clean = await enhanceAudio(b64, fmt);
+      setCleanAudio({ b64: clean.wav_base64, fmt: "wav" });
 
       setState("transcribing");
       setStatus("Transcribing\u2026");
@@ -140,6 +148,26 @@ export default function Transcribe({
     setAudioName("");
     setStatus("");
     setSelectedId("");
+    setCleanAudio(null);
+    setAnalyzing(false);
+  }
+
+  async function handleAnalyze() {
+    if (!cleanAudio) return;
+    if (onGoToAnalyze) {
+      onGoToAnalyze();
+      return;
+    }
+    if (onAnalyze) {
+      setAnalyzing(true);
+      try {
+        await onAnalyze(cleanAudio.b64, cleanAudio.fmt, audioName);
+      } finally {
+        setAnalyzing(false);
+      }
+      return;
+    }
+    setStatus("Analysis unavailable");
   }
 
   return (
@@ -211,6 +239,12 @@ export default function Transcribe({
                   </button>
                 )}
               </div>
+
+              {!signedIn && (
+                <p className="muted" style={{ fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>
+                  Transcribe freely — sign in to save results to your library.
+                </p>
+              )}
             </>
           )}
         </div>
@@ -251,8 +285,8 @@ export default function Transcribe({
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {onGoToAnalyze && (
-                <button className="btn btn-primary" onClick={onGoToAnalyze}>
-                  📊 View Analysis
+                <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing}>
+                  {analyzing ? "⏳ Analyzing…" : "📊 View Analysis"}
                 </button>
               )}
               <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
