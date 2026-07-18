@@ -218,14 +218,18 @@ export default function Library({ compact }: { compact?: boolean }) {
     }
     setMusopenLoading(true);
     setMusopenWorks([]);
-    setStatus("Loading MusOpen\u2026");
+    setStatus("Loading MusOpen…");
     try {
-      const works = await fetchWorks();
+      const { works, error } = await fetchWorks();
       setMusopenWorks(works);
       setMusopenOpen(true);
-      setStatus(`${works.length} works loaded from MusOpen`);
+      if (error) {
+        setStatus("⚠️ " + error);
+      } else {
+        setStatus(`${works.length} works loaded from MusOpen`);
+      }
     } catch (err) {
-      setStatus("\u26A0\uFE0F " + (err instanceof Error ? err.message : "MusOpen failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "MusOpen failed"));
     } finally {
       setMusopenLoading(false);
     }
@@ -326,9 +330,16 @@ export default function Library({ compact }: { compact?: boolean }) {
         </button>
       </div>
 
-      {musopenOpen && musopenWorks.length > 0 && (
+      {musopenOpen && (
         <div className="panel" style={{ marginBottom: 8, maxHeight: 280, overflowY: "auto" }}>
-          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Select a work to import:</div>
+          {musopenWorks.length === 0 ? (
+            <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+              No works available right now. MusOpen&apos;s public API is currently
+              unavailable — visit <a href="https://musopen.org/music" target="_blank" rel="noreferrer">musopen.org/music</a> to browse the catalog.
+            </p>
+          ) : (
+            <>
+              <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Select a work to import:</div>
           {musopenWorks.map((w) => {
             const hasRecording = fetchFirstRecording(w) !== null;
             return (
@@ -362,6 +373,8 @@ export default function Library({ compact }: { compact?: boolean }) {
               </div>
             );
           })}
+            </>
+          )}
         </div>
       )}
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import type { TranscribeResult } from "@/lib/music";
+import { analyzeAudio, type TranscribeResult } from "@/lib/music";
 
 const STEPS = [
   { id: "library", label: "Library", num: 1 },
@@ -19,10 +19,30 @@ export default function Studio({ initialTab = "transcribe" }: { initialTab?: str
   const [step, setStep] = useState<StepId>(safeStep as StepId);
   const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
+  const [analysis, setAnalysis] = useState<TranscribeResult["analysis"] | null>(null);
+  const [analysisError, setAnalysisError] = useState("");
+  const [analyzeStatus, setAnalyzeStatus] = useState("");
 
   function onTranscribed(result: TranscribeResult, name: string) {
     setLastResult(result);
     setAudioName(name);
+    setAnalysis(result.analysis ?? null);
+    setAnalysisError("");
+  }
+
+  async function handleAnalyze(audioBase64: string, fmt: string, name: string) {
+    setAudioName(name);
+    setAnalyzeStatus("Analyzing audio…");
+    setAnalysisError("");
+    try {
+      const result = await analyzeAudio(audioBase64, fmt);
+      setAnalysis(result);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : "analysis failed");
+    } finally {
+      setAnalyzeStatus("");
+      setStep("analyze");
+    }
   }
 
   return (
@@ -53,7 +73,12 @@ export default function Studio({ initialTab = "transcribe" }: { initialTab?: str
       {step === "transcribe" && (
         <div className="app-grid">
           <div className="stage">
-            <Transcribe compact onTranscribed={onTranscribed} onGoToAnalyze={() => setStep("analyze")} />
+            <Transcribe
+              compact
+              onTranscribed={onTranscribed}
+              onGoToAnalyze={() => setStep("analyze")}
+              onAnalyze={handleAnalyze}
+            />
           </div>
         </div>
       )}
@@ -62,8 +87,14 @@ export default function Studio({ initialTab = "transcribe" }: { initialTab?: str
         <div className="app-grid">
           <div className="stage">
             <h3 className="stage-h3">📊 Analysis</h3>
+            {analyzeStatus && <p className="muted" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
+            {analysisError && (
+              <div className="panel" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
+                <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
+              </div>
+            )}
             <Analysis
-              analysis={lastResult?.analysis}
+              analysis={analysis}
               notes={lastResult?.notes ?? []}
               audioName={audioName}
               numNotes={lastResult?.num_notes ?? 0}

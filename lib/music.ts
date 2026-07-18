@@ -96,6 +96,16 @@ export async function enhanceAudio(
   }) as Promise<{ wav_base64: string; url?: string }>;
 }
 
+export async function analyzeAudio(
+  dataBase64: string,
+  fmt = "wav",
+): Promise<TranscribeResult["analysis"]> {
+  return apiFetch("/api/music/analyze", {
+    method: "POST",
+    body: JSON.stringify({ audio_base64: dataBase64, fmt }),
+  }) as Promise<TranscribeResult["analysis"]>;
+}
+
 export function midiToDataUrl(base64: string): string {
   return `data:audio/midi;base64,${base64}`;
 }
