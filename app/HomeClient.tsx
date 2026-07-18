@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import Auth from "@/components/Auth";
 import Studio from "@/components/Studio";
@@ -14,8 +14,16 @@ const BYPASS_AUTH =
 function HomeInner() {
   const { user, loading } = useAuth();
   const params = useSearchParams();
+  const router = useRouter();
   const tab = params.get("tab") || undefined;
   const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    const code = params.get("code");
+    if (code) {
+      router.replace(`/auth/callback?code=${encodeURIComponent(code)}`);
+    }
+  }, [params, router]);
 
   if (loading) {
     return (

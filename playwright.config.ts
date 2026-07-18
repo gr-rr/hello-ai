@@ -15,6 +15,16 @@ export default defineConfig({
     }
     return list;
   })(),
+  webServer: {
+    command: "npm run dev",
+    url: process.env.BASE_URL || "http://localhost:3000",
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_MOCK_ENABLED: "true",
+    },
+  },
   use: {
     baseURL: process.env.BASE_URL || "http://localhost:3000",
     viewport: { width: 1180, height: 1000 },

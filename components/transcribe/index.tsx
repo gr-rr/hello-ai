@@ -250,7 +250,7 @@ export default function Transcribe({
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              {result.analysis && onGoToAnalyze && (
+              {onGoToAnalyze && (
                 <button className="btn btn-primary" onClick={onGoToAnalyze}>
                   📊 View Analysis
                 </button>
@@ -265,14 +265,10 @@ export default function Transcribe({
             <audio controls src={wavToDataUrl(result.wav_base64)} style={{ width: "100%" }} />
           )}
 
-          {result.analysis && (
-            <>
-              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
-              <div className="panel">
-                <PianoRoll notes={result.notes} />
-              </div>
-            </>
-          )}
+          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
+          <div className="panel">
+            <PianoRoll notes={result.notes} />
+          </div>
 
           <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
             {result.midi_url ? (

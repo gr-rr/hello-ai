@@ -2,9 +2,17 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { uploadToLibrary, listLibrary, deleteFromLibrary, type LibFile } from "@/lib/music";
+import {
+  uploadToLibrary,
+  listLibrary,
+  listTranscriptions,
+  deleteFromLibrary,
+  type LibFile,
+  type Transcription,
+} from "@/lib/music";
 import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
+import PianoRoll from "@/components/PianoRoll";
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return "";
@@ -32,6 +40,10 @@ export default function Library({ compact }: { compact?: boolean }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<LibFile[]>([]);
+  const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
+  const [openTranscription, setOpenTranscription] = useState<Transcription | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -418,6 +430,79 @@ export default function Library({ compact }: { compact?: boolean }) {
       )}
 
       <span className="status">{status}</span>
+
+      <div className="panel">
+        <h3>Transcriptions</h3>
+        {!isSupabaseConfigured && (
+          <p className="muted">Supabase not configured — connect to enable storage.</p>
+        )}
+        {isSupabaseConfigured && loadingLibrary && (
+          <p className="muted">Loading\u2026</p>
+        )}
+        {isSupabaseConfigured && libraryError && (
+          <p className="muted" style={{ color: "var(--danger)" }}>⚠️ {libraryError}</p>
+        )}
+        {isSupabaseConfigured && !loadingLibrary && !libraryError && transcriptions.length === 0 && (
+          <p className="muted">
+            No transcriptions yet. Transcribe audio and tap “Save to library”.
+          </p>
+        )}
+        <ul className="filelist">
+          {transcriptions.map((t) => (
+            <li key={t.id} className={openTranscription?.id === t.id ? "playing" : ""}>
+              <div className="file-info">
+                <span className="file-name">{t.title}</span>
+                <span className="muted" style={{ fontSize: 11, display: "flex", gap: 8 }}>
+                  <span>{t.notes.length} notes</span>
+                  {t.created_at ? <span>{formatDate(t.created_at)}</span> : null}
+                </span>
+              </div>
+              <div className="file-actions">
+                <button className="chip" onClick={() => setOpenTranscription(t)}>
+                  {"\u{1F4DC} Open"}
+                </button>
+                <button
+                  className="chip ghost danger"
+                  onClick={() => onDeleteTranscription(t.id, t.title)}
+                  disabled={busy}
+                >
+                  ✕ Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {openTranscription && (
+        <div className="panel" style={{ marginTop: 8, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontWeight: 500, fontSize: 13 }}>{openTranscription.title}</span>
+            <span className="muted" style={{ fontSize: 11 }}>{openTranscription.notes.length} notes</span>
+          </div>
+          {openTranscription.wav_url && (
+            <audio
+              controls
+              src={openTranscription.wav_url}
+              style={{ width: "100%", marginBottom: 8 }}
+            />
+          )}
+          {openTranscription.notes.length > 0 && (
+            <div className="panel">
+              <PianoRoll notes={openTranscription.notes} />
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+            <button
+              className="chip ghost"
+              onClick={() => setOpenTranscription(null)}
+              style={{ fontSize: 12 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <h3>Saved files</h3>

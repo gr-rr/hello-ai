@@ -52,7 +52,7 @@ export default function PianoRoll({
   const h = rows.length * rowH + 16;
 
   return (
-    <div className="piano-roll-container">
+    <div className="piano-roll-container" data-testid="piano-roll">
       <div className="piano-roll-scroll">
         <svg width={labelW + totalPx} height={h} style={{ display: "block" }}>
           {/* beat grid lines */}
