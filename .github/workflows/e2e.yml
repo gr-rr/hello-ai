@@ -17,9 +17,8 @@ concurrency:
 jobs:
   test:
     if: github.event.pull_request.draft == false
-    timeout-minutes: 15
+    timeout-minutes: 20
     runs-on: ubuntu-latest
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16

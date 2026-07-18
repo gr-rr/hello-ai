@@ -169,6 +169,7 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
                     os.path.join(td, "input_conv.wav"),
                 ],
                 capture_output=True,
+                timeout=120,
             )
             if conv.returncode != 0 or not os.path.exists(os.path.join(td, "input_conv.wav")):
                 logger.warning("enhance: pre-convert failed, using raw input")
@@ -188,7 +189,7 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
             "1",
             out_path,
         ]
-        res = subprocess.run(cmd, capture_output=True)
+        res = subprocess.run(cmd, capture_output=True, timeout=120)
         if res.returncode != 0 or not os.path.exists(out_path):
             logger.warning("enhance pipeline failed, using source: " + res.stderr.decode()[:200])
             # Fall back to the (already converted) source if cleanup failed.

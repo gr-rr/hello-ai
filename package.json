@@ -15,7 +15,8 @@
     "check": "bash scripts/check.sh",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:types": "supabase gen types typescript --linked > lib/database.types.ts"
+    "db:types": "supabase gen types typescript --linked > lib/database.types.ts",
+    "precommit": "pre-commit run --all-files"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.66.0",
@@ -41,6 +42,8 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.10",
     "globals": "^17.7.0",
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
     "jsdom": "^29.1.1",
     "msw": "^2.15.0",
     "playwright": "^1.61.1",
