@@ -3,6 +3,10 @@ name: E2E
 on:
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '*.md'
+      - 'docs/**'
   push:
     branches: [main]
 
@@ -12,6 +16,7 @@ concurrency:
 
 jobs:
   test:
+    if: github.event.pull_request.draft == false
     timeout-minutes: 15
     runs-on: ubuntu-latest
     continue-on-error: true
