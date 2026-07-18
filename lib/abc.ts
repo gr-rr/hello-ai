@@ -49,13 +49,35 @@ function quantizeDuration(seconds: number, bpm = 120): string {
  * Build a minimal ABC string from transcribed note events.
  * Notes are sorted by start time and rendered as a single monophonic voice.
  */
+function abcKeyString(tonic?: string, mode?: string): string {
+  if (!tonic) return "C";
+  const letter = tonic[0].toUpperCase();
+  let acc = "";
+  if (tonic.length > 1) {
+    if (tonic[1] === "#") acc = "^";
+    else if (tonic[1] === "b") acc = "_";
+  }
+  const suffix = mode === "minor" ? "m" : "";
+  return `${acc}${letter}${suffix}`;
+}
+
 export function midiNotesToAbc(
   notes: Note[],
-  opts: { title?: string; bpm?: number } = {},
+  opts: {
+    title?: string;
+    bpm?: number;
+    key?: { tonic: string; mode: string };
+    timeSignature?: { numerator: number; denominator: number };
+  } = {},
 ): string {
-  const { title = "Transcription", bpm = 120 } = opts;
+  const { title = "Transcription", bpm = 120, key, timeSignature } = opts;
+  const timeSig = timeSignature
+    ? `${timeSignature.numerator}/${timeSignature.denominator}`
+    : "4/4";
+  const keyStr = key ? abcKeyString(key.tonic, key.mode) : "C";
+
   if (!notes.length) {
-    return `X: 1\nT: ${title}\nM: 4/4\nL: 1/8\nK: C\n`;
+    return `X: 1\nT: ${title}\nM: ${timeSig}\nL: 1/8\nK: ${keyStr}\n`;
   }
 
   const sorted = [...notes].sort((a, b) => a.start - b.start);
@@ -70,10 +92,10 @@ export function midiNotesToAbc(
   return [
     "X: 1",
     `T: ${title}`,
-    "M: 4/4",
+    `M: ${timeSig}`,
     "L: 1/8",
     "Q: 1/4=" + bpm,
-    "K: C",
+    `K: ${keyStr}`,
     body + " |",
   ].join("\n");
 }

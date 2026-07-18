@@ -40,6 +40,8 @@ async function userPrefix(): Promise<string> {
 
 export async function uploadToLibrary(name: string, blob: Blob): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
+  const uid = await userId();
+  if (!uid) throw new Error("Sign in to save to library");
   const fmt = (name.split(".").pop() || "wav").toLowerCase();
   const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
   const prefix = await userPrefix();
@@ -49,6 +51,8 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<string>
 }
 
 export async function listLibrary(): Promise<LibFile[]> {
+  const uid = await userId();
+  if (!uid) return [];
   const prefix = await userPrefix();
   const files = await listFiles(LIBRARY_BUCKET, prefix);
   return files
@@ -67,6 +71,8 @@ export async function listLibrary(): Promise<LibFile[]> {
 }
 
 export async function deleteFromLibrary(id: string): Promise<void> {
+  const uid = await userId();
+  if (!uid) throw new Error("Sign in to delete from library");
   await apiFetch(`/api/music/library/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 

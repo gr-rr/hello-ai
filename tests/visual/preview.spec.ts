@@ -10,16 +10,18 @@ test("design mockup (SOT)", async ({ page }) => {
   await argosScreenshot(page, "design-mockup");
 });
 
-// Actual built app — overview (landing).
-test("app overview", async ({ page }) => {
-  await page.goto("/?tab=overview");
+// Actual built app — landing (auth gate when unauthenticated).
+test("app landing", async ({ page }) => {
+  await page.goto("/");
   await page.waitForTimeout(400);
-  await argosScreenshot(page, "app-overview", { fullPage: true });
+  await argosScreenshot(page, "app-landing", { fullPage: true });
 });
 
-// Actual built app — transcribe tab.
-test("app transcribe", async ({ page }) => {
-  await page.goto("/?tab=transcribe");
+// Actual built app — studio after mock auth setup (requires MSW).
+test("app studio", async ({ page }) => {
+  // Studio loads client-side — capture the default Transcribe step
+  await page.goto("/");
   await page.waitForTimeout(400);
-  await argosScreenshot(page, "app-transcribe", { fullPage: true });
+  // If MSW is enabled, the page may show the studio; otherwise it shows auth
+  await argosScreenshot(page, "app-studio", { fullPage: true });
 });

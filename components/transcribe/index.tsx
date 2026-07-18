@@ -10,6 +10,7 @@ import {
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
+import { useAuth } from "@/components/AuthProvider";
 import Score from "@/components/Score";
 import PianoRoll from "@/components/PianoRoll";
 
@@ -24,13 +25,17 @@ export default function Transcribe({
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
 }) {
+  const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
   const [status, setStatus] = useState("");
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [recording, setRecording] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mediaRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     listLibrary().then(setLibFiles).catch((err) => {
@@ -101,6 +106,33 @@ export default function Transcribe({
     }
   }
 
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      mediaRef.current = rec;
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => chunksRef.current.push(e.data);
+      rec.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        setAudioName(`recording-${Date.now()}.webm`);
+        await processBlob(blob);
+      };
+      rec.start();
+      setRecording(true);
+      setStatus("Recording\u2026");
+    } catch (err) {
+      setState("error");
+      setStatus("\u26A0 " + (err instanceof Error ? err.message : "recording failed"));
+    }
+  }
+
+  function stopRecording() {
+    mediaRef.current?.stop();
+    setRecording(false);
+  }
+
   function reset() {
     setState("idle");
     setResult(null);
@@ -115,36 +147,70 @@ export default function Transcribe({
         <div>
           <h3 className="stage-h3">\uD83C\uDFBC Transcribe</h3>
 
-          <div className="panel" style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6, color: "var(--muted)" }}>
-              Select from library
-            </label>
-            <select
-              className="sel"
-              value={selectedId}
-              onChange={(e) => onSelectLibrary(e.target.value)}
-              style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: "var(--panel-2)", color: "var(--fg)", border: "1px solid var(--border)", fontSize: 14 }}
-            >
-              <option value="">\u2014 Choose a file \u2014</option>
-              {libFiles.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-              <option value="__upload_new__">\u2795 Upload new\u2026</option>
-            </select>
-          </div>
+          {user ? (
+            <>
+              <div className="panel" style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6, color: "var(--muted)" }}>
+                  Select from library
+                </label>
+                <select
+                  className="sel"
+                  value={selectedId}
+                  onChange={(e) => onSelectLibrary(e.target.value)}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: "var(--panel-2)", color: "var(--fg)", border: "1px solid var(--border)", fontSize: 14 }}
+                >
+                  <option value="">\u2014 Choose a file \u2014</option>
+                  {libFiles.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                  <option value="__upload_new__">\u2795 Upload new\u2026</option>
+                </select>
+              </div>
 
-          <input
-            ref={inputRef}
-            type="file"
-            accept="audio/*"
-            onChange={onUploadNew}
-            style={{ display: "none" }}
-          />
+              <input
+                ref={inputRef}
+                type="file"
+                accept="audio/*"
+                onChange={onUploadNew}
+                style={{ display: "none" }}
+              />
 
-          {libFiles.length === 0 && (
-            <p className="muted" style={{ fontSize: 13 }}>
-              No files in your library yet. Upload audio in the Library tab or use Upload new above.
-            </p>
+              {libFiles.length === 0 && (
+                <p className="muted" style={{ fontSize: 13 }}>
+                  No files in your library yet. Upload audio in the Library tab or use Upload new above.
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <div
+                className="drop-zone"
+                onClick={() => !recording && inputRef.current?.click()}
+                style={{ cursor: recording ? "default" : "pointer", marginBottom: 16 }}
+              >
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={onUploadNew}
+                  style={{ display: "none" }}
+                />
+                <span style={{ fontSize: 16, fontWeight: 500 }}>\u2B06 Upload audio</span>
+                <span className="muted" style={{ fontSize: 13 }}>Click to browse files</span>
+              </div>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                {!recording ? (
+                  <button className="btn" onClick={startRecording} disabled={state !== "idle"} style={{ minWidth: 100 }}>
+                    <span style={{ color: "#ef4444" }}>\u25CF</span> Record
+                  </button>
+                ) : (
+                  <button className="btn btn-primary" onClick={stopRecording}>
+                    \u23F9 Stop Recording
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
