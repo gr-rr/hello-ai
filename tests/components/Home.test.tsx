@@ -24,12 +24,12 @@ describe('Home (page)', () => {
     expect(screen.getByTestId('studio-mock')).toBeInTheDocument()
   })
 
-  it('renders Auth when unauthenticated', async () => {
+  it('shows Sign In button when unauthenticated', async () => {
     const useAuthMod = await import('@/components/AuthProvider')
     vi.spyOn(useAuthMod, 'useAuth').mockReturnValue({
       user: null, session: null, loading: false, signOut: vi.fn(),
     })
     render(<Home />)
-    expect(screen.getByTestId('auth-mock')).toBeInTheDocument()
+    expect(screen.getByText('Sign In')).toBeInTheDocument()
   })
 })
