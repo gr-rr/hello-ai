@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { uploadToLibrary, listLibrary, deleteFromLibrary, type LibFile } from "@/lib/music";
+import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
 
 function formatSize(bytes?: number): string {
@@ -36,6 +37,11 @@ export default function Library({ compact }: { compact?: boolean }) {
   const [duration, setDuration] = useState(0);
   const [recording, setRecording] = useState(false);
   const [recordTimer, setRecordTimer] = useState(0);
+
+  const [musopenWorks, setMusopenWorks] = useState<MusopenWork[]>([]);
+  const [musopenOpen, setMusopenOpen] = useState(false);
+  const [musopenLoading, setMusopenLoading] = useState(false);
+  const [importingTrack, setImportingTrack] = useState<string | null>(null);
 
   const dropRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -205,6 +211,50 @@ export default function Library({ compact }: { compact?: boolean }) {
     setRecordTimer(0);
   }
 
+  async function openMusopen() {
+    if (musopenOpen) {
+      setMusopenOpen(false);
+      return;
+    }
+    setMusopenLoading(true);
+    setMusopenWorks([]);
+    setStatus("Loading MusOpen\u2026");
+    try {
+      const works = await fetchWorks();
+      setMusopenWorks(works);
+      setMusopenOpen(true);
+      setStatus(`${works.length} works loaded from MusOpen`);
+    } catch (err) {
+      setStatus("\u26A0\uFE0F " + (err instanceof Error ? err.message : "MusOpen failed"));
+    } finally {
+      setMusopenLoading(false);
+    }
+  }
+
+  async function importFromMusopen(work: MusopenWork) {
+    const recording = fetchFirstRecording(work);
+    if (!recording) {
+      setStatus("\u26A0\uFE0F No recording available for " + work.title);
+      return;
+    }
+    setImportingTrack(work.title);
+    setStatus(`Importing ${work.title}\u2026`);
+    try {
+      const res = await fetch(recording.url);
+      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+      const blob = await res.blob();
+      const ext = recording.format === "wav" ? "wav" : "mp3";
+      const name = `${work.composer} - ${work.title}.${ext}`.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
+      await uploadToLibrary(name, blob);
+      setStatus(`\u2713 Imported ${work.title}`);
+      await refresh();
+    } catch (err) {
+      setStatus("\u26A0\uFE0F " + (err instanceof Error ? err.message : "import failed"));
+    } finally {
+      setImportingTrack(null);
+    }
+  }
+
   function formatTime(sec: number): string {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
@@ -266,7 +316,54 @@ export default function Library({ compact }: { compact?: boolean }) {
             </span>
           </span>
         )}
+        <button
+          className="btn"
+          onClick={openMusopen}
+          disabled={busy || !!importingTrack}
+          style={{ minWidth: 100 }}
+        >
+          {musopenLoading ? "\u23F3" : musopenOpen ? "\u2715 Close" : "\uD83C\uDFB5 MusOpen"}
+        </button>
       </div>
+
+      {musopenOpen && musopenWorks.length > 0 && (
+        <div className="panel" style={{ marginBottom: 8, maxHeight: 280, overflowY: "auto" }}>
+          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Select a work to import:</div>
+          {musopenWorks.map((w) => {
+            const hasRecording = fetchFirstRecording(w) !== null;
+            return (
+              <div
+                key={w.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "4px 0",
+                  borderBottom: "1px solid var(--border)",
+                  opacity: !hasRecording || importingTrack !== null ? 0.5 : 1,
+                }}
+              >
+                <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+                  <span style={{ fontWeight: 500 }}>{w.composer}</span>
+                  <span className="muted"> \u2014 </span>
+                  <span>{w.title}</span>
+                  <span className="muted" style={{ marginLeft: 6, fontSize: 11 }}>
+                    {w.epoch}
+                  </span>
+                </div>
+                <button
+                  className="chip"
+                  disabled={!hasRecording || !!importingTrack}
+                  onClick={() => importFromMusopen(w)}
+                  style={{ whiteSpace: "nowrap", marginLeft: 8 }}
+                >
+                  {importingTrack === w.title ? "\u23F3" : hasRecording ? "Import" : "No audio"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <audio ref={audioRef} crossOrigin="anonymous" style={{ display: "none" }} />
 
