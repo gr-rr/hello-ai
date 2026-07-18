@@ -1,9 +1,11 @@
 import base64
 import logging
 import os
+import re
 import tempfile
 import threading
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -21,7 +23,7 @@ from finetune_server import (
     load_dataset_jsonl,
     train_lora,
 )
-from music_features import enhance_audio, transcribe_audio
+from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
 from musicgen_server import generate_audio
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +32,26 @@ logger = logging.getLogger("backend")
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 security = HTTPBearer()
+
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
+_LIBRARY_KEY_RE = re.compile(r"^library/[0-9a-f]{32}-[\w.\-]+$")
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _valid_library_key(library_path: str) -> str | None:
+    """Return a sanitized storage key inside the `library/` prefix, or None.
+
+    Only accepts keys shaped like `library/<uuid>-<name>` and rejects any path
+    traversal or attempt to escape the bucket prefix.
+    """
+    if not library_path:
+        return None
+    key = library_path[len("library/") :] if library_path.startswith("library/") else library_path
+    candidate = f"library/{key}"
+    return candidate if _LIBRARY_KEY_RE.match(candidate) else None
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -207,7 +229,7 @@ def _run_training(job_id: str, req: TrainRequest):
                 sb.table("jobs").update(
                     {
                         "status": "done",
-                        "finished_at": "now()",
+                        "finished_at": _now(),
                         "loss_log": _job_logs.get(job_id, ""),
                     }
                 ).eq("id", job_id).execute()
@@ -220,7 +242,7 @@ def _run_training(job_id: str, req: TrainRequest):
                 {
                     "status": "error",
                     "error": str(e),
-                    "finished_at": "now()",
+                    "finished_at": _now(),
                 }
             ).eq("id", job_id).execute()
 
@@ -336,7 +358,7 @@ def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
         b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
     except Exception as e:
         logger.exception("compare failed")
-        raise HTTPException(status_code=500, detail=f"compare failed: {e}") from e
+        raise HTTPException(status_code=500, detail="compare failed") from e
     return {"prompt": req.prompt, "a": a_text, "b": b_text}
 
 
@@ -364,7 +386,7 @@ def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)
         )
     except Exception as e:
         logger.exception("generation failed")
-        raise HTTPException(status_code=500, detail=f"generation failed: {e}") from e
+        raise HTTPException(status_code=500, detail="generation failed") from e
 
     if req.upload:
         url = _upload_to_supabase(wav_bytes, req)
@@ -424,7 +446,7 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
     Body: { name, data_base64, fmt }. Returns { path, url }.
     """
     name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
-    fmt = (req.get("fmt") or "wav").lstrip(".")
+    fmt = _sanitize_fmt(req.get("fmt") or "wav")
     data_b64 = req.get("data_base64")
     if not data_b64:
         raise HTTPException(status_code=400, detail="data_base64 required")
@@ -432,8 +454,14 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
         raw = base64.b64decode(data_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid base64") from e
-    path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
-    url = _sb_upload("library", path, raw, f"audio/{fmt}")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+        )
+    ext = fmt.lstrip(".")
+    path = f"library/{uuid.uuid4().hex}-{name}.{ext}"
+    url = _sb_upload("library", path, raw, f"audio/{ext}")
     return {"path": path, "url": url}
 
 
@@ -458,12 +486,19 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
             audio = base64.b64decode(req.audio_base64)
         except Exception as e:
             raise HTTPException(status_code=400, detail="invalid base64") from e
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
     elif req.library_path:
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = req.library_path.replace("library/", "")
-        data = sb.storage.from_("library").download(key)
+        key = _valid_library_key(req.library_path)
+        if not key:
+            raise HTTPException(status_code=400, detail="invalid library_path")
+        data = sb.storage.from_("library").download(key[len("library/") :])
         audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -472,7 +507,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
         cleaned = enhance_audio(audio, fmt=req.fmt)
     except Exception as e:
         logger.exception("enhance failed")
-        raise HTTPException(status_code=500, detail=f"enhance failed: {e}") from e
+        raise HTTPException(status_code=500, detail="enhance failed") from e
 
     out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
     if req.upload:
@@ -494,12 +529,19 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
             audio = base64.b64decode(req.audio_base64)
         except Exception as e:
             raise HTTPException(status_code=400, detail="invalid base64") from e
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
     elif req.library_path:
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = req.library_path.replace("library/", "")
-        data = sb.storage.from_("library").download(key)
+        key = _valid_library_key(req.library_path)
+        if not key:
+            raise HTTPException(status_code=400, detail="invalid library_path")
+        data = sb.storage.from_("library").download(key[len("library/") :])
         audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -513,7 +555,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         )
     except Exception as e:
         logger.exception("transcription failed")
-        raise HTTPException(status_code=500, detail=f"transcription failed: {e}") from e
+        raise HTTPException(status_code=500, detail="transcription failed") from e
 
     midi = result["midi"]
     wav = result["wav"]
@@ -546,18 +588,25 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
             audio = base64.b64decode(req.audio_base64, validate=True)
         except Exception:
             raise HTTPException(status_code=400, detail="invalid base64") from None
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
     elif req.library_path:
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = req.library_path.replace("library/", "")
-        data = sb.storage.from_("library").download(key)
+        key = _valid_library_key(req.library_path)
+        if not key:
+            raise HTTPException(status_code=400, detail="invalid library_path")
+        data = sb.storage.from_("library").download(key[len("library/") :])
         audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
     with tempfile.TemporaryDirectory() as td:
-        in_path = os.path.join(td, f"input.{req.fmt}")
+        in_path = os.path.join(td, f"input{_sanitize_fmt(req.fmt)}")
         with open(in_path, "wb") as f:
             f.write(audio)
         try:
