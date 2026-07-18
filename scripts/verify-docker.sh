@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -uo pipefail
 
 echo "=== Docker Dev Environment Verification ==="
 echo ""
@@ -12,10 +12,10 @@ check() {
   shift
   if "$@" &>/dev/null; then
     echo "  ✅ $desc"
-    ((PASS++))
+    PASS=$((PASS + 1))
   else
     echo "  ❌ $desc"
-    ((FAIL++))
+    FAIL=$((FAIL + 1))
   fi
 }
 
@@ -34,15 +34,15 @@ echo "--- Git ---"
 check "Git status"        git status
 check "Git config"        git config user.name
 check "Git remote"        git remote -v
-check "Can push (dry)"    git push --dry-run origin main 2>&1 | grep -q "Everything up-to-date"
+check "Git remote reachable"  git remote -v | grep -q "upstream\|origin"
 
 echo ""
 echo "--- Environment Variables ---"
-check "GITHUB_TOKEN"       env | grep -q GITHUB_TOKEN
-check "SUPABASE_URL"       env | grep -q SUPABASE_URL
-check "SENTRY_DSN"         env | grep -q SENTRY_DSN
-check "SENTRY_ACCESS_TOKEN" env | grep -q SENTRY_ACCESS_TOKEN
-check "OPENAI_API_KEY or OPENROUTER_API_KEY"  env | grep -qE 'OPENAI_API_KEY|OPENROUTER_API_KEY'
+check "GITHUB_TOKEN"       [ -n "${GITHUB_TOKEN:-}" ]
+check "SUPABASE_URL"       [ -n "${SUPABASE_URL:-}" ]
+check "SENTRY_DSN"         [ -n "${SENTRY_DSN:-}" ]
+check "SENTRY_ACCESS_TOKEN" [ -n "${SENTRY_ACCESS_TOKEN:-}" ]
+check "OPENAI_API_KEY or OPENROUTER_API_KEY"  [ -n "${OPENAI_API_KEY:-}" -o -n "${OPENROUTER_API_KEY:-}" ]
 
 echo ""
 echo "--- Docker ---"

@@ -2,6 +2,12 @@ import { supabase } from "./supabase";
 import { uploadFile, getPublicUrl, listFiles, bucketPath, type FileMeta } from "./storage";
 import { apiFetch } from "./api";
 
+async function userId(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase.auth.getSession();
+  return data.session?.user?.id ?? null;
+}
+
 export type TranscribeResult = {
   notes: { pitch: number; start: number; end: number; velocity: number }[];
   num_notes: number;
@@ -27,26 +33,33 @@ export type LibFile = {
 const LIBRARY_BUCKET = "library";
 const MIDI_BUCKET = "midi";
 
+async function userPrefix(): Promise<string> {
+  const uid = await userId();
+  return `library/${uid ?? "dev"}`;
+}
+
 export async function uploadToLibrary(name: string, blob: Blob): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
   const fmt = (name.split(".").pop() || "wav").toLowerCase();
   const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
-  const path = bucketPath("library", `${Date.now()}-${safeName}`);
+  const prefix = await userPrefix();
+  const path = `${prefix}/${Date.now()}-${safeName}`;
   await uploadFile(LIBRARY_BUCKET, path, blob, `audio/${fmt}`, true);
   return getPublicUrl(LIBRARY_BUCKET, path);
 }
 
 export async function listLibrary(): Promise<LibFile[]> {
-  const files = await listFiles(LIBRARY_BUCKET, "library");
+  const prefix = await userPrefix();
+  const files = await listFiles(LIBRARY_BUCKET, prefix);
   return files
     .filter((f) => !f.name.endsWith("/"))
     .map((f: FileMeta) => {
-      const path = bucketPath("library", f.name);
+      const path = `${prefix}/${f.name}`;
       const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
       return {
         name: displayName,
         url: getPublicUrl(LIBRARY_BUCKET, path),
-        id: f.name,
+        id: `${prefix}/${f.name}`,
         size: f.metadata?.size,
         created_at: f.created_at,
       };

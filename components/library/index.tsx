@@ -24,7 +24,7 @@ function formatDate(dateStr?: string): string {
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHr < 24) return `${diffHr}h ago`;
   if (diffDay < 7) return `${diffDay}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export default function Library({ compact }: { compact?: boolean }) {
@@ -114,7 +114,7 @@ export default function Library({ compact }: { compact?: boolean }) {
     setDuration(0);
   }, []);
 
-  function playAudio(id: string, url: string) {
+  const playAudio = useCallback((id: string, url: string) => {
     cleanupRef.current?.();
     cleanupRef.current = null;
 
@@ -142,15 +142,15 @@ export default function Library({ compact }: { compact?: boolean }) {
     setPlaying(id);
     setCurrentTime(0);
     setDuration(0);
-  }
+  }, [stopAudio]);
 
-  function togglePlay(id: string, url: string) {
+  const togglePlay = useCallback((id: string, url: string) => {
     if (playing === id) {
       stopAudio();
     } else {
       playAudio(id, url);
     }
-  }
+  }, [playing, stopAudio]);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -192,7 +192,7 @@ export default function Library({ compact }: { compact?: boolean }) {
         setRecordTimer((t) => t + 1);
       }, 1000);
     } catch (err) {
-      setStatus("⚠️ Mic access denied");
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "Mic access denied"));
     }
   }
 
@@ -307,7 +307,7 @@ export default function Library({ compact }: { compact?: boolean }) {
               }}
             />
           </div>
-          <Visualizer audioRef={audioRef as React.RefObject<HTMLAudioElement | null>} />
+          <Visualizer audioRef={audioRef} />
           <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
             <button
               className="chip ghost danger"

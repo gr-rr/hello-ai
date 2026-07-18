@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { useAuth } from "./AuthProvider";
 
 export default function Auth() {
   const { user, loading, signOut } = useAuth();
+  const [error, setError] = useState("");
 
   if (!isSupabaseConfigured) {
     return (
@@ -52,13 +54,22 @@ export default function Auth() {
           Sign in with your Google account
         </p>
 
+        {error && (
+          <p style={{ color: "var(--danger)", fontSize: 13, margin: "0 0 16px", textAlign: "center" }}>{error}</p>
+        )}
+
         <button className="btn" onClick={async () => {
-          await supabase!.auth.signInWithOAuth({
-            provider: "google",
-            options: {
-              redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
-            },
-          });
+          try {
+            const { error } = await supabase!.auth.signInWithOAuth({
+              provider: "google",
+              options: {
+                redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+              },
+            });
+            if (error) setError(error.message);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "Google sign-in failed");
+          }
         }} style={{ width: "100%", justifyContent: "center" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>

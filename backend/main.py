@@ -428,8 +428,8 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
         raise HTTPException(status_code=400, detail="data_base64 required")
     try:
         raw = base64.b64decode(data_b64)
-    except Exception:
-        raise HTTPException(status_code=400, detail="invalid base64") from None
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="invalid base64") from e
     path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
     url = _sb_upload("library", path, raw, f"audio/{fmt}")
     return {"path": path, "url": url}
@@ -454,8 +454,8 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
     if req.audio_base64:
         try:
             audio = base64.b64decode(req.audio_base64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid base64") from None
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="invalid base64") from e
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -490,8 +490,8 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
     if req.audio_base64:
         try:
             audio = base64.b64decode(req.audio_base64)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid base64") from None
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="invalid base64") from e
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -531,11 +531,18 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 
 @app.delete("/music/library/{path:path}")
 @limiter.limit("30/minute")
-def delete_library_file(path: str, request: Request, _auth=Depends(verify_token)):
+def delete_library_file(path: str, request: Request, auth=Depends(verify_token)):
     """Delete a file from the `library` bucket using the service role key."""
+    segments = path.split("/")
+    if len(segments) < 2 or segments[0] != "library":
+        raise HTTPException(status_code=400, detail="invalid path")
+    user_id = segments[1]
+    authed_user_id = getattr(auth.user, "id", None)
+    if user_id != authed_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     sb = _sb()
     if not sb:
         raise HTTPException(status_code=500, detail="Supabase not configured")
-    key = path.replace("library/", "")
+    key = path.replace("library/", "", 1)
     sb.storage.from_("library").remove([key])
     return {"status": "deleted"}

@@ -33,7 +33,9 @@ export default function Transcribe({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    listLibrary().then(setLibFiles).catch(() => {});
+    listLibrary().then(setLibFiles).catch((err) => {
+      setStatus("\u26A0 " + (err instanceof Error ? err.message : "failed to load library"));
+    });
   }, []);
 
   async function processBlob(blob: Blob) {
@@ -88,6 +90,9 @@ export default function Transcribe({
     setStatus("Downloading\u2026");
     try {
       const res = await fetch(file.url);
+      if (!res.ok) {
+        throw new Error(`download failed: ${res.status} ${res.statusText}`);
+      }
       const blob = await res.blob();
       await processBlob(blob);
     } catch (err) {
