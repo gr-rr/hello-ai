@@ -11,6 +11,7 @@ import {
   type LibFile,
 } from "@/lib/music";
 import { useAuth } from "@/components/AuthProvider";
+import { FEATURES } from "@/lib/features";
 import Score from "@/components/Score";
 import PianoRoll from "@/components/PianoRoll";
 
@@ -230,10 +231,14 @@ export default function Transcribe({
             <span style={{ fontSize: 13 }}>Processing audio…</span>
           </div>
 
-          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
-          <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20, marginTop: 8 }}>
-            <span style={{ fontSize: 13 }}>Processing audio…</span>
-          </div>
+          {FEATURES.sheetMusic && (
+            <>
+              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
+              <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20, marginTop: 8 }}>
+                <span style={{ fontSize: 13 }}>Processing audio…</span>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -277,8 +282,12 @@ export default function Transcribe({
             ) : null}
           </div>
 
-          <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
-          <Score notes={result.notes} analysis={result.analysis} />
+          {FEATURES.sheetMusic && (
+            <>
+              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
+              <Score notes={result.notes} analysis={result.analysis} />
+            </>
+          )}
         </div>
       )}
 
