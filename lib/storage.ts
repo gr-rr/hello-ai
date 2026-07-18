@@ -23,16 +23,24 @@ export async function uploadFile(
   if (error) throw error;
 }
 
+export type FileMeta = {
+  name: string;
+  id?: string;
+  updated_at?: string;
+  created_at?: string;
+  metadata?: { size?: number; mimetype?: string };
+};
+
 export async function listFiles(
   bucket: string,
   prefix = "",
-): Promise<{ name: string; id?: string; updated_at?: string }[]> {
+): Promise<FileMeta[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.storage
     .from(bucket)
     .list(prefix, { sortBy: { column: "created_at", order: "desc" } });
   if (error) throw error;
-  return (data ?? []) as any[];
+  return (data ?? []) as FileMeta[];
 }
 
 export function getPublicUrl(bucket: string, path: string): string {

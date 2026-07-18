@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
-import { uploadFile, getPublicUrl, listFiles, deleteFile, bucketPath } from "./storage";
+import { uploadFile, getPublicUrl, listFiles, bucketPath, type FileMeta } from "./storage";
+import { apiFetch } from "./api";
 
 export type TranscribeResult = {
   notes: { pitch: number; start: number; end: number; velocity: number }[];
@@ -15,13 +16,17 @@ export type TranscribeResult = {
   };
 };
 
+export type LibFile = {
+  name: string;
+  url: string;
+  id: string;
+  size?: number;
+  created_at?: string;
+};
+
 const LIBRARY_BUCKET = "library";
 const MIDI_BUCKET = "midi";
 
-/**
- * Upload a raw audio file to the user's library bucket and return its public URL.
- * Namespaced under library/ so auth can be added later without a migration.
- */
 export async function uploadToLibrary(name: string, blob: Blob): Promise<string> {
   if (!supabase) throw new Error("Supabase not configured");
   const fmt = (name.split(".").pop() || "wav").toLowerCase();
@@ -31,53 +36,45 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<string>
   return getPublicUrl(LIBRARY_BUCKET, path);
 }
 
-export async function listLibrary(): Promise<{ name: string; url: string; id: string }[]> {
+export async function listLibrary(): Promise<LibFile[]> {
   const files = await listFiles(LIBRARY_BUCKET, "library");
   return files
     .filter((f) => !f.name.endsWith("/"))
-    .map((f) => {
+    .map((f: FileMeta) => {
       const path = bucketPath("library", f.name);
       const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
       return {
         name: displayName,
         url: getPublicUrl(LIBRARY_BUCKET, path),
         id: f.name,
+        size: f.metadata?.size,
+        created_at: f.created_at,
       };
     });
 }
 
 export async function deleteFromLibrary(id: string): Promise<void> {
-  await deleteFile(LIBRARY_BUCKET, bucketPath("library", id));
+  await apiFetch(`/api/music/library/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** Call the backend to transcribe audio bytes -> MIDI (+ synthesized WAV). */
 export async function transcribeAudio(
   dataBase64: string,
   fmt = "wav",
 ): Promise<TranscribeResult> {
-  const res = await fetch("/api/music/transcribe", {
+  return apiFetch("/api/music/transcribe", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ audio_base64: dataBase64, fmt, upload: true }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "transcription failed");
-  return data as TranscribeResult;
+  }) as Promise<TranscribeResult>;
 }
 
-/** Preprocess: denoise/declip/normalize a raw recording via the backend. */
 export async function enhanceAudio(
   dataBase64: string,
   fmt = "wav",
 ): Promise<{ wav_base64: string; url?: string }> {
-  const res = await fetch("/api/music/enhance", {
+  return apiFetch("/api/music/enhance", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ audio_base64: dataBase64, fmt, upload: false }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "enhance failed");
-  return data;
+  }) as Promise<{ wav_base64: string; url?: string }>;
 }
 
 export function midiToDataUrl(base64: string): string {

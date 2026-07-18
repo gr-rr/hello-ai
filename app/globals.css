@@ -234,3 +234,16 @@ html,body {
 }
 .libitem:hover{ border-color:var(--border-strong); }
 .libitem .meta { color:var(--muted); font-size:12px; }
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

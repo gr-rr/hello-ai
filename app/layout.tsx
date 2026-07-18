@@ -3,6 +3,7 @@ import "./globals.css";
 import "abcjs/abcjs-audio.css";
 import { Geist } from "next/font/google";
 import MSWInit from "@/components/MSWInit";
+import AuthProvider from "@/components/AuthProvider";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -24,7 +25,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`font-sans ${geist.variable}`}>
       <body>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <MSWInit />
       </body>
     </html>

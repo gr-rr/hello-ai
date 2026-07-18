@@ -4,7 +4,8 @@ import os
 import threading
 import uuid
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -25,6 +26,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("backend")
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+security = HTTPBearer()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Auth not configured")
+    try:
+        user = sb.auth.get_user(token)
+        return user
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
 
 app = FastAPI(title="hello-ai backend", version="0.2.0")
 app.state.limiter = limiter
@@ -205,13 +222,13 @@ def _run_training(job_id: str, req: TrainRequest):
 
 
 @app.get("/models/base")
-def models_base():
+def models_base(_auth=Depends(verify_token)):
     return {"models": list_base_models()}
 
 
 @app.post("/train")
 @limiter.limit("1/minute")
-def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks):
+def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks, _auth=Depends(verify_token)):
     # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
     if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
@@ -251,7 +268,7 @@ def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks
 
 
 @app.get("/jobs/{job_id}")
-def job_status(job_id: str):
+def job_status(job_id: str, _auth=Depends(verify_token)):
     sb = _sb()
     if sb:
         res = sb.table("jobs").select("*").eq("id", job_id).execute()
@@ -267,7 +284,7 @@ def job_status(job_id: str):
 
 
 @app.get("/models")
-def list_models():
+def list_models(_auth=Depends(verify_token)):
     sb = _sb()
     if not sb:
         return {"models": []}
@@ -300,7 +317,7 @@ def _resolve_adapter(model_ref: str, base_model: str):
 
 @app.post("/compare")
 @limiter.limit("5/minute")
-def compare(req: CompareRequest, request: Request):
+def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
     base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
@@ -316,7 +333,7 @@ def compare(req: CompareRequest, request: Request):
 
 @app.post("/generate", response_model=GenerateResponse)
 @limiter.limit("5/minute")
-def generate(req: GenerateRequest, request: Request):
+def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
@@ -392,7 +409,7 @@ def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
 # ---------------------------------------------------------------------------
 @app.post("/music/library")
 @limiter.limit("10/minute")
-async def upload_library(req: dict, request: Request):
+async def upload_library(req: dict, request: Request, _auth=Depends(verify_token)):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
@@ -420,7 +437,7 @@ class EnhanceRequest(BaseModel):
 
 @app.post("/music/enhance")
 @limiter.limit("20/minute")
-def enhance(req: EnhanceRequest, request: Request):
+def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
     """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
 
     This is the audio-quality preprocessing step, run before transcription or
@@ -457,7 +474,7 @@ def enhance(req: EnhanceRequest, request: Request):
 
 @app.post("/music/transcribe")
 @limiter.limit("10/minute")
-def transcribe(req: TranscribeRequest, request: Request):
+def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_token)):
     """Transcribe audio -> MIDI (+ synthesized WAV + note events).
 
     Accepts raw audio as base64, or a path in the `library` bucket.
@@ -503,3 +520,15 @@ def transcribe(req: TranscribeRequest, request: Request):
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
+
+
+@app.delete("/music/library/{path:path}")
+@limiter.limit("30/minute")
+def delete_library_file(path: str, request: Request, _auth=Depends(verify_token)):
+    """Delete a file from the `library` bucket using the service role key."""
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    key = path.replace("library/", "")
+    sb.storage.from_("library").remove([key])
+    return {"status": "deleted"}
