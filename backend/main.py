@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+import tempfile
 import threading
 import uuid
 
@@ -11,6 +12,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from analyze import analyze_audio
 from finetune_server import (
     generate as ft_generate,
 )
@@ -19,7 +21,7 @@ from finetune_server import (
     load_dataset_jsonl,
     train_lora,
 )
-from music_features import enhance_audio, transcribe_audio
+from music_features import enhance_audio, transcribe_audio, _sanitize_fmt
 from musicgen_server import generate_audio
 
 logging.basicConfig(level=logging.INFO)
@@ -164,7 +166,7 @@ def _run_training(job_id: str, req: TrainRequest):
                 if not sb2:
                     raise RuntimeError("Supabase not configured for dataset fetch")
                 data = sb2.storage.from_("datasets").download(req.dataset_path)
-                text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+                text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
             else:
                 raise ValueError("no dataset provided")
 
@@ -317,7 +319,7 @@ def _resolve_adapter(model_ref: str, base_model: str):
                     for f in files:
                         data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
                         with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
-                            fh.write(data if isinstance(data, (bytes, bytearray)) else data.read())
+                            fh.write(data if isinstance(data, bytes | bytearray) else data.read())
             return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
     return base_model, None
 
@@ -334,7 +336,7 @@ def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
         b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
     except Exception as e:
         logger.exception("compare failed")
-        raise HTTPException(status_code=500, detail=f"compare failed: {e}") from e
+        raise HTTPException(status_code=500, detail="compare failed") from e
     return {"prompt": req.prompt, "a": a_text, "b": b_text}
 
 
@@ -362,7 +364,7 @@ def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)
         )
     except Exception as e:
         logger.exception("generation failed")
-        raise HTTPException(status_code=500, detail=f"generation failed: {e}") from e
+        raise HTTPException(status_code=500, detail="generation failed") from e
 
     if req.upload:
         url = _upload_to_supabase(wav_bytes, req)
@@ -422,7 +424,7 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
     Body: { name, data_base64, fmt }. Returns { path, url }.
     """
     name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
-    fmt = (req.get("fmt") or "wav").lstrip(".")
+    fmt = _sanitize_fmt(req.get("fmt") or "wav")
     data_b64 = req.get("data_base64")
     if not data_b64:
         raise HTTPException(status_code=400, detail="data_base64 required")
@@ -430,8 +432,14 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
         raw = base64.b64decode(data_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid base64") from e
-    path = f"library/{uuid.uuid4().hex}-{name}.{fmt}"
-    url = _sb_upload("library", path, raw, f"audio/{fmt}")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+        )
+    ext = fmt.lstrip(".")
+    path = f"library/{uuid.uuid4().hex}-{name}.{ext}"
+    url = _sb_upload("library", path, raw, f"audio/{ext}")
     return {"path": path, "url": url}
 
 
@@ -456,12 +464,19 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
             audio = base64.b64decode(req.audio_base64)
         except Exception as e:
             raise HTTPException(status_code=400, detail="invalid base64") from e
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
     elif req.library_path:
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = req.library_path.replace("library/", "")
-        data = sb.storage.from_("library").download(key)
+        key = _valid_library_key(req.library_path)
+        if not key:
+            raise HTTPException(status_code=400, detail="invalid library_path")
+        data = sb.storage.from_("library").download(key.replace("library/", "", 1))
         audio = data if isinstance(data, (bytes, bytearray)) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -470,7 +485,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
         cleaned = enhance_audio(audio, fmt=req.fmt)
     except Exception as e:
         logger.exception("enhance failed")
-        raise HTTPException(status_code=500, detail=f"enhance failed: {e}") from e
+        raise HTTPException(status_code=500, detail="enhance failed") from e
 
     out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
     if req.upload:
@@ -492,12 +507,19 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
             audio = base64.b64decode(req.audio_base64)
         except Exception as e:
             raise HTTPException(status_code=400, detail="invalid base64") from e
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
     elif req.library_path:
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = req.library_path.replace("library/", "")
-        data = sb.storage.from_("library").download(key)
+        key = _valid_library_key(req.library_path)
+        if not key:
+            raise HTTPException(status_code=400, detail="invalid library_path")
+        data = sb.storage.from_("library").download(key.replace("library/", "", 1))
         audio = data if isinstance(data, (bytes, bytearray)) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -511,7 +533,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         )
     except Exception as e:
         logger.exception("transcription failed")
-        raise HTTPException(status_code=500, detail=f"transcription failed: {e}") from e
+        raise HTTPException(status_code=500, detail="transcription failed") from e
 
     midi = result["midi"]
     wav = result["wav"]
@@ -527,6 +549,44 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
+
+
+class AnalyzeRequest(BaseModel):
+    audio_base64: str | None = None
+    library_path: str | None = None
+    fmt: str = "wav"
+
+
+@app.post("/music/analyze")
+@limiter.limit("30/minute")
+def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
+    """Analyze audio file for key, tempo, time signature, and chords."""
+    if req.audio_base64:
+        try:
+            audio = base64.b64decode(req.audio_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64") from None
+    elif req.library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        key = req.library_path.replace("library/", "")
+        data = sb.storage.from_("library").download(key)
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
+    else:
+        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, f"input.{req.fmt}")
+        with open(in_path, "wb") as f:
+            f.write(audio)
+        try:
+            result = analyze_audio(in_path)
+        except Exception:
+            logger.exception("analysis failed")
+            raise HTTPException(status_code=500, detail="analysis failed") from None
+
+    return result
 
 
 @app.delete("/music/library/{path:path}")
