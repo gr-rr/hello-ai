@@ -111,6 +111,46 @@ python -m pytest tests/ -q
 
 If build or any check fails, fix the issue before committing.
 
+## CI gates (what blocks a merge)
+
+These run on every PR to `main` and must be green:
+
+- `build.yml` — `npm run build` + `npm test` (component tests). **Blocking.**
+- `ci.yml` — `npm run lint`, `npm run typecheck`, `ruff`, `ruff format --check`,
+  and `pytest backend/tests/` (units + **security** + **contract** + **smoke**).
+  **Blocking.** The smoke tests install `ffmpeg` and exercise the real
+  `enhance_audio`/`analyze_audio` pipeline.
+- `e2e.yml` — Playwright against a real Next.js build. **Blocking** (was
+  `continue-on-error` historically; do not relax this).
+- `gitleaks.yml` — secret scan. **Blocking.**
+- `codeql.yml` — SAST (js + python). **Blocking.**
+- `dependency-review.yml` — dependency CVE review. **Blocking.**
+
+### Self-enforcing checks you should rely on
+- `backend/tests/test_security.py` — asserts upload-size, path-traversal,
+  fmt-sanitization, and error-leak invariants. Add a case here whenever you
+  touch a storage endpoint.
+- `backend/tests/test_contract.py` — asserts every `app/api/*` proxy target has
+  a matching FastAPI route. Catches frontend↔backend drift.
+- `backend/tests/test_smoke.py` — runs the real audio pipeline (ffmpeg/librosa).
+
+## Local pre-commit + commit convention
+
+Install the pre-commit framework once to block bad commits before CI:
+```
+pip install pre-commit && pre-commit install
+```
+It runs ruff, ruff-format, the security + contract pytest, and trailing-whitespace
+/ large-file checks on every commit.
+
+Commits follow **Conventional Commits** (`feat:`, `fix:`, `chore:`, `docs:`,
+`style:`, `refactor:`, `test:`, `perf:`, `build:`, `ci:`). Opt in with:
+```
+git config core.hooksPath .githooks
+```
+This enforces the convention via `commitlint` (the `commit` script still uses
+`aicommits` for message drafting).
+
 ## What to do when stuck
 
 - Read the docs/ directory for context
@@ -123,3 +163,20 @@ If build or any check fails, fix the issue before committing.
 - **Implementation** — use `general` agent with clear task description
 - **Testing** — write the test first, then ask `general` to run it
 - **Documentation** — read existing docs, then write/update
+
+## Local dev environment (Docker)
+
+The repo ships prebuilt images; the coding agent may run **natively** or inside
+the `music-ai-opencode` container — both are valid. Notes:
+
+- `hello-ai-backend` image already contains `ffmpeg` + `torch` + `librosa` +
+  `basic-pitch`. To run the real backend locally: `docker compose up backend`
+  (serves FastAPI on :8000). The `backend/tests/test_smoke.py` enhance test
+  needs `ffmpeg` — present in this image and in CI, but may be absent on a bare
+  native machine (it self-skips there).
+- `hello-ai-frontend` image runs `npm run dev` on :3000.
+- CI does **not** use these images; it installs deps fresh on `ubuntu-latest`.
+  That is intentional (reproducible, no image rebuild needed per PR).
+- The `music-ai-opencode` container bind-mounts the repo at `/workspace`; edits
+  made there and edits made natively land in the same working tree, so keep git
+  state clean (commit/stash before switching branches) to avoid cross-contamination.

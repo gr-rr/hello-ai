@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Opt-in conventional-commit enforcement.
+# Enable once with:  git config core.hooksPath .githooks
+# Requires:  npm install --save-dev @commitlint/cli @commitlint/config-conventional
+npx --no-install commitlint --edit "$1"
