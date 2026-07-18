@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+tests/
+.git
+.gitignore
+soundfonts/FluidR3_GM.sf2
+.env
+.env.*
+*.md
