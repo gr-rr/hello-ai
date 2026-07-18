@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { uploadFile, getPublicUrl, listFiles, bucketPath, type FileMeta } from "./storage";
+import { uploadFile, getPublicUrl, listFiles, type FileMeta } from "./storage";
 import { apiFetch } from "./api";
 
 async function userId(): Promise<string | null> {
