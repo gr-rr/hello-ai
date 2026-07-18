@@ -543,9 +543,9 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
     """Analyze audio file for key, tempo, time signature, and chords."""
     if req.audio_base64:
         try:
-            audio = base64.b64decode(req.audio_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="invalid base64") from e
+            audio = base64.b64decode(req.audio_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64") from None
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -562,9 +562,9 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
             f.write(audio)
         try:
             result = analyze_audio(in_path)
-        except Exception as e:
+        except Exception:
             logger.exception("analysis failed")
-            raise HTTPException(status_code=500, detail=f"analysis failed: {e}") from e
+            raise HTTPException(status_code=500, detail="analysis failed") from None
 
     return result
 

@@ -121,7 +121,7 @@ def detect_time_signature(y: np.ndarray, sr: int) -> TimeSigResult:
         return TimeSigResult(numerator=4, denominator=4, confidence=0.1)
 
     peaks = []
-    for i in range(2, min(len(ac), 128)):
+    for i in range(2, min(len(ac) - 1, 128)):
         if ac[i] > ac[i - 1] and ac[i] > ac[i + 1] and ac[i] > 0.3 * ac.max():
             peaks.append(i)
 
@@ -163,6 +163,21 @@ def detect_chords(y: np.ndarray, sr: int) -> list[ChordResult]:
         frame = chroma[:, i]
         if frame.max() > 0:
             frame = frame / frame.max()
+
+        t = i * hop_duration
+
+        if frame.sum() < 0.1:
+            if current_label:
+                chords.append(
+                    ChordResult(
+                        root=current_root,
+                        quality=current_quality,
+                        start=round(current_start, 3),
+                        end=round(t, 3),
+                    )
+                )
+                current_label = ""
+            continue
 
         best_score = -1.0
         best_label = "C:M"
