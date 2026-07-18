@@ -11,10 +11,11 @@ export const supabase: SupabaseClient<Database> | null =
   url && anonKey
     ? createClient<Database>(url, anonKey, {
         auth: {
-          // Google OAuth returns a URL hash (#access_token=...) in this project,
-          // which is the implicit-flow response format. detectSessionInUrl parses
-          // that hash and establishes the session via onAuthStateChange.
-          flowType: "implicit",
+          // PKCE flow (default). Google redirects with ?code= to /auth/callback,
+          // which calls exchangeCodeForSession. detectSessionInUrl handles the
+          // hash on the callback route. Must NOT use implicit flow — it breaks
+          // the PKCE code_verifier and yields "bad_oauth_state".
+          flowType: "pkce",
           detectSessionInUrl: true,
           persistSession: true,
           autoRefreshToken: true,
