@@ -10,7 +10,7 @@ type Note = TranscribeResult["notes"][number];
 const SOUNDFONT_URL =
   "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/";
 
-export default function Score({ notes }: { notes: Note[] }) {
+export default function Score({ notes, analysis: _analysis }: { notes: Note[]; analysis?: TranscribeResult["analysis"] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLDivElement>(null);
   const cursorControlRef = useRef<abcjs.CursorControl | null>(null);
