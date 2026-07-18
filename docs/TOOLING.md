@@ -12,4 +12,4 @@
 | **basic-pitch** | WAV → MIDI transcription (backend) | `backend/music_features.py` |
 | **FluidSynth** | MIDI → WAV synthesis (backend) | `backend/music_features.py` |
 | **Vercel** | Hosting + CI (build + deploy) | Project linked to GitHub |
-| **pnpm** | Package management | `package.json` (uses `overrides` for sharp) |
+| **npm** | Package management | `package.json` |

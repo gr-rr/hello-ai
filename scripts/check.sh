@@ -34,6 +34,22 @@ else
 fi
 
 echo ""
+echo "── Backend tests ──"
+if python -m pytest backend/tests/ -v 2>/dev/null; then
+  pass "pytest"
+else
+  fail "pytest"
+fi
+
+echo ""
+echo "── Frontend tests ──"
+if npm test 2>/dev/null; then
+  pass "vitest"
+else
+  fail "vitest"
+fi
+
+echo ""
 echo "── Backend health ──"
 BE_URL="${MUSIC_BACKEND_URL:-}"
 if [ -n "$BE_URL" ]; then

@@ -94,15 +94,15 @@ with no manual clicking:
 
 | Concern            | Path |
 |--------------------|------|
-| Page shell         | `components/Studio.tsx` (topbar + hero + 2‑column grid) |
-| Transcribe         | `components/transcribe/index.tsx`, `components/Score.tsx`, `lib/abc.ts` |
-| Library            | `components/library/index.tsx`, `lib/storage.ts` |
+| Page shell         | `components/Studio.tsx` (topbar + stepper grid) |
+| Transcribe         | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
+| Library            | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
 | Backend proxy      | `lib/backend.ts`, `app/api/**/route.ts` |
 | Supabase client    | `lib/supabase.ts` (browser, anon; graceful fallback) |
 | Design SOT         | `design/tokens.json`, `design/mockups/*` |
 | E2E journeys       | `tests/e2e/journey.spec.ts` |
 | Visual QA          | `tests/visual/preview.spec.ts`, `.github/workflows/argos.yml` |
-| CI gate            | `.github/workflows/build.yml` |
+| CI gate            | `.github/workflows/ci.yml` |
 | Backend (VM code)  | `backend/` (FastAPI) — separate deploy, not on Vercel |
 
 ## 4. Adding a feature

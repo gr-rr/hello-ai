@@ -10,9 +10,8 @@ score you can play back in the browser (abcjs). Files persist to Supabase.
 - 🎼 **Transcribe** (`/?tab=transcribe`) — audio → MIDI (basic-pitch) → rendered
   sheet music with playback.
 
-Other studios (Music, Chat, Piano, Datasets, Train, Compare) are implemented but
-**disabled** in the `FEATURES` registry (`components/Studio.tsx`) — flip
-`enabled: true` to bring them back.
+The app is a single-page Studio with Library and Transcribe tabs. Analysis
+features are rendered inline after transcription.
 
 ## Documentation
 
@@ -153,7 +152,7 @@ later.
 
 ## Persistence (Supabase)
 
-- `lib/supabase.ts` — client singleton. `lib/storage.ts` — generic bucket helpers (single source for uploads). `lib/audio.ts` — `saveTrack` / `getTracks` on top of storage. `lib/backend.ts` — single reverse-proxy to the Oracle backend.
+- `lib/supabase.ts` — client singleton. `lib/storage.ts` — generic bucket helpers (single source for uploads). `lib/backend.ts` — single reverse-proxy to the Oracle backend.
 - Migration: `supabase/migrations/20260716_init_tracks.sql` (apply via the SQL
   Editor or `supabase db push --linked`).
 - Table `public.tracks` + `audio` storage bucket + RLS policies (public read/insert

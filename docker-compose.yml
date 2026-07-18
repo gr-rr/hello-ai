@@ -1,22 +1,84 @@
 services:
-  web:
+  opencode:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        USER_ID: 501
+        GROUP_ID: 501
+    container_name: music-ai-opencode
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    user: "501:501"
+    volumes:
+      - .:/workspace
+      - opencode_node_modules:/workspace/node_modules
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.gitconfig:/home/dev/.gitconfig:ro
+      # Optional: mount SSH keys for Oracle VM access
+      # - ${HOME}/.ssh:/home/dev/.ssh:ro
     env_file:
       - .env.local
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - SENTRY_ACCESS_TOKEN=${SENTRY_ACCESS_TOKEN:-}
+      - SENTRY_AUTH_TOKEN=${SENTRY_AUTH_TOKEN:-}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
+      - NEXT_PUBLIC_MOCK_ENABLED=${NEXT_PUBLIC_MOCK_ENABLED:-false}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_ID: 501
+        GROUP_ID: 501
+    working_dir: /workspace
+    user: "501:501"
+    command: npm run dev
     ports:
       - "3000:3000"
-    # Hot-reload: mount source as a volume (node_modules excluded via .dockerignore-equivalent).
     volumes:
-      - .:/app
-      - /app/node_modules
-      # Git + SSH so `git` works identically inside the container (read-only, secrets stay on host).
-      - ${HOME}/.ssh:/home/node/.ssh:ro
-      - ${HOME}/.gitconfig:/home/node/.gitconfig:ro
+      - .:/workspace
+      - opencode_node_modules:/workspace/node_modules
     environment:
-      # Tell git/ssh to use the mounted key.
-      - GIT_SSH_COMMAND=ssh -F /home/node/.ssh/config -i /home/node/.ssh/id_ed25519_gr
-    # Run as the non-root `node` user (already the image default) for least privilege.
-    user: "node"
-    command: sh -c "ssh-keyscan github.com >> /home/node/.ssh/known_hosts 2>/dev/null; npm run dev"
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
+      - NEXT_PUBLIC_MOCK_ENABLED=${NEXT_PUBLIC_MOCK_ENABLED:-false}
+      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_ID: 501
+        GROUP_ID: 501
+    working_dir: /workspace
+    user: "501:501"
+    command: >
+      sh -c "pip install -r /workspace/backend/requirements.txt -q &&
+             uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/workspace
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+      - BACKEND_URL=http://backend:8000
+      - SOUNDFONT_PATH=/workspace/backend/soundfonts/FluidR3_GM.sf2
+
+volumes:
+  opencode_node_modules:

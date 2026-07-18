@@ -1,21 +1,47 @@
-# Dev container for hello-ai (Next.js + React).
-# Build stage installs deps; the container runs `npm run dev` with hot reload.
-FROM node:20-alpine
+FROM ubuntu:22.04
 
-# git is needed for in-container git operations (mounted ssh/gitconfig, see compose).
-RUN apk add --no-cache git openssh-client
+ARG USER_ID=501
+ARG GROUP_ID=501
 
-WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Install deps first (better layer caching).
-COPY package*.json ./
-RUN npm ci
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Copy source.
-COPY . .
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    build-essential \
+    git \
+    vim-tiny \
+    sudo \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    python3-venv \
+    libsndfile1 \
+    ffmpeg \
+    fluidsynth \
+    && rm -rf /var/lib/apt/lists/*
 
-# Next.js dev server binds to 0.0.0.0 so the host can reach it.
-ENV NEXT_TELEMETRY_DISABLED=1
-EXPOSE 3000
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-CMD ["npm", "run", "dev"]
+RUN npm install -g pnpm opencode-ai supabase
+
+RUN pip3 install uv
+
+RUN npx playwright install --with-deps chromium
+
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+
+RUN groupadd -g ${GROUP_ID} dev \
+    && useradd -m -u ${USER_ID} -g dev -s /bin/bash dev \
+    && echo "dev ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+WORKDIR /workspace
+
+USER dev
+
+CMD ["/bin/bash"]
