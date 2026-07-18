@@ -41,7 +41,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
-        )
+        ) from None
 
 app = FastAPI(title="hello-ai backend", version="0.2.0")
 app.state.limiter = limiter
@@ -228,7 +228,10 @@ def models_base(_auth=Depends(verify_token)):
 
 @app.post("/train")
 @limiter.limit("1/minute")
-def train(req: TrainRequest, request: Request, background_tasks: BackgroundTasks, _auth=Depends(verify_token)):
+def train(
+    req: TrainRequest, request: Request,
+    background_tasks: BackgroundTasks, _auth=Depends(verify_token),
+):
     # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
     if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
