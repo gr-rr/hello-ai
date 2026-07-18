@@ -17,6 +17,21 @@ import PianoRoll from "@/components/PianoRoll";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
+function audioFmtFromBlob(blob: Blob): string {
+  const type = blob.type.toLowerCase();
+  if (type.includes("ogg")) return "ogg";
+  if (type.includes("mp4") || type.includes("m4a")) return "mp4";
+  if (type.includes("flac")) return "flac";
+  if (type.includes("mp3") || type.includes("mpeg")) return "mp3";
+  return "wav";
+}
+
+function audioFmtFromName(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (["ogg", "mp4", "m4a", "flac", "mp3", "wav", "webm"].includes(ext)) return ext === "m4a" ? "mp4" : ext;
+  return "wav";
+}
+
 export default function Transcribe({
   compact,
   onTranscribed,
@@ -44,23 +59,28 @@ export default function Transcribe({
     });
   }, []);
 
-  async function processBlob(blob: Blob) {
+  async function processBlob(blob: Blob, fmtOverride?: string) {
     setResult(null);
     try {
       const buf = await blob.arrayBuffer();
       const b64 = btoa(
         new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
       );
-      const fmt = blob.type.includes("ogg") ? "ogg"
-        : blob.type.includes("mp4") ? "mp4" : "webm";
+      const fmt = fmtOverride ?? audioFmtFromBlob(blob);
 
       setState("enhancing");
-      setStatus("Cleaning audio\u2026");
-      const clean = await enhanceAudio(b64, fmt);
+      setStatus("Cleaning audio…");
+      let transcribeBase64 = b64;
+      try {
+        const clean = await enhanceAudio(b64, fmt);
+        if (clean.wav_base64) transcribeBase64 = clean.wav_base64;
+      } catch {
+        setStatus("Cleaning skipped — transcribing raw audio…");
+      }
 
       setState("transcribing");
-      setStatus("Transcribing\u2026");
-      const res = await transcribeAudio(clean.wav_base64, "wav");
+      setStatus("Transcribing…");
+      const res = await transcribeAudio(transcribeBase64, fmt);
       setResult(res);
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
@@ -100,7 +120,7 @@ export default function Transcribe({
         throw new Error(`download failed: ${res.status} ${res.statusText}`);
       }
       const blob = await res.blob();
-      await processBlob(blob);
+      await processBlob(blob, audioFmtFromName(file.name));
     } catch (err) {
       setState("error");
       setStatus("\u26A0 " + (err instanceof Error ? err.message : "download failed"));
@@ -265,7 +285,7 @@ export default function Transcribe({
             <audio controls src={wavToDataUrl(result.wav_base64)} style={{ width: "100%" }} />
           )}
 
-          {result.analysis && (
+          {result.notes.length > 0 && (
             <>
               <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
               <div className="panel">
