@@ -9,11 +9,16 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   argos:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     # Visual QA is an informational signal only — it must never fail the pipeline
-    # or block a merge (only the `build` job is required by branch protection).
+    # or block a merge (only the `build` and `e2e` jobs are required by branch protection).
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +37,6 @@ jobs:
             sleep 1
           done
       - name: visual tests
-        run: npx playwright test
+        run: npx playwright test tests/visual
         env:
           ARGOS_TOKEN: ${{ secrets.ARGOS_TOKEN }}

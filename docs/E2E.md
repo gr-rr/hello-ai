@@ -1,8 +1,8 @@
 # E2E User Journeys — Blocking PR Checks
 
-Two Playwright tests in `tests/e2e/journey.spec.ts` exercise the **core user flows**
-and run as part of the required `build` CI job. A PR cannot merge to `main` if
-either test fails.
+Four Playwright tests in `tests/e2e/journey.spec.ts` exercise the **core user flows**
+and run as part of the required `e2e` CI job (`.github/workflows/e2e.yml`). A PR cannot
+merge to `main` if any journey fails.
 
 ## Why they're blocking
 
@@ -17,73 +17,61 @@ Both were caught manually after deploy. The blocking check prevents that.
 
 ## Tests
 
-### 1. Transcribe: upload → sheet music → MIDI download
+`tests/e2e/journey.spec.ts`:
 
-`tests/e2e/journey.spec.ts:34`
+1. **Library: upload, play, and delete** (`:74`)
+   ```
+   Upload a .m4a file → hits real Supabase Storage → status shows "Saved ✓"
+   → play → delete → list empties
+   ```
+2. **Library: record button shows recording state** (`:149`)
+   ```
+   Click Record → recording UI appears (timer + Stop) → Stop returns to idle
+   ```
+3. **Transcribe: select library file → piano roll + score** (`:215`)
+   ```
+   Pick a library file → backend mocked → ABC notation renders as SVG
+   → piano roll renders → "▶ Play" becomes enabled (synth initialized)
+   ```
+4. **Transcribe: Upload new option works** (`:264`)
+   ```
+   Upload a .wav file → backend mocked → ABC notation renders as SVG
+   → "▶ Play" button becomes enabled (synth initialized)
+   → MIDI download link appears (midi_base64)
+   ```
 
-```
-Upload a .wav file → backend mocked → ABC notation renders as SVG
-                  → "▶ Play" button becomes enabled (synth initialized)
-                  → clicking play doesn't break
-                  → MIDI download link appears (midi_base64)
-```
+The Transcribe journeys mock the backend (`/api/music/enhance` +
+`/api/music/transcribe`) at the MSW/route level, so they run offline, fast, and
+deterministically. The Library journeys use the **real Supabase** project (public
+anon key from env vars) and exercise the RLS policies that allow anonymous inserts.
 
-The backend (`/api/music/enhance` + `/api/music/transcribe`) is **mocked** at
-the Playwright route level, so the test runs offline, fast, and deterministically.
-The mock returns 5 MIDI notes plus a `midi_base64` string.
-
-What it guards:
+What they guard:
 - `renderAbc` produces a score SVG
 - `setTune` succeeds with a valid soundfont URL
 - The abcjs audio CSS is bundled (imported in `app/layout.tsx`)
-- MIDI download button renders when `midi_base64` is present (new feature)
-
-### 2. Library: upload via drop zone
-
-`tests/e2e/journey.spec.ts:66`
-
-```
-Upload a .m4a file → hits real Supabase Storage → status shows "Saved ✓"
-```
-
-This test uses the **real Supabase** project (public anon key from env vars).
-It exercises the RLS policies that allow anonymous inserts.
-
-What it guards:
+- MIDI download button renders when `midi_base64` is present
 - `anon insert library` policy exists on `storage.objects` (RLS regression)
 - The Supabase bucket `library` is accessible
-- The drop zone + hidden file input work together (new UI)
+- The drop zone + hidden file input work together
 
-The test is skipped gracefully if `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-are not set (the CI workflow sets them from repo secrets).
+The Library journeys are skipped gracefully if `NEXT_PUBLIC_SUPABASE_URL` /
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` are not set (the CI workflow sets them from repo secrets).
 
 ## How they run in CI
 
-`.github/workflows/build.yml`:
-
-```yaml
-- run: npm run build
-- run: npx playwright install --with-deps chromium
-- name: user journeys (server + blocking tests)
-  run: |
-    npm run start & SERVER_PID=$!
-    wait for server
-    npx playwright test tests/e2e/journey.spec.ts
-    exit $TEST_STATUS
-```
-
-The `build` status check is required by branch protection on `main`. If the
-journeys fail, the check is red and the PR cannot be merged.
+`.github/workflows/e2e.yml` starts the built app, waits for `localhost:3000`, then runs
+`npx playwright test tests/e2e`. The job is required by branch protection on `main`, so
+a failing journey blocks the merge.
 
 ## Running locally
 
 ```bash
 npm run dev &
-npx playwright test tests/e2e/journey.spec.ts
+npx playwright test tests/e2e
 ```
 
-The Transcribe test uses mocked backend routes, so it runs offline. The Library
-test needs Supabase env vars to hit real storage.
+The Transcribe journeys use mocked backend routes, so they run offline. The Library
+journeys need Supabase env vars to hit real storage.
 
 ## Adding a new journey
 
