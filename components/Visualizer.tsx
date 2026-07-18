@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 
 type Props = {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 };
 
 export default function Visualizer({ audioRef }: Props) {

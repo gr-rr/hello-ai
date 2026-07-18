@@ -3,8 +3,8 @@ import tempfile
 
 os.environ.setdefault("ADAPTER_ROOT", tempfile.mkdtemp(prefix="adapter_root_"))
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from main import app
 

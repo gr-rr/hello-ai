@@ -17,6 +17,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - name: Ruff (Python)
         run: |
           pip install ruff

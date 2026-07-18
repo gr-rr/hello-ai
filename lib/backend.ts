@@ -9,9 +9,13 @@ const BACKEND_URL =
  */
 export async function proxyToBackend(req: NextRequest, path: string) {
   try {
+    const authHeader = req.headers.get("authorization");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (authHeader) headers["Authorization"] = authHeader;
+
     const init: RequestInit = {
       method: req.method,
-      headers: { "Content-Type": "application/json" },
+      headers,
     };
     if (req.method !== "GET" && req.method !== "HEAD") {
       const body = await req.text();

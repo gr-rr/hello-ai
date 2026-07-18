@@ -2,21 +2,34 @@ import { render, screen } from '@testing-library/react'
 import Home from '@/app/page'
 
 vi.mock('@/components/Studio', () => ({
-  default: ({ initialTab }: { initialTab?: string }) => (
-    <div data-testid="studio-mock">Studio: {initialTab}</div>
-  ),
+  default: () => <div data-testid="studio-mock">Studio</div>,
+}))
+
+vi.mock('@/components/Auth', () => ({
+  default: () => <div data-testid="auth-mock">Auth</div>,
+}))
+
+vi.mock('@/components/AuthProvider', () => ({
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useAuth: () => ({ user: { id: "test" }, session: {}, loading: false, signOut: vi.fn() }),
+}))
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 describe('Home (page)', () => {
-  it('renders Studio with default tab', async () => {
-    const searchParams = Promise.resolve({})
-    render(await Home({ searchParams }))
+  it('renders Studio when authenticated', () => {
+    render(<Home />)
     expect(screen.getByTestId('studio-mock')).toBeInTheDocument()
   })
 
-  it('passes tab from search params', async () => {
-    const searchParams = Promise.resolve({ tab: 'transcribe' })
-    render(await Home({ searchParams }))
-    expect(screen.getByText(/transcribe/)).toBeInTheDocument()
+  it('renders Auth when unauthenticated', async () => {
+    const useAuthMod = await import('@/components/AuthProvider')
+    vi.spyOn(useAuthMod, 'useAuth').mockReturnValue({
+      user: null, session: null, loading: false, signOut: vi.fn(),
+    })
+    render(<Home />)
+    expect(screen.getByTestId('auth-mock')).toBeInTheDocument()
   })
 })
