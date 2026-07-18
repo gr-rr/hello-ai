@@ -274,7 +274,7 @@ export default function Transcribe({
           </div>
 
           <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
-          <Score notes={result.notes} analysis={result.analysis} />
+          <Score notes={result.notes} />
         </div>
       )}
 
