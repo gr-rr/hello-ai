@@ -2,6 +2,12 @@
 
 import { useEffect, useRef } from "react";
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 type Props = {
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 };
@@ -19,6 +25,10 @@ export default function Visualizer({ audioRef }: Props) {
     const canvasCtx = canvas.getContext("2d");
     if (!canvasCtx) return;
 
+    const styles = getComputedStyle(document.documentElement);
+    const bgColor = styles.getPropertyValue("--bg").trim() || "#080515";
+    const accentColor = styles.getPropertyValue("--accent").trim() || "#c084fc";
+
     let cancelled = false;
 
     async function setup() {
@@ -26,7 +36,7 @@ export default function Visualizer({ audioRef }: Props) {
       if (!audioEl) return;
       const AudioCtx =
         window.AudioContext ||
-        (window as any).webkitAudioContext;
+        window.webkitAudioContext;
       if (!AudioCtx) return;
       const ctx: AudioContext = new AudioCtx();
       ctxRef.current = ctx;
@@ -55,12 +65,12 @@ export default function Visualizer({ audioRef }: Props) {
 
         const w = canvas!.width;
         const h = canvas!.height;
-        canvasCtx!.fillStyle = "#0b0d12";
+        canvasCtx!.fillStyle = bgColor;
         canvasCtx!.fillRect(0, 0, w, h);
 
         // Waveform
         canvasCtx!.lineWidth = 2;
-        canvasCtx!.strokeStyle = "#6ea8fe";
+        canvasCtx!.strokeStyle = accentColor;
         canvasCtx!.beginPath();
         const sliceWidth = w / bufferLength;
         let x = 0;
