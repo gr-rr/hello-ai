@@ -153,7 +153,7 @@ completes when the Picky User signs off. Then PM starts the next cycle.
 Every cycle produces:
 - `docs/specs/<feature>.md` — what was built and why
 - `design/mockups/<feature>.html` — what it should look like
-- `docs/changelog.md` — what changed
+- `docs/CHANGELOG.md` — what changed
 - New/modified test files — how it's verified
 - Updated `docs/ARCHITECTURE.md` if the structure changed
 

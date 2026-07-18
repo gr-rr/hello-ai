@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+import tempfile
 import threading
 import uuid
 
@@ -11,6 +12,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from analyze import analyze_audio
 from finetune_server import (
     generate as ft_generate,
 )
@@ -164,7 +166,7 @@ def _run_training(job_id: str, req: TrainRequest):
                 if not sb2:
                     raise RuntimeError("Supabase not configured for dataset fetch")
                 data = sb2.storage.from_("datasets").download(req.dataset_path)
-                text = data.decode("utf-8") if isinstance(data, (bytes, bytearray)) else data
+                text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
             else:
                 raise ValueError("no dataset provided")
 
@@ -317,7 +319,7 @@ def _resolve_adapter(model_ref: str, base_model: str):
                     for f in files:
                         data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
                         with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
-                            fh.write(data if isinstance(data, (bytes, bytearray)) else data.read())
+                            fh.write(data if isinstance(data, bytes | bytearray) else data.read())
             return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
     return base_model, None
 
@@ -462,7 +464,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
             raise HTTPException(status_code=500, detail="Supabase not configured")
         key = req.library_path.replace("library/", "")
         data = sb.storage.from_("library").download(key)
-        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
@@ -498,7 +500,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
             raise HTTPException(status_code=500, detail="Supabase not configured")
         key = req.library_path.replace("library/", "")
         data = sb.storage.from_("library").download(key)
-        audio = data if isinstance(data, (bytes, bytearray)) else data.read()
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
@@ -527,6 +529,44 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
+
+
+class AnalyzeRequest(BaseModel):
+    audio_base64: str | None = None
+    library_path: str | None = None
+    fmt: str = "wav"
+
+
+@app.post("/music/analyze")
+@limiter.limit("30/minute")
+def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
+    """Analyze audio file for key, tempo, time signature, and chords."""
+    if req.audio_base64:
+        try:
+            audio = base64.b64decode(req.audio_base64, validate=True)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid base64") from None
+    elif req.library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        key = req.library_path.replace("library/", "")
+        data = sb.storage.from_("library").download(key)
+        audio = data if isinstance(data, bytes | bytearray) else data.read()
+    else:
+        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, f"input.{req.fmt}")
+        with open(in_path, "wb") as f:
+            f.write(audio)
+        try:
+            result = analyze_audio(in_path)
+        except Exception:
+            logger.exception("analysis failed")
+            raise HTTPException(status_code=500, detail="analysis failed") from None
+
+    return result
 
 
 @app.delete("/music/library/{path:path}")
