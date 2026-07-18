@@ -301,7 +301,7 @@ export default function Library({ compact }: { compact?: boolean }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 8 }}>
         {!recording ? (
           <button className="btn" onClick={startRecording} disabled={busy} style={{ minWidth: 100 }}>
-            <span style={{ color: "#ef4444" }}>\u25CF</span> Record
+            <span style={{ color: "var(--danger)" }}>\u25CF</span> Record
           </button>
         ) : (
           <button className="btn btn-primary" onClick={stopRecording}>
@@ -463,7 +463,7 @@ export default function Library({ compact }: { compact?: boolean }) {
           width: 10px;
           height: 10px;
           border-radius: 50%;
-          background: #ef4444;
+          background: var(--danger);
           animation: pulse-record 1s ease-in-out infinite;
         }
         @keyframes pulse-record {

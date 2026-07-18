@@ -202,7 +202,7 @@ export default function Transcribe({
               <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                 {!recording ? (
                   <button className="btn" onClick={startRecording} disabled={state !== "idle"} style={{ minWidth: 100 }}>
-                    <span style={{ color: "#ef4444" }}>\u25CF</span> Record
+                    <span style={{ color: "var(--danger)" }}>\u25CF</span> Record
                   </button>
                 ) : (
                   <button className="btn btn-primary" onClick={stopRecording}>
