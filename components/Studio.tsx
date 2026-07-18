@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Library from "./library";
 import Transcribe from "./transcribe";
+import Analysis from "./analyze";
 import type { TranscribeResult } from "@/lib/music";
 
 const STEPS = [
@@ -61,35 +62,12 @@ export default function Studio({ initialTab = "transcribe" }: { initialTab?: str
         <div className="app-grid">
           <div className="stage">
             <h3 className="stage-h3">📊 Analysis</h3>
-            {lastResult?.analysis ? (
-              <>
-                <p className="muted" style={{ marginBottom: 16 }}>{audioName} · {lastResult.num_notes} notes</p>
-                <div className="analysis-grid">
-                  <div className="analysis-card fade-in">
-                    <span className="analysis-label">Key</span>
-                    <span className="analysis-value">{lastResult.analysis.key.tonic} {lastResult.analysis.key.mode}</span>
-                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.key.confidence * 100)}%` }} /></div>
-                    <span className="confidence-pct">{Math.round(lastResult.analysis.key.confidence * 100)}%</span>
-                  </div>
-                  <div className="analysis-card fade-in" style={{ animationDelay: "0.05s" }}>
-                    <span className="analysis-label">Tempo</span>
-                    <span className="analysis-value">{lastResult.analysis.tempo.bpm} BPM</span>
-                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.tempo.confidence * 100)}%` }} /></div>
-                    <span className="confidence-pct">{Math.round(lastResult.analysis.tempo.confidence * 100)}%</span>
-                  </div>
-                  <div className="analysis-card fade-in" style={{ animationDelay: "0.1s" }}>
-                    <span className="analysis-label">Time signature</span>
-                    <span className="analysis-value">{lastResult.analysis.time_signature.numerator}/{lastResult.analysis.time_signature.denominator}</span>
-                    <div className="confidence-track"><div className="confidence-fill" style={{ width: `${Math.round(lastResult.analysis.time_signature.confidence * 100)}%` }} /></div>
-                    <span className="confidence-pct">{Math.round(lastResult.analysis.time_signature.confidence * 100)}%</span>
-                  </div>
-                </div>
-              </>
-            ) : lastResult ? (
-              <p className="muted">This transcription has no analysis data.</p>
-            ) : (
-              <p className="muted">Transcribe an audio file first, then view its analysis here.</p>
-            )}
+            <Analysis
+              analysis={lastResult?.analysis}
+              notes={lastResult?.notes ?? []}
+              audioName={audioName}
+              numNotes={lastResult?.num_notes ?? 0}
+            />
           </div>
         </div>
       )}

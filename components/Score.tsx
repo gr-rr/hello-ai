@@ -10,7 +10,13 @@ type Note = TranscribeResult["notes"][number];
 const SOUNDFONT_URL =
   "https://paulrosen.github.io/midi-js-soundfonts/FluidR3_GM/";
 
-export default function Score({ notes, analysis: _analysis }: { notes: Note[]; analysis?: TranscribeResult["analysis"] }) {
+export default function Score({
+  notes,
+  analysis,
+}: {
+  notes: Note[];
+  analysis?: TranscribeResult["analysis"];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLDivElement>(null);
   const cursorControlRef = useRef<abcjs.CursorControl | null>(null);
@@ -20,9 +26,18 @@ export default function Score({ notes, analysis: _analysis }: { notes: Note[]; a
   const [ready, setReady] = useState(false);
   const [abc, setAbc] = useState("");
 
+  const hasAnalysis = !!(analysis?.key && analysis?.tempo);
+
   useEffect(() => {
-    if (!containerRef.current) return;
-    const generated = midiNotesToAbc(notes);
+    if (!hasAnalysis || !containerRef.current) return;
+    const generated = midiNotesToAbc(notes, {
+      bpm: analysis!.tempo.bpm,
+      key: { tonic: analysis!.key.tonic, mode: analysis!.key.mode },
+      timeSignature: {
+        numerator: analysis!.time_signature.numerator,
+        denominator: analysis!.time_signature.denominator,
+      },
+    });
     setAbc(generated);
 
     const Cursor = class implements abcjs.CursorControl {
@@ -90,7 +105,7 @@ export default function Score({ notes, analysis: _analysis }: { notes: Note[]; a
       }
     };
     setup();
-  }, [notes]);
+  }, [notes, hasAnalysis, analysis]);
 
   const downloadAbc = () => {
     const blob = new Blob([abc], { type: "text/vnd.abc" });
@@ -101,6 +116,10 @@ export default function Score({ notes, analysis: _analysis }: { notes: Note[]; a
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  if (!hasAnalysis) {
+    return <p className="muted">Transcribe and analyze your audio to see the score.</p>;
+  }
 
   return (
     <div className="score">
