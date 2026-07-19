@@ -72,9 +72,9 @@ def test_proxied_route_exists_in_backend(path):
     if path.startswith("/music/library/"):
         method = "DELETE"
     assert PROXIED, "no proxied paths discovered — check app/api scanning"
-    assert _backend_has(
-        path, method
-    ), f"Frontend proxies to '{path}' ({method}) but no matching backend route exists"
+    assert _backend_has(path, method), (
+        f"Frontend proxies to '{path}' ({method}) but no matching backend route exists"
+    )
 
 
 NOTE_KEYS = {"pitch", "start", "end", "velocity"}
