@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, type TranscribeResult } from "@/lib/music";
+import { analyzeAudio, listLibrary, type TranscribeResult, type LibFile } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -25,6 +25,7 @@ export default function Studio({
   signedIn?: boolean;
 }) {
   const router = useRouter();
+  const analyzeInputRef = useRef<HTMLInputElement>(null);
   const safeTab = TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
   const [tab, setTab] = useState<TabId>(safeTab as TabId);
   const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
@@ -32,6 +33,14 @@ export default function Studio({
   const [analysis, setAnalysis] = useState<TranscribeResult["analysis"] | null>(null);
   const [analysisError, setAnalysisError] = useState("");
   const [analyzeStatus, setAnalyzeStatus] = useState("");
+  const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
+  const [showAnalyzeLibPicker, setShowAnalyzeLibPicker] = useState(false);
+
+  useEffect(() => {
+    if (tab === "analyze") {
+      listLibrary().then(setAnalyzeLibFiles).catch(() => {});
+    }
+  }, [tab]);
 
   function onTranscribed(result: TranscribeResult, name: string) {
     setLastResult(result);
@@ -45,7 +54,7 @@ export default function Studio({
     setAnalyzeStatus("Analyzing audio…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(audioBase64, fmt);
+      const result = await analyzeAudio(audioBase64, fmt, lastResult?.midi_base64);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -58,6 +67,31 @@ export default function Studio({
   function goToTab(id: TabId) {
     setTab(id);
     router.replace(`/?tab=${id}`, { scroll: false });
+  }
+
+  async function handleAnalyzeFile(file: File) {
+    const buf = await file.arrayBuffer();
+    const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+    const fmt = file.name.split(".").pop()?.toLowerCase() ?? "wav";
+    await handleAnalyze(b64, fmt, file.name);
+  }
+
+  async function handleAnalyzeLibrary(item: LibFile) {
+    setShowAnalyzeLibPicker(false);
+    setAudioName(item.name);
+    setAnalyzeStatus("Downloading…");
+    try {
+      const res = await fetch(item.url);
+      if (!res.ok) throw new Error(`download failed: ${res.status}`);
+      const blob = await res.blob();
+      const fmt = item.name.split(".").pop()?.toLowerCase() ?? "wav";
+      const buf = await blob.arrayBuffer();
+      const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+      await handleAnalyze(b64, fmt, item.name);
+    } catch (err) {
+      setAnalysisError(err instanceof Error ? err.message : "download failed");
+      setAnalyzeStatus("");
+    }
   }
 
   async function signIn() {
@@ -122,17 +156,71 @@ export default function Studio({
           <div className="card">
             <h3 className="card-title"><span className="glyph">📊</span> Analyze</h3>
             {analyzeStatus && <p className="status" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
-            {analysisError && (
+
+            {analysisError && !analysis && !analyzeStatus && (
               <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
                 <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
               </div>
             )}
-            <Analysis
-              analysis={analysis}
-              notes={lastResult?.notes ?? []}
-              audioName={audioName}
-              numNotes={lastResult?.num_notes ?? 0}
-            />
+
+            {!analysis && !analyzeStatus && !showAnalyzeLibPicker && (
+              <div className="source-grid" style={{ marginBottom: 16 }}>
+                <div className="source-card" onClick={() => analyzeInputRef.current?.click()}>
+                  <span className="sc-icon">⬆</span>
+                  <span className="sc-label">Upload to analyze</span>
+                  <span className="sc-hint">WAV · MP3 · M4A</span>
+                  <input
+                    ref={analyzeInputRef}
+                    type="file"
+                    accept="audio/*"
+                    style={{ display: "none" }}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) await handleAnalyzeFile(f);
+                    }}
+                  />
+                </div>
+                <div
+                  className={`source-card${analyzeLibFiles.length > 0 ? "" : " disabled"}`}
+                  onClick={() => analyzeLibFiles.length > 0 && setShowAnalyzeLibPicker(true)}
+                >
+                  <span className="sc-icon">📁</span>
+                  <span className="sc-label">From library</span>
+                  <span className="sc-hint">
+                    {analyzeLibFiles.length === 0 ? "No saved tracks" : "Pick a track"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {showAnalyzeLibPicker && (
+              <>
+                <div className="section-label">Pick a saved track</div>
+                {analyzeLibFiles.map((f) => (
+                  <div key={f.id} className="track" style={{ cursor: "pointer" }} onClick={() => handleAnalyzeLibrary(f)}>
+                    <div className="track-head">
+                      <div className="track-name">{f.name}</div>
+                      <div className="track-actions">
+                        <span className="chip">Analyze</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="toolbar">
+                  <button className="btn btn-ghost" onClick={() => setShowAnalyzeLibPicker(false)}>Back</button>
+                </div>
+              </>
+            )}
+
+            {analysis && (
+              <Analysis
+                analysis={analysis}
+                notes={lastResult?.notes ?? []}
+                audioName={audioName}
+                numNotes={lastResult?.num_notes ?? 0}
+              />
+            )}
           </div>
         )}
       </div>
