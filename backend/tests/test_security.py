@@ -106,16 +106,15 @@ def test_transcribe_rejects_invalid_library_path(client):
     assert r.status_code == 400
 
 
-def test_analyze_rejects_invalid_library_path(client):
-    r = client.post("/music/analyze", headers=_auth(), json={"library_path": "../escape"})
-    assert r.status_code == 400
+def test_analyze_requires_midi_base64(client):
+    r = client.post("/music/analyze", headers=_auth(), json={})
+    assert r.status_code == 422
 
 
-def test_analyze_rejects_oversized_payload(client):
-    big = base64.b64encode(b"x" * (MAX_UPLOAD_BYTES + 10)).decode()
+def test_analyze_rejects_invalid_base64(client):
     r = client.post(
         "/music/analyze",
         headers=_auth(),
-        json={"fmt": "wav", "audio_base64": big},
+        json={"midi_base64": "!!!notb64!!!"},
     )
-    assert r.status_code == 413
+    assert r.status_code == 400
