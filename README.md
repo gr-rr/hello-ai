@@ -1,159 +1,188 @@
-# hello-ai · Music AI Studio — Audio → Sheet Music
+# hello-ai · Music AI Studio
 
-Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a
-transcription (basic-pitch on an Oracle VM), and a synthesized, cursor-highlighted
-score you can play back in the browser (abcjs). Files persist to Supabase, and a
-lightweight analysis (key, tempo, time signature) is shown after transcription.
+Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a transcription (basic-pitch on an Oracle VM), and a synthesized, cursor-highlighted score you can play back in the browser (abcjs). Files persist to Supabase, and a lightweight analysis (key, tempo, time signature) is shown after transcription.
 
-## Live features
+## Live Demo
 
-- 📁 **Library** (`/?tab=library`) — upload, record, play, and delete audio in Supabase.
-- 🎼 **Transcribe** (`/?tab=transcribe`) — audio → MIDI (basic-pitch) → rendered
-  sheet music with playback.
-- 📊 **Analysis** — key / tempo / time-signature detection shown inline after a
-  transcription.
+[hello-ai.vercel.app](https://hello-ai.vercel.app)
 
-The app is a single-page Studio with Library, Transcribe, and Analyze tabs.
+## Quick Links
 
-## Documentation
-
-| Doc | What it covers |
-|-----|----------------|
-| [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) | Local setup on the free/OSS stack (Vercel + Oracle + Supabase) |
-| [docs/TOOLING.md](docs/TOOLING.md) | Libraries, services, and config files |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram + the design→build→test→ship loop |
-| [design/README.md](design/README.md) | Design system (tokens, mockups, Argos visual QA) |
-| [docs/E2E.md](docs/E2E.md) | Blocking Playwright user journeys |
-
-## Local development
-
-```bash
-npm install
-npm run dev
+- **📚 Documentation** – See `/docs/` for agent workflows, architecture, and setup guides
+- **⚡ Key Documentation**
+  - [README.md](README.md) – Project overview & navigation
+  - [ARCHITECTURE.md](docs/ARCHITECTURE.md) – System design & autonomous loops
+  - [AGENTS.md](docs/AGENTS.md) – Engineering source of truth for AI agents
+  - [ROADMAP.md](docs/ROADMAP.md) – Current phase & feature roadmap
+  - [PRODUCT_VISION.md](docs/PRODUCT_VISION.md) – North star & priorities
+- **🔧 Developer Docs**
+  - [LOCAL_DEV.md](docs/LOCAL_DEV.md) – Local setup (Vercel + Oracle + Supabase)
+  - [TOOLING.md](docs/TOOLING.md) – Tools, services, config files
+  - [E2E.md](docs/E2E.md) – User journey tests that block merges
+- **🎨 Design**
+  - [design/README.md](design/README.md) – Design system & visual QA
+  - [design/tokens.json](design/tokens.json) – Token definitions
+- **📁 Project Structure**
+```
+app/                    — Next.js app (Vercel)
+  components/           — UI components
+  lib/                  — Core libraries + backend proxy
+backend/               — FastAPI on Oracle VM
+  main.py               — API endpoints
+  music_features.py     — basic-pitch transcription, FluidSynth
+  analyze.py            — audio analysis (key, tempo, chords)
+docs/                   — Documentation sources of truth
+  README.md             — Project overview
+  ARCHITECTURE.md       — System design & workflows
+  AGENTS.md             — Engineering SOT for AI agents
+  ROADMAP.md            — Feature roadmap
+  ... (15+ files)
+supabase/              — Database + storage migrations
+public/                — Worker files for MSW (dev mock)
+tests/                 — Playwright E2E + visual comparison
+scripts/               — CI/CD + auto-merge helpers
 ```
 
-Open http://localhost:3000. See [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md) for the
-full setup (env, tests, backend, Supabase RLS).
+## Features
 
-## CI / merge gate
+### 🎵 Core Studio
 
-- **`build`** (required) — builds the app and runs `npm test` (vitest).
-- **`e2e`** (required) — builds, starts the app, and runs the blocking Playwright
-  user journeys in `tests/e2e/journey.spec.ts` (Transcribe + Library). A broken
-  core flow cannot merge.
-- **`lint`** (required) — ESLint + Ruff (Python) + pytest.
-- **`argos`** (non-blocking) — visual diff vs `main` baseline, for review.
+- **Library** (`/?tab=library`) — Upload, record, play, and delete audio in Supabase
+- **Transcribe** (`/?tab=transcribe`) — Audio → MIDI (basic-pitch) → rendered sheet music with playback
+- **Analysis** — Key / tempo / time-signature detection shown inline after a transcription
 
-Run the same checks locally with `npm run check` (see `scripts/check.sh`).
+### 🌐 Live Features
 
-## Deploy
+| Concern | Location |
+|---------|----------|
+| Page shell | `components/Studio.tsx` (topbar + stepper grid) |
+| Transcribe | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
+| Library | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
+| Backend proxy | `lib/backend.ts`, `app/api/**/route.ts` |
+| Design SOT | `design/tokens.json`, `design/mockups/*` |
+| E2E journeys | `tests/e2e/journey.spec.ts` |
 
-Deploy to [Vercel](https://vercel.com) — connect the repo; it builds with the
-included `vercel.json` (Next.js framework preset). Vercel deploys `main` only;
-`feat/*` branches do not auto-update the production URL until merged.
+## Getting Started
 
-### Environment variables (Vercel + local `.env.local`)
+### Local Development
 
-| Var | Purpose |
-|-----|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (public) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/publishable key (public, browser-safe) |
-| `MUSIC_BACKEND_URL` | Oracle FastAPI backend base URL (default `https://gricci-testing.duckdns.org`) |
+```bash
+# One-time setup
+npm install
 
-Without the Supabase vars the app falls back to built-in demo values; without the
-backend, Transcribe can't return notes.
+# Start dev server (frontend + mocked backend)
+npm run dev
 
-## Server-side processing (Oracle Cloud, always-free)
+# Run E2E user journeys (needs Supabase auth in another terminal)
+npx playwright test tests/e2e
 
-Transcription runs on an Oracle Cloud **Ampere A1** VM (4 OCPU / 24 GB ARM,
-Ubuntu 22.04) behind Caddy TLS. The Next.js `/api/music/*` routes proxy to the
-backend. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+# Run visual regression tests
+npx playwright test tests/visual
+```
+
+### Production Features
+
+- **Auth** — Supabase implicit OAuth flow, seamless session handling
+- **Error Tracking** — Sentry SDK + Sentry MCP for agent self-diagnosis
+- **CI/CD** — Vercel auto-deploys `main`, blocking PR checks (E2E + lint + build)
+- **Visual QA** — Argos CI diff against design mockups
+
+## Architecture Overview
 
 ```
 Browser ──▶ Vercel (/api/music/*) ──▶ Oracle VM
-                                 Caddy :443 (HTTPS/Let's Encrypt) ──▶ FastAPI :8000
-                                                                           └─▶ Supabase (storage)
+                         Caddy :443 (HTTPS/Let's Encrypt)
+                         FastAPI :8000
+                           ├─ basic-pitch transcription
+                           ├─ FluidSynth MIDI→WAV
+                           └─ ffmpeg enhance
+                           └─ Supabase (SERVICE_ROLE)
 ```
 
-### Provisioning (via `oci` CLI)
+**Key Rule:** The browser never talks to the Oracle backend directly. All backend calls go through `app/api/*` → `lib/backend.ts` (`proxyToBackend`), keeping the VM URL/key off the client.
 
-All infra is created from the CLI (no console clicking required):
+## Running Tests
+
+### Component Tests (Vitest)
 
 ```bash
-# Auth: ~/.oci/config (tenancy/user OCID + API key at ~/.oci/oci_api_key.pem)
-oci iam user get --user-id <user-ocid>          # verify auth
-
-# Network
-oci network vcn create --compartment-id <tenancy> --cidr-block 10.0.0.0/16
-oci network internet-gateway create --vcn-id <vcn> --is-enabled true
-oci network subnet create --vcn-id <vcn> --cidr-block 10.0.0.0/24
-oci network route-table update --rt-id <rt> --force \
-  --route-rules '[{"destination":"0.0.0.0/0","destination-type":"CIDR_BLOCK","network-entity-id":"<igw>"}]'
-# Security list: open 22/80/443/8000 (use --force, ingress rules silently drop otherwise)
-oci compute instance launch --from-json instance.json --region us-phoenix-1
+npm test
 ```
 
-> Gotcha: `route-table update` and `security-list update` require `--force` or
-> the new rules are silently ignored.
-
-### Backend on the VM
+### E2E User Journeys (Playwright)
 
 ```bash
-# On the VM (Ubuntu 22.04 ARM):
-sudo apt-get install -y docker-ce docker-compose-plugin
-# Copy backend/ (tar, exclude .venv) to /home/ubuntu/backend, then:
-cd /home/ubuntu/backend && docker compose up -d   # FastAPI :8000 + Caddy :80
+# Transcribe tab runs offline (mocked backend)
+npx playwright test tests/e2e/journey.spec.ts
 
-# Server-side Supabase upload (optional): create /home/ubuntu/backend/.env
-SUPABASE_URL=https://<ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service_role_jwt>       # secret, never exposed to browser
+# Library tab needs real Supabase credentials
+export NEXT_PUBLIC_SUPABASE_URL=... && npx playwright test tests/e2e/journey.spec.ts
 ```
 
-The `backend/` directory contains:
-- `main.py` — FastAPI app (`/health`, `/music/transcribe`, `/music/enhance`,
-  `/music/library`, `/music/library/{path}`)
-- `music_features.py` — basic-pitch transcription, FluidSynth MIDI→WAV, ffmpeg enhance
-- `requirements.txt`, `Dockerfile`, `docker-compose.yml` (Caddy + backend)
+### Visual Regression (Argos)
 
-> **Env gotcha:** `docker compose` only injects `.env` vars into the container
-> when run **from the `backend/` directory** (so it reads `backend/.env`). Running
-> `docker compose -f ~/backend/docker-compose.yml …` from elsewhere substitutes
-> empty strings and the backend silently runs with no Supabase config. Always
-> `cd ~/backend && docker compose up -d`.
+```bash
+npx playwright test tests/visual/preview.spec.ts
+# Uploads screenshots to Argos for diff against baseline
+```
 
-## Persistence (Supabase)
+## Contributing
 
-- `lib/supabase.ts` — client singleton.
-- `lib/storage.ts` — generic bucket helpers (single source for uploads).
-- `lib/backend.ts` — single reverse-proxy to the Oracle backend.
-- Buckets: `library`, `midi`, `audio` (public read/insert for the open demo).
-- Migrations live in `supabase/migrations/`. Apply via the SQL Editor or
-  `supabase db query --linked -f <migration.sql>`.
+> This project uses autonomous AI agents with defined roles (PM → Designer → Auditor → Engineer → Picky User). Read `docs/AGENTS.md` first.
 
-## Dev Diary / Learnings
+### Feature Checklist
 
-A running log of non-obvious things learned while building this. Useful when
-resuming agentic work on this repo.
+For **new features**, follow the standard workflow:
 
-- **Vercel deploys `main`, not PR branches.** Pushes to `feat/*` branches do NOT
-  auto-update the production URL unless Vercel is pointed at that branch or the PR
-  is merged. The live site reflects the deployed production branch.
-- **Docker Compose `.env` injection.** Compose reads `.env` relative to the CWD it
-  is launched from. Run `cd ~/backend && docker compose up -d` or the container gets
-  empty env (silent Supabase misconfig → 500s).
-- **Don't `rsync --delete` the VM backend dir.** A `rsync --delete` from a local
-  `backend/` (which has no `.env`) **deletes the VM's `~/backend/.env`**, taking down
-  Supabase config on next restart. The compose file now hardcodes the env vars so
-  reboots/rsyncs can't silently break the backend.
-- **`Caddyfile` must stay a file.** After a reboot it appeared as a *directory* on the
-  VM, crashing Caddy (`mount ... not a directory`). If Caddy won't start, `rm -rf
-  ~/backend/Caddyfile` and recreate it as the file in `backend/docker-compose.yml`.
-- **Caddy auto-TLS** via Let's Encrypt on the DuckDNS domain; no manual certs.
-- **Supabase migration apply:** `supabase db query --linked -f <migration.sql>`.
-  (`supabase link --project-ref <ref>` first; CLI v2.109 auto-links via device auth.)
+1. **Design (UI Designer)** → Add component to `components/<feature>/index.tsx`
+   - Read `docs/specs/<feature>.md` (PM spec)
+   - Use design tokens from `design/tokens.json`
+
+2. **Engineering** → Implement per conventions:
+   - `components/` one component per file
+   - `app/api/<feature>/route.ts` if backend needed
+   - Write E2E in `tests/e2e/journey.spec.ts`
+
+3. **Testing** → Verify everything passes:
+   - `npm run typecheck`
+   - `npx playwright test --reporter=line`
+   - `npm run build`
+
+### Commit Convention
+
+Conventional Commits: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`
+
+Opt in with:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `commit` script still uses `aicommits` for message drafting.
 
 ## Roadmap
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for the full phase plan
-(Phase 1 Foundation delivered → Phase 2 Music Analysis → Phase 3 Composition →
-Phase 4 Generation → Phase 5 Fine-tuning).
+- **Phase 1: Foundation** ✅ Current — Core transcription + library management
+- **Phase 2: Analysis** 🔜 Next — Key/tempo detection + chord recognition
+- **Phase 3: Composition** 🎹 — Interactive chord/progression playground
+- **Phase 4: Generation** 🤖 — Style-conditioned music generation
+- **Phase 5: Fine-tuning** 🧬 — Personalized models from user library
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| `docs/PRODUCT_VISION.md` | North star + principles |
+| `docs/ROADMAP.md` | Current focus + feature sequencing |
+| `docs/ARCHITECTURE.md` | System design + CI workflow |
+| `docs/AGENTS.md` | Engineering SOT for AI agents |
+| `docs/DEVELOPMENT.md` | Docker + local setup |
+| `docs/E2E.md` | Why E2E tests are blocking |
+| `docs/CHANGELOG.md` | Recent changes + gotchas |
+| `design/README.md` | Design system + visual QA flow |
+
+## Links
+
+- [Main Site](https://hello-ai.vercel.app)
+- [GitHub](https://github.com/agent-of-empires/hello-ai)
+- [Architecture Diagram](docs/ARCHITECTURE.md#1-system-at-a-glance)
