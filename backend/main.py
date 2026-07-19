@@ -14,7 +14,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from analyze import analyze_audio
+from analyze import analyze_from_midi
 from finetune_server import (
     generate as ft_generate,
 )
@@ -591,57 +591,28 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 
 
 class AnalyzeRequest(BaseModel):
-    audio_base64: str | None = None
-    library_path: str | None = None
-    midi_base64: str | None = None
-    fmt: str = "wav"
+    midi_base64: str
 
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
 def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Analyze audio file for key, tempo, time signature, and chords.
+    """Analyze a MIDI file for key, tempo, time signature, and chords.
 
+    Requires midi_base64 from a prior transcription.
     Public for now: anonymous requests are allowed (auth is optional)."""
-    if req.audio_base64:
-        try:
-            audio = base64.b64decode(req.audio_base64, validate=True)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid base64") from None
-        if len(audio) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-            )
-    elif req.library_path:
-        sb = _sb()
-        if not sb:
-            raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = _valid_library_key(req.library_path)
-        if not key:
-            raise HTTPException(status_code=400, detail="invalid library_path")
-        data = sb.storage.from_("library").download(key[len("library/") :])
-        audio = data if isinstance(data, bytes | bytearray) else data.read()
-    else:
-        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+    try:
+        midi_bytes = base64.b64decode(req.midi_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid base64") from None
 
     with tempfile.TemporaryDirectory() as td:
-        in_path = os.path.join(td, f"input{_sanitize_fmt(req.fmt)}")
-        with open(in_path, "wb") as f:
-            f.write(audio)
-
-        midi_path: str | None = None
-        if req.midi_base64:
-            try:
-                midi_bytes = base64.b64decode(req.midi_base64, validate=True)
-                midi_path = os.path.join(td, "input.mid")
-                with open(midi_path, "wb") as f:
-                    f.write(midi_bytes)
-            except Exception:
-                logger.warning("invalid midi_base64; analyzing audio only")
+        midi_path = os.path.join(td, "input.mid")
+        with open(midi_path, "wb") as f:
+            f.write(midi_bytes)
 
         try:
-            result = analyze_audio(in_path, midi_path)
+            result = analyze_from_midi(midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None
