@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, listLibrary, type TranscribeResult, type LibFile } from "@/lib/music";
+import { analyzeAudio, listMidiFiles, type TranscribeResult, type LibFile } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -25,7 +25,6 @@ export default function Studio({
   signedIn?: boolean;
 }) {
   const router = useRouter();
-  const analyzeInputRef = useRef<HTMLInputElement>(null);
   const safeTab = TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
   const [tab, setTab] = useState<TabId>(safeTab as TabId);
   const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
@@ -38,7 +37,7 @@ export default function Studio({
 
   useEffect(() => {
     if (tab === "analyze") {
-      listLibrary().then(setAnalyzeLibFiles).catch(() => {});
+      listMidiFiles().then(setAnalyzeLibFiles).catch(() => {});
     }
   }, [tab]);
 
@@ -49,12 +48,12 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(audioBase64: string, fmt: string, name: string) {
+  async function handleAnalyze(midiBase64: string, name: string) {
     setAudioName(name);
-    setAnalyzeStatus("Analyzing audio…");
+    setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(audioBase64, fmt, lastResult?.midi_base64);
+      const result = await analyzeAudio(midiBase64);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -69,25 +68,17 @@ export default function Studio({
     router.replace(`/?tab=${id}`, { scroll: false });
   }
 
-  async function handleAnalyzeFile(file: File) {
-    const buf = await file.arrayBuffer();
-    const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-    const fmt = file.name.split(".").pop()?.toLowerCase() ?? "wav";
-    await handleAnalyze(b64, fmt, file.name);
-  }
-
   async function handleAnalyzeLibrary(item: LibFile) {
     setShowAnalyzeLibPicker(false);
     setAudioName(item.name);
-    setAnalyzeStatus("Downloading…");
+    setAnalyzeStatus("Downloading MIDI…");
     try {
       const res = await fetch(item.url);
       if (!res.ok) throw new Error(`download failed: ${res.status}`);
       const blob = await res.blob();
-      const fmt = item.name.split(".").pop()?.toLowerCase() ?? "wav";
       const buf = await blob.arrayBuffer();
       const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-      await handleAnalyze(b64, fmt, item.name);
+      await handleAnalyze(b64, item.name);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "download failed");
       setAnalyzeStatus("");
@@ -165,22 +156,6 @@ export default function Studio({
 
             {!analysis && !analyzeStatus && !showAnalyzeLibPicker && (
               <div className="source-grid" style={{ marginBottom: 16 }}>
-                <div className="source-card" onClick={() => analyzeInputRef.current?.click()}>
-                  <span className="sc-icon">⬆</span>
-                  <span className="sc-label">Upload to analyze</span>
-                  <span className="sc-hint">WAV · MP3 · M4A</span>
-                  <input
-                    ref={analyzeInputRef}
-                    type="file"
-                    accept="audio/*"
-                    style={{ display: "none" }}
-                    onChange={async (e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (f) await handleAnalyzeFile(f);
-                    }}
-                  />
-                </div>
                 <div
                   className={`source-card${analyzeLibFiles.length > 0 ? "" : " disabled"}`}
                   onClick={() => analyzeLibFiles.length > 0 && setShowAnalyzeLibPicker(true)}
@@ -188,7 +163,7 @@ export default function Studio({
                   <span className="sc-icon">📁</span>
                   <span className="sc-label">From library</span>
                   <span className="sc-hint">
-                    {analyzeLibFiles.length === 0 ? "No saved tracks" : "Pick a track"}
+                    {analyzeLibFiles.length === 0 ? "No transcribed songs" : "Pick a track"}
                   </span>
                 </div>
               </div>

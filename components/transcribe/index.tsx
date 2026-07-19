@@ -40,7 +40,7 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (audioBase64: string, fmt: string, name: string) => void;
+  onAnalyze?: (midiBase64: string, name: string) => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -287,16 +287,14 @@ export default function Transcribe({
               {saved && (
                 <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
               )}
-              {onGoToAnalyze && (
+              {onGoToAnalyze && onAnalyze && result?.midi_base64 && (
                 <button
                   className="btn btn-primary"
                   onClick={async () => {
-                    if (onAnalyze && analyzeBase64) {
-                      try {
-                        await onAnalyze(analyzeBase64, analyzeFmt, audioName);
-                      } catch {
-                        /* analysisError surfaces on the Analyze tab */
-                      }
+                    try {
+                      await onAnalyze(result.midi_base64!, audioName);
+                    } catch {
+                      /* analysisError surfaces on the Analyze tab */
                     }
                     onGoToAnalyze();
                   }}
