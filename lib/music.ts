@@ -133,10 +133,15 @@ export async function enhanceAudio(
 export async function analyzeAudio(
   dataBase64: string,
   fmt = "wav",
+  midiBase64?: string,
 ): Promise<TranscribeResult["analysis"]> {
   return apiFetch("/api/music/analyze", {
     method: "POST",
-    body: JSON.stringify({ audio_base64: dataBase64, fmt }),
+    body: JSON.stringify(
+      midiBase64
+        ? { audio_base64: dataBase64, fmt, midi_base64: midiBase64 }
+        : { audio_base64: dataBase64, fmt },
+    ),
   }) as Promise<TranscribeResult["analysis"]>;
 }
 

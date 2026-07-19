@@ -576,6 +576,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 class AnalyzeRequest(BaseModel):
     audio_base64: str | None = None
     library_path: str | None = None
+    midi_base64: str | None = None
     fmt: str = "wav"
 
 
@@ -609,8 +610,19 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
         in_path = os.path.join(td, f"input{_sanitize_fmt(req.fmt)}")
         with open(in_path, "wb") as f:
             f.write(audio)
+
+        midi_path: str | None = None
+        if req.midi_base64:
+            try:
+                midi_bytes = base64.b64decode(req.midi_base64, validate=True)
+                midi_path = os.path.join(td, "input.mid")
+                with open(midi_path, "wb") as f:
+                    f.write(midi_bytes)
+            except Exception:
+                logger.warning("invalid midi_base64; analyzing audio only")
+
         try:
-            result = analyze_audio(in_path)
+            result = analyze_audio(in_path, midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None
