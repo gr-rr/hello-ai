@@ -245,6 +245,7 @@ html,body {
 .piano-roll-container { width:100%; }
 .piano-roll-scroll { overflow-x:auto; border-radius:8px; max-height:320px; overflow-y:auto; }
 .piano-roll-footer { display:flex; justify-content:space-between; margin-top:8px; }
+.spectrogram { width:100%; }
 .footer { margin-top:24px; color:var(--muted); font-size:12px; text-align:center; }
 .muted { color:var(--muted); font-size:13px; }
 .status { font-size:13px; color:var(--muted); min-height:18px; }

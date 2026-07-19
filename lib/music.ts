@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { uploadFile, getPublicUrl, listFiles, type FileMeta } from "./storage";
+import { uploadFile, getPublicUrl, listFiles, downloadText, deleteFile, type FileMeta } from "./storage";
 import { apiFetch } from "./api";
 
 async function userId(): Promise<string | null> {
@@ -28,6 +28,7 @@ export type LibFile = {
   id: string;
   size?: number;
   created_at?: string;
+  notes?: { pitch: number; start: number; end: number; velocity: number }[];
 };
 
 export type Transcription = {
@@ -47,7 +48,7 @@ async function userPrefix(): Promise<string> {
   return `library/${uid ?? "dev"}`;
 }
 
-export async function uploadToLibrary(name: string, blob: Blob): Promise<string> {
+export async function uploadToLibrary(name: string, blob: Blob): Promise<{ url: string; id: string }> {
   if (!supabase) throw new Error("Supabase not configured");
   const uid = await userId();
   if (!uid) throw new Error("Sign in to save to library");
@@ -56,7 +57,7 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<string>
   const prefix = await userPrefix();
   const path = `${prefix}/${Date.now()}-${safeName}`;
   await uploadFile(LIBRARY_BUCKET, path, blob, `audio/${fmt}`, true);
-  return getPublicUrl(LIBRARY_BUCKET, path);
+  return { url: getPublicUrl(LIBRARY_BUCKET, path), id: path };
 }
 
 export async function listLibrary(): Promise<LibFile[]> {
@@ -64,25 +65,49 @@ export async function listLibrary(): Promise<LibFile[]> {
   if (!uid) return [];
   const prefix = await userPrefix();
   const files = await listFiles(LIBRARY_BUCKET, prefix);
-  return files
-    .filter((f) => !f.name.endsWith("/"))
-    .map((f: FileMeta) => {
-      const path = `${prefix}/${f.name}`;
-      const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
-      return {
-        name: displayName,
-        url: getPublicUrl(LIBRARY_BUCKET, path),
-        id: `${prefix}/${f.name}`,
-        size: f.metadata?.size,
-        created_at: f.created_at,
-      };
-    });
+  const items = await Promise.all(
+    files
+      .filter((f) => !f.name.endsWith("/"))
+      .map(async (f: FileMeta) => {
+        const path = `${prefix}/${f.name}`;
+        const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
+        const notesPath = `${prefix}/${f.name}.json`;
+        let notes;
+        try {
+          const raw = await downloadText(TRANSCRIPTIONS_BUCKET, notesPath);
+          if (raw) notes = JSON.parse(raw);
+        } catch {
+          notes = undefined;
+        }
+        return {
+          name: displayName,
+          url: getPublicUrl(LIBRARY_BUCKET, path),
+          id: `${prefix}/${f.name}`,
+          size: f.metadata?.size,
+          created_at: f.created_at,
+          notes,
+        };
+      }),
+  );
+  return items;
+}
+
+export async function saveTranscription(
+  id: string,
+  notes: { pitch: number; start: number; end: number; velocity: number }[],
+): Promise<void> {
+  if (!supabase) return;
+  const path = `${id}.json`;
+  await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(notes), "application/json", true);
 }
 
 export async function deleteFromLibrary(id: string): Promise<void> {
-  const uid = await userId();
-  if (!uid) throw new Error("Sign in to delete from library");
-  await apiFetch(`/api/music/library/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!supabase) throw new Error("Supabase not configured");
+  await deleteFile(LIBRARY_BUCKET, id);
+  // also delete companion transcription file if present
+  try {
+    await deleteFile(TRANSCRIPTIONS_BUCKET, `${id}.json`);
+  } catch { /* ok if none */ }
 }
 
 export async function listTranscriptions(): Promise<Transcription[]> {

@@ -5,11 +5,14 @@ import {
   transcribeAudio,
   enhanceAudio,
   listLibrary,
+  uploadToLibrary,
+  saveTranscription,
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
+import Spectrogram from "@/components/Spectrogram";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
@@ -132,6 +135,8 @@ export default function Transcribe({
     setRecording(false);
   }
 
+  const [saved, setSaved] = useState(false);
+
   function reset() {
     setState("idle");
     setResult(null);
@@ -141,10 +146,41 @@ export default function Transcribe({
     setStatus("");
     setShowLibPicker(false);
     setPlayhead(0);
+    setSaved(false);
+  }
+
+  async function saveToLibrary() {
+    if (!result || !result.wav_url) return;
+    try {
+      setStatus("Saving to library…");
+      const blob = await (await fetch(result.wav_url)).blob();
+      const { id } = await uploadToLibrary(audioName || "transcription.wav", blob);
+      if (result.notes.length) {
+        await saveTranscription(id, result.notes);
+      }
+      setSaved(true);
+      setStatus("✓ Saved to library");
+    } catch (err) {
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "save failed"));
+    }
   }
 
   async function onSelectLibraryFile(file: LibFile) {
     setAudioName(file.name);
+    setShowLibPicker(false);
+
+    if (file.notes && file.notes.length > 0) {
+      setResult({
+        notes: file.notes,
+        num_notes: file.notes.length,
+        wav_url: file.url,
+      });
+      setState("populated");
+      setStatus(`${file.notes.length} notes loaded from library`);
+      setPlayhead(0);
+      return;
+    }
+
     setStatus("Downloading…");
     try {
       const res = await fetch(file.url);
@@ -243,11 +279,19 @@ export default function Transcribe({
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              {onGoToAnalyze && onAnalyze && (
+              {!saved && signedIn && (
+                <button className="btn" onClick={saveToLibrary}>
+                  💾 Save to library
+                </button>
+              )}
+              {saved && (
+                <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
+              )}
+              {onGoToAnalyze && (
                 <button
                   className="btn btn-primary"
                   onClick={async () => {
-                    if (analyzeBase64) {
+                    if (onAnalyze && analyzeBase64) {
                       try {
                         await onAnalyze(analyzeBase64, analyzeFmt, audioName);
                       } catch {
@@ -282,6 +326,8 @@ export default function Transcribe({
               <PianoRoll notes={result.notes} playheadTime={playhead} bpm={120} />
             </div>
           )}
+
+          {result.wav_url && <Spectrogram url={result.wav_url} />}
 
           <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "6px 0 0" }}>
             basic-pitch · FluidSynth · abcjs · Supabase — prototype, flows simulated.

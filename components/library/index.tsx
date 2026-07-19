@@ -10,6 +10,8 @@ import {
 } from "@/lib/music";
 import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
+import PianoRoll from "@/components/PianoRoll";
+import Spectrogram from "@/components/Spectrogram";
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return "";
@@ -29,6 +31,7 @@ export default function Library({
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<LibFile[]>([]);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -112,6 +115,7 @@ export default function Library({
       audio.removeAttribute("src");
     }
     setPlaying(null);
+    setPaused(false);
     setCurrentTime(0);
     setDuration(0);
   }, []);
@@ -140,14 +144,34 @@ export default function Library({
     audio.src = url;
     audio.play().catch(() => {});
     setPlaying(id);
+    setPaused(false);
     setCurrentTime(0);
     setDuration(0);
   }, [stopAudio]);
 
+  const pauseAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio) audio.pause();
+    setPaused(true);
+  }, []);
+
+  const resumeAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.play().catch(() => {});
+    setPaused(false);
+  }, []);
+
   const togglePlay = useCallback((id: string, url: string) => {
-    if (playing === id) { stopAudio(); }
-    else { playAudio(id, url); }
-  }, [playing, stopAudio, playAudio]);
+    if (playing !== id) {
+      stopAudio();
+      playAudio(id, url);
+    } else if (paused) {
+      resumeAudio();
+    } else {
+      pauseAudio();
+    }
+  }, [playing, paused, stopAudio, playAudio, pauseAudio, resumeAudio]);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -348,9 +372,12 @@ export default function Library({
         <div className="card" style={{ marginTop: 12 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <span style={{ fontWeight: 500, fontSize: 13 }}>{nowPlaying.name}</span>
-            <span className="muted" style={{ fontFamily: "monospace", fontSize: 12 }}>
-              {formatTime(currentTime)} / {formatTime(duration || 0)}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="muted" style={{ fontFamily: "monospace", fontSize: 12 }}>
+                {formatTime(currentTime)} / {formatTime(duration || 0)}
+              </span>
+              <button className="icon-btn ghost" onClick={stopAudio} title="Close" style={{ fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
+            </div>
           </div>
           <div
             className="pb-track"
@@ -364,9 +391,17 @@ export default function Library({
           >
             <div className="pb-fill" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
           </div>
+          {nowPlaying.notes && nowPlaying.notes.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <PianoRoll notes={nowPlaying.notes} playheadTime={currentTime} bpm={120} />
+            </div>
+          )}
+          {nowPlaying.url && <Spectrogram url={nowPlaying.url} />}
           <Visualizer audioRef={audioRef} />
           <div className="toolbar" style={{ justifyContent: "center" }}>
-            <button className="icon-btn ghost danger" onClick={stopAudio}>■ Stop</button>
+            <button className="icon-btn" onClick={() => paused ? resumeAudio() : pauseAudio()}>
+              {paused ? "▶" : "⏸"}
+            </button>
           </div>
         </div>
       )}
@@ -386,7 +421,7 @@ export default function Library({
                   <div className="track-meta">{f.size ? formatSize(f.size) : ""}</div>
                   <div className="track-actions">
                     <button className="icon-btn" onClick={() => togglePlay(f.id, f.url)}>
-                      {playing === f.id ? "⏸" : "▶"}
+                      {playing === f.id && !paused ? "⏸" : "▶"}
                     </button>
                     <button className="icon-btn ghost danger" onClick={() => onDelete(f.id, f.name)} disabled={busy}>
                       ✕
