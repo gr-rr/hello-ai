@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { AUTH_CALLBACK_URL } from "@/lib/site";
 import { useAuth } from "./AuthProvider";
 
 export default function Auth() {
@@ -63,10 +64,7 @@ export default function Auth() {
             const { error } = await supabase!.auth.signInWithOAuth({
               provider: "google",
               options: {
-                redirectTo:
-                  typeof window !== "undefined"
-                    ? `${window.location.origin}/auth/callback`
-                    : undefined,
+                redirectTo: AUTH_CALLBACK_URL,
               },
             });
             if (error) setError(error.message);
