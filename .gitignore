@@ -33,3 +33,6 @@ test-results/
 ../hello-ai-worktrees/
 .mock-deploy/
 design/mockups/workbench-functional.html
+
+.credentials
+.infra-guide.md
