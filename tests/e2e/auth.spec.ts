@@ -1,5 +1,27 @@
 import { test, expect, type Page } from "@playwright/test";
+<<<<<<< HEAD
 import { mockSession } from "@/tests/fixtures/mockSession";
+=======
+import { mockSession } from "../fixtures/mockSession";
+
+const REF = "cijhpddqvvzyzfzmkdnn";
+
+async function seedSession(page: Page) {
+  await page.addInitScript(
+    ({ ref, session }) => {
+      try {
+        window.localStorage.setItem(
+          `sb-${ref}-auth-token`,
+          JSON.stringify(session),
+        );
+      } catch {
+        /* ignore */
+      }
+    },
+    { ref: REF, session: mockSession },
+  );
+}
+>>>>>>> origin/feat/c-contract-e2e
 
 async function openHome(page: Page) {
   await page.goto("/");
@@ -13,6 +35,7 @@ test.describe("P2: sign-in flow reaches Studio", () => {
   test("a signed-in (mocked) session renders Studio and the Transcribe tab", async ({
     page,
   }) => {
+<<<<<<< HEAD
     await page.addInitScript((session) => {
       try {
         const projectRef = "cijhpddqvvzyzfzmkdnn";
@@ -43,11 +66,22 @@ test.describe("P2: sign-in flow reaches Studio", () => {
 
     await expect(stepper).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: /Transcribe/ })).toBeVisible();
+=======
+    await seedSession(page);
+    await openHome(page);
+
+    const stepper = page.locator(".stepper");
+    await expect(stepper).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: /Transcribe/ }),
+    ).toBeVisible();
+>>>>>>> origin/feat/c-contract-e2e
   });
 
   test("studio stepper navigates between Library and Transcribe tabs", async ({
     page,
   }) => {
+<<<<<<< HEAD
     await page.addInitScript((session) => {
       try {
         window.localStorage.setItem(
@@ -59,6 +93,9 @@ test.describe("P2: sign-in flow reaches Studio", () => {
       }
     }, mockSession);
 
+=======
+    await seedSession(page);
+>>>>>>> origin/feat/c-contract-e2e
     await openHome(page);
 
     const stepper = page.locator(".stepper");
