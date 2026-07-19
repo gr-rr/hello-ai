@@ -67,11 +67,7 @@ def _backend_has(path: str, method: str) -> bool:
 def test_proxied_route_exists_in_backend(path):
     # Determine the HTTP method the frontend uses for this path.
     method = "POST"  # all music/* and train/compare/generate are POST
-    if (
-        path.startswith("/models")
-        or path.startswith("/jobs")
-        or path.startswith("/health")
-    ):
+    if path.startswith("/models") or path.startswith("/jobs") or path.startswith("/health"):
         method = "GET"
     if path.startswith("/music/library/"):
         method = "DELETE"
