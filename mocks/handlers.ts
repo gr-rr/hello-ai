@@ -1,11 +1,6 @@
 import { http, HttpResponse, delay } from "msw";
 import { sampleWavBase64, sampleWavOutputBase64 } from "@/tests/fixtures/sample-wav";
-
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-function pitchToName(p: number): string {
-  return NOTE_NAMES[((p % 12) + 12) % 12] + (Math.floor(p / 12) - 1);
-}
+import { pitchToName } from "@/lib/notes";
 
 // C major scale notes: C4(60), D4(62), E4(64), F4(65), G4(67), A4(69), B4(71), C5(72)
 const SCALE = [60, 62, 64, 65, 67, 69, 71, 72];

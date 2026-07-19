@@ -2,20 +2,9 @@
 
 import { useRef } from "react";
 import type { TranscribeResult } from "@/lib/music";
+import { pitchToName } from "@/lib/notes";
 
 type Note = TranscribeResult["notes"][number];
-
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-function pitchToName(p: number): string {
-  return `${NOTE_NAMES[((p % 12) + 12) % 12]}${Math.floor(p / 12) - 1}`;
-}
-
-function pitchColor(p: number): string {
-  const hues = [0, 30, 60, 85, 140, 180, 210, 250, 290, 320, 345, 15];
-  const idx = ((p % 12) + 12) % 12;
-  return `hsl(${hues[idx]}, 65%, 50%)`;
-}
 
 const PPQ = 16;
 
@@ -115,7 +104,6 @@ export default function PianoRoll({
                   const dur = n.end - n.start;
                   const w = Math.max((dur / 60) * bpm * PPQ, 5);
                   const active = playheadTime >= n.start && playheadTime <= n.end;
-                  const color = pitchColor(n.pitch);
                   return (
                     <rect
                       key={ni}
@@ -124,11 +112,11 @@ export default function PianoRoll({
                       width={w}
                       height={14}
                       rx={4}
-                      fill={color}
+                      fill="var(--accent)"
                       opacity={active ? 0.95 : 0.25 + (n.velocity / 127) * 0.45}
                       style={
                         active
-                          ? { filter: `drop-shadow(0 0 5px ${color})` }
+                          ? { filter: "drop-shadow(0 0 5px var(--accent))" }
                           : undefined
                       }
                     >

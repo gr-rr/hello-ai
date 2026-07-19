@@ -2,6 +2,7 @@
 
 import type { TranscribeResult } from "@/lib/music";
 import { computeNoteStats } from "@/lib/analyze";
+import { FLAT_NOTE_NAMES, SHARP_NOTE_NAMES } from "@/lib/notes";
 
 type Props = {
   analysis: TranscribeResult["analysis"] | null | undefined;
@@ -10,14 +11,10 @@ type Props = {
   numNotes: number;
 };
 
-const SHARP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const NOTE_NAMES = SHARP;
-
 function tonicToIndex(tonic: string): number {
-  const s = SHARP.indexOf(tonic);
+  const s = SHARP_NOTE_NAMES.indexOf(tonic as (typeof SHARP_NOTE_NAMES)[number]);
   if (s !== -1) return s;
-  const FLAT = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-  return FLAT.indexOf(tonic);
+  return FLAT_NOTE_NAMES.indexOf(tonic as (typeof FLAT_NOTE_NAMES)[number]);
 }
 
 function getDiatonicChords(tonic: string, mode: string) {
@@ -30,7 +27,7 @@ function getDiatonicChords(tonic: string, mode: string) {
     : ["minor", "dim", "major", "minor", "minor", "major", "major"];
   return degrees.map((d, i) => {
     const idx = (rootIdx + d) % 12;
-    const root = SHARP[idx];
+    const root = SHARP_NOTE_NAMES[idx];
     const q = qualities[i];
     const label = q === "major" ? root : `${root}${q === "dim" ? "dim" : "m"}`;
     return { label, q };
@@ -96,7 +93,7 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
         <div className="stat">
           <span className="s-label">Pitch range</span>
           <span className="s-value">
-            {NOTE_NAMES[noteStats.pitchRange.low % 12]}–{NOTE_NAMES[noteStats.pitchRange.high % 12]}
+            {SHARP_NOTE_NAMES[noteStats.pitchRange.low % 12]}–{SHARP_NOTE_NAMES[noteStats.pitchRange.high % 12]}
           </span>
           <span className="confidence-pct">{noteStats.pitchRange.span} semitones</span>
         </div>
