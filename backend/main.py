@@ -69,6 +69,23 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         ) from None
 
 
+def verify_token_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+):
+    """Like verify_token but allows anonymous access. Returns the user when a
+    valid bearer token is supplied, otherwise None. Used by read-only/public
+    endpoints (e.g. /music/analyze) so unauthenticated users can still use them."""
+    if not credentials:
+        return None
+    sb = _sb()
+    if not sb:
+        return None
+    try:
+        return sb.auth.get_user(credentials.credentials)
+    except Exception:
+        return None
+
+
 app = FastAPI(title="hello-ai backend", version="0.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -582,8 +599,10 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
-def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token)):
-    """Analyze audio file for key, tempo, time signature, and chords."""
+def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
+    """Analyze audio file for key, tempo, time signature, and chords.
+
+    Public for now: anonymous requests are allowed (auth is optional)."""
     if req.audio_base64:
         try:
             audio = base64.b64decode(req.audio_base64, validate=True)
