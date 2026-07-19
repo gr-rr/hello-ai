@@ -25,13 +25,23 @@ export default function Spectrogram({
 
     setLoadStatus("loading");
 
+    const styles = getComputedStyle(document.documentElement);
+    const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
+    const accentStrong = styles.getPropertyValue("--accent-strong").trim() || "#a855f7";
+    const withAlpha = (hex: string, alpha: number) => {
+      const m = /^#([0-9a-f]{6})$/i.exec(hex);
+      if (!m) return hex;
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+    };
+
     const spectrogramEl = specRef.current!;
     const ws = WaveSurfer.create({
       container: waveformRef.current,
       height: 60,
-      waveColor: "rgba(192,132,252,0.35)",
-      progressColor: "rgba(192,132,252,0.7)",
-      cursorColor: "var(--accent-strong)",
+      waveColor: withAlpha(accent, 0.35),
+      progressColor: withAlpha(accent, 0.7),
+      cursorColor: accentStrong,
       barWidth: 2,
       barGap: 1,
       barRadius: 2,

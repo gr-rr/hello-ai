@@ -6,6 +6,9 @@ type Props = {
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
 };
 
+type AudioGraph = { ctx: AudioContext; source: MediaElementAudioSourceNode };
+const graphCache = new WeakMap<HTMLAudioElement, AudioGraph>();
+
 export default function Visualizer({ audioRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<AudioContext | null>(null);
@@ -28,9 +31,17 @@ export default function Visualizer({ audioRef }: Props) {
         window.AudioContext ||
         (window as any).webkitAudioContext;
       if (!AudioCtx) return;
-      const ctx: AudioContext = new AudioCtx();
+      // createMediaElementSource throws if called twice for the same element,
+      // so reuse the AudioContext + source node once an element has been routed.
+      let graph = graphCache.get(audioEl);
+      if (!graph) {
+        const ctx: AudioContext = new AudioCtx();
+        const source = ctx.createMediaElementSource(audioEl);
+        graph = { ctx, source };
+        graphCache.set(audioEl, graph);
+      }
+      const { ctx, source } = graph;
       ctxRef.current = ctx;
-      const source = ctx.createMediaElementSource(audioEl);
       sourceRef.current = source;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
@@ -97,8 +108,9 @@ export default function Visualizer({ audioRef }: Props) {
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
+      // The AudioContext + source are cached and reused per element, so tear
+      // down only this effect's connections; don't close the shared context.
       sourceRef.current?.disconnect();
-      ctxRef.current?.close().catch(() => {});
     };
   }, [audioRef]);
 

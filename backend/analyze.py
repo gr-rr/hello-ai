@@ -281,9 +281,7 @@ def _midi_frames(midi_path: str) -> tuple[np.ndarray, list[tuple[float, np.ndarr
                 windows[wid] = np.zeros(12, dtype=np.float64)
             windows[wid][pclass] += dur
 
-    frames = [
-        (wid * 0.25, vec) for wid, vec in sorted(windows.items()) if vec.sum() > 0
-    ]
+    frames = [(wid * 0.25, vec) for wid, vec in sorted(windows.items()) if vec.sum() > 0]
     return pc_hist, frames
 
 

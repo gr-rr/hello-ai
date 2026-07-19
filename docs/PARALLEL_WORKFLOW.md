@@ -50,10 +50,18 @@ aoe serve                   # http dashboard, prints URL
 
 ## Merging
 
-When a branch is green, merge with the protection-lift helper (temporarily lifts `main` branch protection, merges, restores it):
+When a branch is green, merge it. Prefer GitHub auto-merge so it lands once
+required checks pass:
 
 ```
-scripts/auto_merge.sh <pr_number>
+gh pr merge <pr_number> --squash --auto
+```
+
+For an immediate merge as a repo admin (bypasses the wait, not branch
+protection rules):
+
+```
+gh pr merge <pr_number> --squash --admin
 ```
 
 ## Notes

@@ -81,6 +81,15 @@ late. MSW never starts in CI.
 `NEXT_PUBLIC_MOCK_ENABLED: "true"` to the Build step's `env:`. Documented here for
 a maintainer with workflow scope.
 
+### P1-1b · CI ruff version drift — `ci.yml` `Run: pip install ruff` vs `backend/requirements.txt`
+CI runs `pip install ruff` (unpinned → latest, e.g. 0.15.22) while the repo pins
+`ruff==0.5.7`. Newer ruff reformats `backend/analyze.py`, so `ruff format --check`
+fails the `lint` job on every PR through no fault of the PR.
+**Partly resolved:** `analyze.py` reformatted to output both 0.5.7 and 0.15.x
+agree on, so the gate is green now. **Still recommended (needs `workflow` scope):**
+pin CI to `pip install ruff==0.5.7` to match `requirements.txt`/pre-commit and
+prevent future drift.
+
 ### P1-2 · `backend/main.py` is a 648-line God file
 Auth, Supabase glue, job orchestration, and every route live together. The other
 backend modules are cleanly separated — `main.py` should follow.
@@ -141,16 +150,20 @@ Three jobs each run `npm ci` + `npm run build`; pip/Playwright browsers uncached
 `abcjs` dep + its CSS import in `app/layout.tsx` are now orphaned but **kept** —
 the sheet-music feature is clearly planned; flagged for a maintainer decision.
 
-### P2-2 · Hardcoded colors — `components/PianoRoll.tsx`
+### P2-2 · Hardcoded colors — `components/PianoRoll.tsx`, `components/Spectrogram.tsx`
 `NOTE_COLORS` literal hex map violates the "no hardcoded colors" rule.
-**Fix (this PR):** drive note fills from a CSS variable.
+**Fix (#51):** PianoRoll note fills driven from `var(--accent)`.
+**Follow-up (DONE):** `Spectrogram.tsx` shipped with `rgba(192,132,252,…)` literals
+(= `--accent`) for canvas colors; now resolved from the `--accent`/`--accent-strong`
+CSS variables at runtime. (`Visualizer.tsx` canvas still uses literal hex/hsl for
+its scope — larger canvas-theming change, tracked separately.)
 
-### P2-3 · Dependency nits — `package.json`
+### P2-3 · Dependency nits — `package.json` — DONE
 - standalone `playwright` is redundant with `@playwright/test`.
 - `eslint-config-next@^16` on a Next 15 app (major skew).
 - `lint --max-warnings 200` makes the gate almost meaningless.
-**Follow-up:** drop standalone `playwright`; align `eslint-config-next@^15`;
-ratchet `--max-warnings` down.
+**Resolved:** dropped standalone `playwright`; aligned `eslint-config-next@^15`;
+ratcheted `--max-warnings` to `0` (repo currently has zero warnings).
 
 ### P2-4 · Repo hygiene
 - Two agent SOTs: root `AGENTS.md` vs `docs/AGENTS.md` (docs is canonical).
@@ -162,20 +175,26 @@ ratchet `--max-warnings` down.
 - Unreferenced `scripts/ux-audit.mjs`, `scripts/check-warning.mjs`.
 - `scripts/auto_merge.sh` tears down branch protection to merge — use
   `gh pr merge --admin` instead.
-**Follow-up:** consolidate docs to one agents doc; standardise on the pre-commit
-framework; delete unused scripts.
+**Partly resolved:** deleted unused `ux-audit.mjs`, `check-warning.mjs`,
+`install-hooks.sh`, `auto_merge.sh`; `docs/PARALLEL_WORKFLOW.md` now points to
+`gh pr merge`; fixed `docs/TOOLING.md` stale `next.config.ts` → `.mjs`. Root
+`AGENTS.md` (OpenCode project instructions) intentionally kept — it points to the
+canonical `docs/AGENTS.md`, not a duplicate. `LOCAL_DEV.md` (npm) and
+`DEVELOPMENT.md` (Docker) kept — different audiences.
 
 ### P2-5 · Gitleaks gaps — `.gitleaks.toml`
 Allowlisting test files + `package-lock.json` and narrowing `generic-api-key` to
 `sk-*` disables default detection for AWS/GCP/Slack keys.
 **Follow-up:** rely on `useDefault = true`; drop the broad allowlist.
 
-### P2-6 · Web-Audio / effect leaks (frontend)
-- `components/Score.tsx` (being deleted) rebuilt the synth on every change with no
+### P2-6 · Web-Audio / effect leaks (frontend) — DONE (Visualizer)
+- `components/Score.tsx` (deleted in #51) rebuilt the synth on every change with no
   cleanup.
 - `components/Visualizer.tsx` — `createMediaElementSource` can only run once per
   element; the source binding is fragile if the element is replaced.
-**Follow-up:** guard `createMediaElementSource`; stabilise effect deps.
+**Resolved:** `Visualizer` now caches the `AudioContext` + source node per element
+(`WeakMap`) so re-runs reuse the routed graph instead of throwing; cleanup no
+longer closes the shared context.
 
 ---
 
