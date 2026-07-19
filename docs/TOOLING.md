@@ -2,7 +2,7 @@
 
 | Tool | What it does | Config |
 |------|-------------|--------|
-| **Next.js** | React framework (SSR, RSC, route handlers) | `next.config.ts`, `tsconfig.json` |
+| **Next.js** | React framework (SSR, RSC, route handlers) | `next.config.mjs`, `tsconfig.json` |
 | **TypeScript** | Type checking | `tsconfig.json` |
 | **Playwright** | E2E + visual regression tests | `playwright.config.ts` |
 | **Argos** | Visual diff (screenshots vs baseline) | `.github/workflows/argos.yml` |
