@@ -49,7 +49,7 @@ test.describe("P4: library list", () => {
     await page.goto("/?tab=library");
     await page.locator(".drop-zone").first().waitFor({ timeout: 15_000 });
 
-    await expect(page.getByText("my recording.wav")).toBeVisible({
+    await expect(page.getByText("my recording.wav").first()).toBeVisible({
       timeout: 15_000,
     });
 

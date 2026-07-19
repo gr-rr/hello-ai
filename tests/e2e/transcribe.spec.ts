@@ -58,7 +58,7 @@ test.describe("P3: transcribe an uploaded audio file", () => {
       timeout: 20_000,
     });
 
-    const notes = page.getByTestId("piano-roll").locator(".piano-note");
+    const notes = page.getByTestId("piano-roll").locator("rect");
     expect(await notes.count()).toBeGreaterThan(0);
 
     await expect(page.locator("audio[controls]")).toBeVisible();

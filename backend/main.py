@@ -635,3 +635,14 @@ def delete_library_file(path: str, request: Request, auth=Depends(verify_token))
     key = path.replace("library/", "", 1)
     sb.storage.from_("library").remove([key])
     return {"status": "deleted"}
+
+
+@app.delete("/music/library/transcription/{record_id:path}")
+@limiter.limit("30/minute")
+def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
+    """Delete a saved transcription from the `transcriptions` bucket."""
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    sb.storage.from_("transcriptions").remove([record_id])
+    return {"status": "deleted"}
