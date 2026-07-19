@@ -131,6 +131,7 @@ export default function Studio({
               onTranscribed={onTranscribed}
               onGoToAnalyze={() => goToStep("analyze")}
               onAnalyze={handleAnalyze}
+              onSignIn={signIn}
             />
           </div>
         </div>
