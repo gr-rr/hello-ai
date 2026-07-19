@@ -9,8 +9,10 @@ default_tool = "opencode"
 enabled = true
 
 [hooks]
-on_create = ["npm ci", "cp -n ../../hello-ai/.env.local .env.local || true"]
-on_launch = ["npm ci"]
+on_create = [
+    "test -f ../../hello-ai/.env.local && cp ../../hello-ai/.env.local .env.local || true",
+    "npm install --no-audit --no-fund",
+]
 
 [updates]
 update_check_mode = "off"
