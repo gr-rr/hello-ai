@@ -81,7 +81,7 @@ export async function listLibrary(): Promise<LibFile[]> {
       .map(async (f: FileMeta) => {
         const path = `${prefix}/${f.name}`;
         const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
-        const notesPath = `${prefix}/${f.name}.json`;
+        const notesPath = `${uid}/${f.name}.json`;
         let notes;
         try {
           const raw = await downloadText(TRANSCRIPTIONS_BUCKET, notesPath);
@@ -107,7 +107,10 @@ export async function saveTranscription(
   notes: { pitch: number; start: number; end: number; velocity: number }[],
 ): Promise<void> {
   if (!supabase) return;
-  const path = `${id}.json`;
+  const uid = await userId();
+  if (!uid) return;
+  const baseName = id.split("/").pop() ?? id;
+  const path = `${uid}/${baseName}.json`;
   await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(notes), "application/json", true);
 }
 
@@ -115,9 +118,13 @@ export async function deleteFromLibrary(id: string): Promise<void> {
   if (!supabase) throw new Error("Supabase not configured");
   await deleteFile(LIBRARY_BUCKET, id);
   // also delete companion transcription file if present
-  try {
-    await deleteFile(TRANSCRIPTIONS_BUCKET, `${id}.json`);
-  } catch { /* ok if none */ }
+  const uid = await userId();
+  if (uid) {
+    const baseName = id.split("/").pop() ?? id;
+    try {
+      await deleteFile(TRANSCRIPTIONS_BUCKET, `${uid}/${baseName}.json`);
+    } catch { /* ok if none */ }
+  }
 }
 
 export async function listTranscriptions(): Promise<Transcription[]> {
