@@ -7,6 +7,7 @@ import {
   listLibrary,
   uploadToLibrary,
   saveTranscription,
+  blobToBase64,
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
@@ -59,7 +60,14 @@ export default function Transcribe({
   const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
-    listLibrary().then(setLibFiles).catch(() => {});
+    listLibrary()
+      .then(setLibFiles)
+      .catch((err) => {
+        setStatus(
+          "⚠️ Could not load your library: " +
+            (err instanceof Error ? err.message : "unknown error"),
+        );
+      });
   }, []);
 
   async function processBlob(blob: Blob, fmtOverride?: string) {
@@ -67,8 +75,7 @@ export default function Transcribe({
     setShowLibPicker(false);
     setPlayhead(0);
     try {
-      const buf = await blob.arrayBuffer();
-      const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+      const b64 = await blobToBase64(blob);
       const fmt = fmtOverride ?? audioFmtFromBlob(blob);
 
       setState("enhancing");
@@ -117,8 +124,10 @@ export default function Transcribe({
       rec.ondataavailable = (e) => chunksRef.current.push(e.data);
       rec.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        setAudioName(`recording-${Date.now()}.webm`);
+        const mimeType = rec.mimeType || "audio/webm";
+        const ext = mimeType.includes("ogg") ? "ogg" : "webm";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        setAudioName(`recording-${Date.now()}.${ext}`);
         await processBlob(blob);
       };
       rec.start();
@@ -243,9 +252,7 @@ export default function Transcribe({
       {showLibPicker && (
         <>
           <div className="section-label">Pick a saved track</div>
-          {libFiles
-            .filter((f) => true)
-            .map((f) => (
+          {libFiles.map((f) => (
               <div key={f.id} className="track" style={{ cursor: "pointer" }} onClick={() => onSelectLibraryFile(f)}>
                 <div className="track-head">
                   <div className="track-name">{f.name}</div>
@@ -321,7 +328,11 @@ export default function Transcribe({
           <div className="section-label">Piano roll</div>
           {result.notes.length > 0 && (
             <div className="card">
-              <PianoRoll notes={result.notes} playheadTime={playhead} bpm={120} />
+              <PianoRoll
+                notes={result.notes}
+                playheadTime={playhead}
+                bpm={result.analysis?.tempo.bpm ?? 120}
+              />
             </div>
           )}
 

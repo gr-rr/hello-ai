@@ -8,6 +8,16 @@ async function userId(): Promise<string | null> {
   return data.session?.user?.id ?? null;
 }
 
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 export type TranscribeResult = {
   notes: { pitch: number; start: number; end: number; velocity: number }[];
   num_notes: number;
@@ -127,12 +137,6 @@ export async function listTranscriptions(): Promise<Transcription[]> {
         created_at: f.created_at,
       } satisfies Transcription;
     });
-}
-
-export async function deleteTranscription(id: string): Promise<void> {
-  const uid = await userId();
-  if (!uid) throw new Error("Sign in to delete from library");
-  await apiFetch(`/api/music/transcriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 export async function transcribeAudio(
