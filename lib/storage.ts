@@ -49,6 +49,15 @@ export function getPublicUrl(bucket: string, path: string): string {
   return data.publicUrl;
 }
 
+export async function deleteFile(
+  bucket: string,
+  path: string,
+): Promise<void> {
+  if (!supabase) throw new Error("Supabase not configured");
+  const { error } = await supabase.storage.from(bucket).remove([path]);
+  if (error) throw error;
+}
+
 export async function downloadText(
   bucket: string,
   path: string,

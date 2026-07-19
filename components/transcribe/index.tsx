@@ -12,6 +12,7 @@ import {
 } from "@/lib/music";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
+import Spectrogram from "@/components/Spectrogram";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
@@ -160,6 +161,20 @@ export default function Transcribe({
 
   async function onSelectLibraryFile(file: LibFile) {
     setAudioName(file.name);
+    setShowLibPicker(false);
+
+    if (file.notes && file.notes.length > 0) {
+      setResult({
+        notes: file.notes,
+        num_notes: file.notes.length,
+        wav_url: file.url,
+      });
+      setState("populated");
+      setStatus(`${file.notes.length} notes loaded from library`);
+      setPlayhead(0);
+      return;
+    }
+
     setStatus("Downloading…");
     try {
       const res = await fetch(file.url);
@@ -293,6 +308,8 @@ export default function Transcribe({
               <PianoRoll notes={result.notes} playheadTime={playhead} bpm={120} />
             </div>
           )}
+
+          {result.wav_url && <Spectrogram url={result.wav_url} />}
 
           <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "6px 0 0" }}>
             basic-pitch · FluidSynth · abcjs · Supabase — prototype, flows simulated.

@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { uploadFile, getPublicUrl, listFiles, downloadText, type FileMeta } from "./storage";
+import { uploadFile, getPublicUrl, listFiles, downloadText, deleteFile, type FileMeta } from "./storage";
 import { apiFetch } from "./api";
 
 async function userId(): Promise<string | null> {
@@ -102,9 +102,12 @@ export async function saveTranscription(
 }
 
 export async function deleteFromLibrary(id: string): Promise<void> {
-  const uid = await userId();
-  if (!uid) throw new Error("Sign in to delete from library");
-  await apiFetch(`/api/music/library/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!supabase) throw new Error("Supabase not configured");
+  await deleteFile(LIBRARY_BUCKET, id);
+  // also delete companion transcription file if present
+  try {
+    await deleteFile(TRANSCRIPTIONS_BUCKET, `${id}.json`);
+  } catch { /* ok if none */ }
 }
 
 export async function listTranscriptions(): Promise<Transcription[]> {
