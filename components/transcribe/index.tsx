@@ -47,6 +47,8 @@ export default function Transcribe({
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
   const [showLibPicker, setShowLibPicker] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [playhead, setPlayhead] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -58,6 +60,7 @@ export default function Transcribe({
   async function processBlob(blob: Blob, fmtOverride?: string) {
     setResult(null);
     setShowLibPicker(false);
+    setPlayhead(0);
     try {
       const buf = await blob.arrayBuffer();
       const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
@@ -131,6 +134,7 @@ export default function Transcribe({
     setAudioName("");
     setStatus("");
     setShowLibPicker(false);
+    setPlayhead(0);
   }
 
   async function onSelectLibraryFile(file: LibFile) {
@@ -243,12 +247,21 @@ export default function Transcribe({
           </div>
 
           <div className="section-label">Playback</div>
-          {result.wav_url && <audio controls src={result.wav_url} style={{ width: "100%", marginBottom: 8 }} />}
+          {result.wav_url && (
+            <audio
+              ref={audioRef}
+              controls
+              src={result.wav_url}
+              style={{ width: "100%", marginBottom: 8 }}
+              onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
+              onPlay={() => setPlayhead(audioRef.current?.currentTime ?? 0)}
+            />
+          )}
 
           <div className="section-label">Piano roll</div>
           {result.notes.length > 0 && (
             <div className="card">
-              <PianoRoll notes={result.notes} />
+              <PianoRoll notes={result.notes} playheadTime={playhead} bpm={120} />
             </div>
           )}
 
