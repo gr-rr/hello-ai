@@ -30,6 +30,7 @@ export default function Score({
 
   useEffect(() => {
     if (!hasAnalysis || !containerRef.current) return;
+    let cancelled = false;
     const generated = midiNotesToAbc(notes, {
       bpm: analysis!.tempo.bpm,
       key: { tonic: analysis!.key.tonic, mode: analysis!.key.mode },
@@ -99,12 +100,25 @@ export default function Score({
         await synth.setTune(visualObj, false, {
           soundFontUrl: SOUNDFONT_URL,
         });
-        setReady(true);
+        if (!cancelled) setReady(true);
       } catch {
-        setReady(false);
+        if (!cancelled) setReady(false);
       }
     };
     setup();
+
+    return () => {
+      cancelled = true;
+      const synth = synthControlRef.current as
+        | (abcjs.SynthObjectController & { destroy?: () => void })
+        | null;
+      try {
+        synth?.destroy?.();
+      } catch {
+        /* already torn down */
+      }
+      synthControlRef.current = null;
+    };
   }, [notes, hasAnalysis, analysis]);
 
   const downloadAbc = () => {
