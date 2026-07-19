@@ -28,15 +28,32 @@ export type MusopenApiWork = {
   }[];
 };
 
-const MUSOPEN_API = "https://api.musopen.org/v1/works";
+const MUSOPEN_API = process.env.NEXT_PUBLIC_MUSOPEN_API || "https://api.musopen.org/v1/works";
 
-export async function fetchWorks(limit = 30): Promise<MusopenWork[]> {
-  const res = await fetch(`${MUSOPEN_API}?limit=${limit}`);
-  if (!res.ok) throw new Error(`MusOpen API error: ${res.status}`);
-  const json = await res.json();
-  const data: MusopenApiWork[] = json?.data ?? json?.works ?? [];
-  if (!Array.isArray(data) || data.length === 0) return [];
-  return data.map(normalizeWork);
+export type FetchWorksResult = {
+  works: MusopenWork[];
+  error?: string;
+};
+
+export async function fetchWorks(limit = 30): Promise<FetchWorksResult> {
+  try {
+    const res = await fetch(`${MUSOPEN_API}?limit=${limit}`);
+    if (!res.ok) {
+      return {
+        works: [],
+        error: `MusOpen API unavailable (${res.status}). Browse the catalog at https://musopen.org/music instead.`,
+      };
+    }
+    const json = await res.json();
+    const data: MusopenApiWork[] = json?.data ?? json?.works ?? [];
+    if (!Array.isArray(data) || data.length === 0) return { works: [] };
+    return { works: data.map(normalizeWork) };
+  } catch (err) {
+    return {
+      works: [],
+      error: `MusOpen API unreachable. ${err instanceof Error ? err.message : ""}`.trim(),
+    };
+  }
 }
 
 function normalizeWork(raw: MusopenApiWork): MusopenWork {

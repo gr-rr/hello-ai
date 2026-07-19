@@ -7,6 +7,7 @@ import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import { analyzeAudio, type TranscribeResult } from "@/lib/music";
+import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const STEPS = [
   { id: "library", label: "Library", num: 1 },
@@ -63,12 +64,7 @@ export default function Studio({
     if (!supabase) return;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/auth/callback`
-            : undefined,
-      },
+      options: { redirectTo: AUTH_CALLBACK_URL },
     });
   }
 

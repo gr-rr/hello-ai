@@ -267,10 +267,14 @@ export default function Library({
     setMusopenWorks([]);
     setStatus("Loading MusOpen…");
     try {
-      const works = await fetchWorks();
+      const { works, error } = await fetchWorks();
       setMusopenWorks(works);
       setMusopenOpen(true);
-      setStatus(`${works.length} works loaded from MusOpen`);
+      if (error) {
+        setStatus("⚠️ " + error);
+      } else {
+        setStatus(`${works.length} works loaded from MusOpen`);
+      }
     } catch (err) {
       setStatus("⚠️ " + (err instanceof Error ? err.message : "MusOpen failed"));
     } finally {
