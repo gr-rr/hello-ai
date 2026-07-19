@@ -591,28 +591,53 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 
 
 class AnalyzeRequest(BaseModel):
-    midi_base64: str
+    audio_base64: str | None = None
+    midi_base64: str | None = None
+    fmt: str = "wav"
 
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
 def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Analyze a MIDI file for key, tempo, time signature, and chords.
+    """Analyze audio (or MIDI) for key, tempo, time signature, and chords.
 
-    Requires midi_base64 from a prior transcription.
-    Public for now: anonymous requests are allowed (auth is optional)."""
-    try:
-        midi_bytes = base64.b64decode(req.midi_base64, validate=True)
-    except Exception:
-        raise HTTPException(status_code=400, detail="invalid base64") from None
+    Prefers raw audio (audio_base64) because that yields reliable tempo and
+    time-signature detection; when MIDI is also supplied its note events refine
+    the key and chord estimates. Falls back to MIDI-only when no audio is given.
+    Public: anonymous requests are allowed (auth is optional)."""
+    has_audio = bool(req.audio_base64)
+    has_midi = bool(req.midi_base64)
+    if not has_audio and not has_midi:
+        raise HTTPException(status_code=400, detail="audio_base64 or midi_base64 required")
 
     with tempfile.TemporaryDirectory() as td:
-        midi_path = os.path.join(td, "input.mid")
-        with open(midi_path, "wb") as f:
-            f.write(midi_bytes)
+        audio_path = None
+        midi_path = None
+
+        if has_audio:
+            try:
+                audio_bytes = base64.b64decode(req.audio_base64, validate=True)
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid audio base64") from None
+            ext = "wav" if req.fmt.lower() in ("wav", "wave") else req.fmt.lower()
+            audio_path = os.path.join(td, f"input.{ext}")
+            with open(audio_path, "wb") as f:
+                f.write(audio_bytes)
+
+        if has_midi:
+            try:
+                midi_bytes = base64.b64decode(req.midi_base64, validate=True)
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid midi base64") from None
+            midi_path = os.path.join(td, "input.mid")
+            with open(midi_path, "wb") as f:
+                f.write(midi_bytes)
 
         try:
-            result = analyze_from_midi(midi_path)
+            if audio_path:
+                result = analyze_audio(audio_path, midi_path)
+            else:
+                result = analyze_from_midi(midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None

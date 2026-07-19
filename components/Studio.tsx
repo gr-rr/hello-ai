@@ -48,12 +48,12 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(midiBase64: string, name: string) {
-    setAudioName(name);
+  async function handleAnalyze(audioBase64?: string, midiBase64?: string, name?: string) {
+    if (name) setAudioName(name);
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(midiBase64);
+      const result = await analyzeAudio(audioBase64, midiBase64);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -78,7 +78,7 @@ export default function Studio({
       const blob = await res.blob();
       const buf = await blob.arrayBuffer();
       const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-      await handleAnalyze(b64, item.name);
+      await handleAnalyze(undefined, b64, item.name);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "download failed");
       setAnalyzeStatus("");

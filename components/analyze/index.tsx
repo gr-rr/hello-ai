@@ -53,8 +53,16 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
       : `This piece is in ${analysis.key.tonic} minor. Common chords: ${chordLabels}.`;
 
   const cKey = Math.round(analysis.key.confidence * 100);
-  const cTempo = Math.round(analysis.tempo.confidence * 100);
-  const cSig = Math.round(analysis.time_signature.confidence * 100);
+  const cTempo = analysis.tempo ? Math.round(analysis.tempo.confidence * 100) : null;
+  const cSig = analysis.time_signature ? Math.round(analysis.time_signature.confidence * 100) : null;
+
+  const progression = (analysis.chords ?? [])
+    .filter((c) => c.quality)
+    .map((c) => {
+      const q = c.quality;
+      const label = q === "M" ? c.root : q === "m" ? `${c.root}m` : `${c.root}${q}`;
+      return { label, start: c.start, end: c.end };
+    });
 
   return (
     <div>
@@ -69,15 +77,23 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
         </div>
         <div className="stat fade-in" style={{ animationDelay: ".05s" }}>
           <span className="s-label">Tempo</span>
-          <span className="s-value">{analysis.tempo.bpm} BPM</span>
-          <div className="confidence-track"><div className="confidence-fill" style={{ width: `${cTempo}%` }} /></div>
-          <span className="confidence-pct">{cTempo}%</span>
+          <span className="s-value">{analysis.tempo ? `${analysis.tempo.bpm} BPM` : "—"}</span>
+          {cTempo !== null && (
+            <>
+              <div className="confidence-track"><div className="confidence-fill" style={{ width: `${cTempo}%` }} /></div>
+              <span className="confidence-pct">{cTempo}%</span>
+            </>
+          )}
         </div>
         <div className="stat fade-in" style={{ animationDelay: ".1s" }}>
           <span className="s-label">Time signature</span>
-          <span className="s-value">{analysis.time_signature.numerator}/{analysis.time_signature.denominator}</span>
-          <div className="confidence-track"><div className="confidence-fill" style={{ width: `${cSig}%` }} /></div>
-          <span className="confidence-pct">{cSig}%</span>
+          <span className="s-value">{analysis.time_signature ? `${analysis.time_signature.numerator}/${analysis.time_signature.denominator}` : "—"}</span>
+          {cSig !== null && (
+            <>
+              <div className="confidence-track"><div className="confidence-fill" style={{ width: `${cSig}%` }} /></div>
+              <span className="confidence-pct">{cSig}%</span>
+            </>
+          )}
         </div>
       </div>
 
@@ -87,6 +103,20 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
           <span key={i} className={`chip-q ${c.q}`}>{c.label}</span>
         ))}
       </div>
+
+      {progression.length > 0 && (
+        <>
+          <div className="section-label">Chord progression</div>
+          <div className="chips">
+            {progression.map((c, i) => (
+              <span key={i} className="chip">{c.label}</span>
+            ))}
+          </div>
+          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "4px 0 0" }}>
+            {progression.length} segments · {progression[0].start.toFixed(1)}s–{progression[progression.length - 1].end.toFixed(1)}s
+          </p>
+        </>
+      )}
 
       <div className="section-label">Note statistics</div>
       <div className="stat-grid">
