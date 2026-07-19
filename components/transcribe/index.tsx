@@ -41,14 +41,13 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (midiBase64: string, name: string) => void;
+  onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string) => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
   const [analyzeBase64, setAnalyzeBase64] = useState("");
-  const [analyzeFmt, setAnalyzeFmt] = useState("wav");
   const [status, setStatus] = useState("");
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
   const [showLibPicker, setShowLibPicker] = useState(false);
@@ -93,7 +92,6 @@ export default function Transcribe({
       const res = await transcribeAudio(transcribeBase64, fmt);
       setResult(res);
       setAnalyzeBase64(transcribeBase64);
-      setAnalyzeFmt(fmt);
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
       onTranscribed?.(res, audioName);
@@ -151,7 +149,6 @@ export default function Transcribe({
     setResult(null);
     setAudioName("");
     setAnalyzeBase64("");
-    setAnalyzeFmt("wav");
     setStatus("");
     setShowLibPicker(false);
     setPlayhead(0);
@@ -294,12 +291,12 @@ export default function Transcribe({
               {saved && (
                 <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
               )}
-              {onGoToAnalyze && onAnalyze && result?.midi_base64 && (
+              {onGoToAnalyze && onAnalyze && (result?.wav_base64 || result?.midi_base64) && (
                 <button
                   className="btn btn-primary"
                   onClick={async () => {
                     try {
-                      await onAnalyze(result.midi_base64!, audioName);
+                      await onAnalyze(result.wav_base64, result.midi_base64, audioName);
                     } catch {
                       /* analysisError surfaces on the Analyze tab */
                     }
@@ -331,7 +328,7 @@ export default function Transcribe({
               <PianoRoll
                 notes={result.notes}
                 playheadTime={playhead}
-                bpm={result.analysis?.tempo.bpm ?? 120}
+                bpm={result.analysis?.tempo?.bpm ?? 120}
               />
             </div>
           )}

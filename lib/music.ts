@@ -27,8 +27,9 @@ export type TranscribeResult = {
   wav_url?: string;
   analysis?: {
     key: { tonic: string; mode: string; confidence: number };
-    tempo: { bpm: number; confidence: number };
-    time_signature: { numerator: number; denominator: number; confidence: number };
+    tempo?: { bpm: number; confidence: number };
+    time_signature?: { numerator: number; denominator: number; confidence: number };
+    chords?: { root: string; quality: string; start: number; end: number }[];
   };
 };
 
@@ -167,11 +168,13 @@ export async function enhanceAudio(
 }
 
 export async function analyzeAudio(
-  midiBase64: string,
+  audioBase64?: string,
+  midiBase64?: string,
+  fmt = "wav",
 ): Promise<TranscribeResult["analysis"]> {
   return apiFetch("/api/music/analyze", {
     method: "POST",
-    body: JSON.stringify({ midi_base64: midiBase64 }),
+    body: JSON.stringify({ audio_base64: audioBase64, midi_base64: midiBase64, fmt }),
   }) as Promise<TranscribeResult["analysis"]>;
 }
 

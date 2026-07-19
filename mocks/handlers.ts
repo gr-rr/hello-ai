@@ -43,6 +43,22 @@ export const handlers = [
     });
   }),
 
+  http.post("/api/music/analyze", async () => {
+    await delay(1200);
+    return HttpResponse.json({
+      key: { tonic: "A", mode: "minor", confidence: 0.82 },
+      tempo: { bpm: 112, confidence: 0.88 },
+      time_signature: { numerator: 4, denominator: 4, confidence: 0.9 },
+      chords: [
+        { root: "A", quality: "m", start: 0.0, end: 2.0 },
+        { root: "F", quality: "M", start: 2.0, end: 4.0 },
+        { root: "C", quality: "M", start: 4.0, end: 6.0 },
+        { root: "G", quality: "M", start: 6.0, end: 8.0 },
+        { root: "A", quality: "m", start: 8.0, end: 10.0 },
+      ],
+    });
+  }),
+
   http.post("/api/music/library", async ({ request }) => {
     await delay(200);
     const body = (await request.json()) as {
