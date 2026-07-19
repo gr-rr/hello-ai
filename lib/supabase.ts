@@ -12,11 +12,15 @@ export const supabase: SupabaseClient<Database> | null =
     ? createClient<Database>(url, anonKey, {
         auth: {
           // PKCE flow (default). Google redirects with ?code= to /auth/callback,
-          // which calls exchangeCodeForSession. detectSessionInUrl handles the
-          // hash on the callback route. Must NOT use implicit flow — it breaks
+          // which the server redirects to the client /auth/confirm page that
+          // calls exchangeCodeForSession. Must NOT use implicit flow — it breaks
           // the PKCE code_verifier and yields "bad_oauth_state".
+          // detectSessionInUrl is false so the client does NOT auto-exchange the
+          // ?code= in the URL on init (which would consume it and make the
+          // explicit exchangeCodeForSession on /auth/confirm fail). The explicit
+          // call on /auth/confirm is the single source of truth.
           flowType: "pkce",
-          detectSessionInUrl: true,
+          detectSessionInUrl: false,
           persistSession: true,
           autoRefreshToken: true,
         },
