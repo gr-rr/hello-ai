@@ -4,17 +4,11 @@ import { useEffect, useState, useRef } from "react";
 import {
   transcribeAudio,
   enhanceAudio,
-  analyzeAudio,
-  wavToDataUrl,
-  midiToDataUrl,
   listLibrary,
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
 import { useAuth } from "@/components/AuthProvider";
-import { isSupabaseConfigured } from "@/lib/supabase";
-import { FEATURES } from "@/lib/features";
-import Score from "@/components/Score";
 import PianoRoll from "@/components/PianoRoll";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
@@ -35,19 +29,15 @@ function audioFmtFromName(name: string): string {
 }
 
 export default function Transcribe({
-  compact,
   signedIn,
   onTranscribed,
   onGoToAnalyze,
   onAnalyze,
-  onSignIn,
 }: {
-  compact?: boolean;
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
   onAnalyze?: (audioBase64: string, fmt: string, name: string) => void;
-  onSignIn?: () => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -55,27 +45,22 @@ export default function Transcribe({
   const [audioName, setAudioName] = useState("");
   const [status, setStatus] = useState("");
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
-  const [selectedId, setSelectedId] = useState("");
+  const [showLibPicker, setShowLibPicker] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [cleanAudio, setCleanAudio] = useState<{ b64: string; fmt: string } | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
-    listLibrary().then(setLibFiles).catch((err) => {
-      setStatus("\u26A0 " + (err instanceof Error ? err.message : "failed to load library"));
-    });
+    listLibrary().then(setLibFiles).catch(() => {});
   }, []);
 
   async function processBlob(blob: Blob, fmtOverride?: string) {
     setResult(null);
+    setShowLibPicker(false);
     try {
       const buf = await blob.arrayBuffer();
-      const b64 = btoa(
-        new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""),
-      );
+      const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
       const fmt = fmtOverride ?? audioFmtFromBlob(blob);
 
       setState("enhancing");
@@ -83,10 +68,7 @@ export default function Transcribe({
       let transcribeBase64 = b64;
       try {
         const clean = await enhanceAudio(b64, fmt);
-        if (clean.wav_base64) {
-          transcribeBase64 = clean.wav_base64;
-          setCleanAudio({ b64: clean.wav_base64, fmt: "wav" });
-        }
+        if (clean.wav_base64) transcribeBase64 = clean.wav_base64;
       } catch {
         setStatus("Cleaning skipped — transcribing raw audio…");
       }
@@ -100,7 +82,7 @@ export default function Transcribe({
       onTranscribed?.(res, audioName);
     } catch (err) {
       setState("error");
-      setStatus("\u26A0 " + (err instanceof Error ? err.message : "transcription failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "transcription failed"));
     }
   }
 
@@ -109,35 +91,11 @@ export default function Transcribe({
     await processBlob(file);
   }
 
-  async function onUploadNew(e: React.ChangeEvent<HTMLInputElement>) {
+  function onUploadNew(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    await handleFilePick(file);
-  }
-
-  async function onSelectLibrary(id: string) {
-    if (id === "__upload_new__") {
-      inputRef.current?.click();
-      return;
-    }
-    if (!id) return;
-    setSelectedId(id);
-    const file = libFiles.find((f) => f.id === id);
-    if (!file) return;
-    setAudioName(file.name);
-    setStatus("Downloading\u2026");
-    try {
-      const res = await fetch(file.url);
-      if (!res.ok) {
-        throw new Error(`download failed: ${res.status} ${res.statusText}`);
-      }
-      const blob = await res.blob();
-      await processBlob(blob, audioFmtFromName(file.name));
-    } catch (err) {
-      setState("error");
-      setStatus("\u26A0 " + (err instanceof Error ? err.message : "download failed"));
-    }
+    handleFilePick(file);
   }
 
   async function startRecording() {
@@ -155,10 +113,10 @@ export default function Transcribe({
       };
       rec.start();
       setRecording(true);
-      setStatus("Recording\u2026");
+      setStatus("Recording…");
     } catch (err) {
       setState("error");
-      setStatus("\u26A0 " + (err instanceof Error ? err.message : "recording failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "recording failed"));
     }
   }
 
@@ -172,55 +130,37 @@ export default function Transcribe({
     setResult(null);
     setAudioName("");
     setStatus("");
-    setSelectedId("");
-    setCleanAudio(null);
-    setAnalyzing(false);
+    setShowLibPicker(false);
   }
 
-  async function handleAnalyze() {
-    if (!cleanAudio) return;
-    if (onGoToAnalyze) {
-      onGoToAnalyze();
-      return;
+  async function onSelectLibraryFile(file: LibFile) {
+    setAudioName(file.name);
+    setStatus("Downloading…");
+    try {
+      const res = await fetch(file.url);
+      if (!res.ok) throw new Error(`download failed: ${res.status}`);
+      const blob = await res.blob();
+      await processBlob(blob, audioFmtFromName(file.name));
+    } catch (err) {
+      setState("error");
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "download failed"));
     }
-    if (onAnalyze) {
-      setAnalyzing(true);
-      try {
-        await onAnalyze(cleanAudio.b64, cleanAudio.fmt, audioName);
-      } finally {
-        setAnalyzing(false);
-      }
-      return;
-    }
-    setStatus("Analysis unavailable");
   }
+
+  const canUseLibrary = signedIn && libFiles.length > 0;
 
   return (
-    <>
-      {state === "idle" && (
-        <div>
-          <h3 className="stage-h3">🎼 Transcribe</h3>
+    <div className="card">
+      <h3 className="card-title"><span className="glyph">🎼</span> Transcribe</h3>
 
-          {user ? (
-            <>
-              <div className="panel" style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 13, fontWeight: 500, display: "block", marginBottom: 6, color: "var(--muted)" }}>
-                  Select from library
-                </label>
-                <select
-                  className="sel"
-                  value={selectedId}
-                  onChange={(e) => onSelectLibrary(e.target.value)}
-                  style={{ width: "100%", padding: "10px 12px", borderRadius: 8, background: "var(--panel-2)", color: "var(--fg)", border: "1px solid var(--border)", fontSize: 14 }}
-                >
-                  <option value="">— Choose a file —</option>
-                  {libFiles.map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
-                  <option value="__upload_new__">➕ Upload new…</option>
-                </select>
-              </div>
-
+      {state === "idle" && !showLibPicker && (
+        <>
+          <div className="section-label">Choose an audio source</div>
+          <div className="source-grid">
+            <div className="source-card" onClick={() => inputRef.current?.click()}>
+              <span className="sc-icon">⬆</span>
+              <span className="sc-label">Upload file</span>
+              <span className="sc-hint">WAV · MP3 · M4A</span>
               <input
                 ref={inputRef}
                 type="file"
@@ -228,142 +168,102 @@ export default function Transcribe({
                 onChange={onUploadNew}
                 style={{ display: "none" }}
               />
-
-              {libFiles.length === 0 && (
-                <p className="muted" style={{ fontSize: 13 }}>
-                  No files in your library yet. Upload audio in the Library tab or use Upload new above.
-                </p>
-              )}
-            </>
-          ) : signedIn ? (
-            <>
-              <div
-                className="drop-zone"
-                onClick={() => !recording && inputRef.current?.click()}
-                style={{ cursor: recording ? "default" : "pointer", marginBottom: 16 }}
-              >
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept="audio/*"
-                  onChange={onUploadNew}
-                  style={{ display: "none" }}
-                />
-                <span style={{ fontSize: 16, fontWeight: 500 }}>⬆ Upload audio</span>
-                <span className="muted" style={{ fontSize: 13 }}>Click to browse files</span>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                {!recording ? (
-                  <button className="btn" onClick={startRecording} disabled={state !== "idle"} style={{ minWidth: 100 }}>
-                    <span style={{ color: "var(--danger)" }}>●</span> Record
-                  </button>
-                ) : (
-                  <button className="btn btn-primary" onClick={stopRecording}>
-                    ⏹ Stop Recording
-                  </button>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="panel" style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
-              <p className="muted" style={{ margin: 0 }}>
-                Sign in to transcribe audio into MIDI and sheet music.
-              </p>
-              {onSignIn && isSupabaseConfigured && (
-                <button className="btn btn-primary" onClick={onSignIn} style={{ minWidth: 160, justifyContent: "center" }}>
-                  Sign in
-                </button>
-              )}
             </div>
+            <div className="source-card" onClick={recording ? stopRecording : startRecording}>
+              <span className="sc-icon">{recording ? "■" : "●"}</span>
+              <span className="sc-label">{recording ? "Stop" : "Record"}</span>
+              <span className="sc-hint">Use your mic</span>
+            </div>
+            <div
+              className={`source-card${canUseLibrary ? "" : " disabled"}`}
+              onClick={() => canUseLibrary && setShowLibPicker(true)}
+            >
+              <span className="sc-icon">📁</span>
+              <span className="sc-label">From library</span>
+              <span className="sc-hint">
+                {!signedIn ? "Sign in" : libFiles.length === 0 ? "No saved tracks" : "Pick a track"}
+              </span>
+            </div>
+          </div>
+
+          {!signedIn && (
+            <p className="muted" style={{ fontSize: 13, textAlign: "center" }}>
+              Transcribe freely — sign in to save results to your library.
+            </p>
           )}
-        </div>
+        </>
+      )}
+
+      {showLibPicker && (
+        <>
+          <div className="section-label">Pick a saved track</div>
+          {libFiles
+            .filter((f) => true)
+            .map((f) => (
+              <div key={f.id} className="track" style={{ cursor: "pointer" }} onClick={() => onSelectLibraryFile(f)}>
+                <div className="track-head">
+                  <div className="track-name">{f.name}</div>
+                  <div className="track-actions">
+                    <span className="chip">Transcribe</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          <div className="toolbar">
+            <button className="btn btn-ghost" onClick={() => setShowLibPicker(false)}>Back</button>
+          </div>
+        </>
       )}
 
       {(state === "enhancing" || state === "transcribing") && (
-        <div>
-          <h3 className="stage-h3">🎼 Transcribe</h3>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-            <div className="chip" style={{ background: "var(--panel-3)", cursor: "default" }}>
-              {audioName || "audio"}
-            </div>
-            <span className="muted">{status}</span>
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
+            <span className="chip-q major" style={{ borderRadius: "var(--r-md)" }}>{audioName || "audio"}</span>
+            <span className="status" style={{ fontSize: 13 }}>{status}</span>
           </div>
-
-          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
-          <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20 }}>
-            <span style={{ fontSize: 13 }}>Processing audio…</span>
-          </div>
-
-          {FEATURES.sheetMusic && (
-            <>
-              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
-              <div className="drop-zone pulse" style={{ cursor: "default", borderStyle: "solid", padding: 20, marginTop: 8 }}>
-                <span style={{ fontSize: 13 }}>Processing audio…</span>
-              </div>
-            </>
-          )}
-        </div>
+          <div className="pulse" style={{ height: 8, width: "60%", background: "var(--panel-3)", borderRadius: "var(--r-full)", marginBottom: 16 }} />
+        </>
       )}
 
       {state === "populated" && result && (
-        <div>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
             <div>
-              <h3 className="stage-h3" style={{ margin: 0 }}>🎼 {audioName}</h3>
+              <h3 style={{ margin: 0, fontSize: "var(--fs-base)" }}>{audioName}</h3>
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               {onGoToAnalyze && (
-                <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing}>
-                  {analyzing ? "⏳ Analyzing…" : "📊 View Analysis"}
+                <button className="btn btn-primary" onClick={() => onGoToAnalyze()}>
+                  📊 Analyze
                 </button>
               )}
               <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
             </div>
           </div>
 
-          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Audio</h4>
-          {result.wav_url && <audio controls src={result.wav_url} style={{ width: "100%" }} />}
-          {result.wav_base64 && !result.wav_url && (
-            <audio controls src={wavToDataUrl(result.wav_base64)} style={{ width: "100%" }} />
-          )}
+          <div className="section-label">Playback</div>
+          {result.wav_url && <audio controls src={result.wav_url} style={{ width: "100%", marginBottom: 8 }} />}
 
+          <div className="section-label">Piano roll</div>
           {result.notes.length > 0 && (
-            <>
-              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Piano Roll</h4>
-              <div className="panel">
-                <PianoRoll notes={result.notes} />
-              </div>
-            </>
+            <div className="card">
+              <PianoRoll notes={result.notes} />
+            </div>
           )}
 
-          <div style={{ display: "flex", gap: 8, margin: "8px 0 12px" }}>
-            {result.midi_url ? (
-              <a className="chip ghost" href={result.midi_url} target="_blank" rel="noreferrer">⬇ Download MIDI</a>
-            ) : result.midi_base64 ? (
-              <a className="chip ghost" href={midiToDataUrl(result.midi_base64)} download="transcription.mid">⬇ Download MIDI</a>
-            ) : null}
-          </div>
-
-          {FEATURES.sheetMusic && (
-            <>
-              <h4 style={{ margin: "12px 0 6px", fontSize: 13, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Sheet Music</h4>
-              <Score notes={result.notes} analysis={result.analysis} />
-            </>
-          )}
-        </div>
+          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "6px 0 0" }}>
+            basic-pitch · FluidSynth · abcjs · Supabase — prototype, flows simulated.
+          </p>
+        </>
       )}
 
       {state === "error" && (
-        <div>
-          <h3 className="stage-h3">🎼 Transcribe</h3>
-          <div className="panel" style={{ borderColor: "rgba(239,68,68,0.3)" }}>
-            <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
-            <button className="btn" onClick={reset}>Try again</button>
-          </div>
+        <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginTop: 12 }}>
+          <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
+          <button className="btn" onClick={reset}>Try again</button>
         </div>
       )}
-    </>
+    </div>
   );
 }

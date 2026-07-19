@@ -2,20 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import { analyzeAudio, type TranscribeResult } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
-const STEPS = [
-  { id: "library", label: "Library", num: 1 },
-  { id: "transcribe", label: "Transcribe", num: 2 },
-  { id: "analyze", label: "Analyze", num: 3 },
+const TABS = [
+  { id: "library", label: "Library", icon: "📁" },
+  { id: "transcribe", label: "Transcribe", icon: "🎼" },
+  { id: "analyze", label: "Analyze", icon: "📊" },
 ] as const;
 
-type StepId = (typeof STEPS)[number]["id"];
+type TabId = (typeof TABS)[number]["id"];
 
 export default function Studio({
   initialTab = "transcribe",
@@ -25,8 +25,8 @@ export default function Studio({
   signedIn?: boolean;
 }) {
   const router = useRouter();
-  const safeStep = STEPS.some((s) => s.id === initialTab) ? initialTab : "transcribe";
-  const [step, setStep] = useState<StepId>(safeStep as StepId);
+  const safeTab = TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
+  const [tab, setTab] = useState<TabId>(safeTab as TabId);
   const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
   const [analysis, setAnalysis] = useState<TranscribeResult["analysis"] | null>(null);
@@ -51,12 +51,12 @@ export default function Studio({
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
     } finally {
       setAnalyzeStatus("");
-      goToStep("analyze");
+      goToTab("analyze");
     }
   }
 
-  function goToStep(id: StepId) {
-    setStep(id);
+  function goToTab(id: TabId) {
+    setTab(id);
     router.replace(`/?tab=${id}`, { scroll: false });
   }
 
@@ -68,82 +68,62 @@ export default function Studio({
     });
   }
 
+  function signOut() {
+    supabase?.auth.signOut();
+    window.location.reload();
+  }
+
   return (
     <div className="page">
-      <div className="topbar">
-        <div className="stepper">
-          {STEPS.map((s) => (
+      <header className="topbar" style={{ justifyContent: "space-between" }}>
+        <div className="brand">
+          <span className="brand-dot" />
+          Music Studio
+        </div>
+        <nav className="nav">
+          {TABS.map((t) => (
             <button
-              key={s.id}
-              className={`stepper-step ${step === s.id ? "active" : ""}`}
-              onClick={() => goToStep(s.id)}
+              key={t.id}
+              className={`nav-item${tab === t.id ? " active" : ""}`}
+              onClick={() => goToTab(t.id)}
             >
-              <span className="stepper-num">{s.num}</span>
-              {s.label}
+              {t.icon} {t.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      {!signedIn && (
-        <div className="hero">
-          <span className="badge">AI music toolkit</span>
-          <h1 className="gradient-text">Music AI Studio</h1>
-          <p>
-            Transcribe audio into MIDI and sheet music, then analyze your sound —
-            all in one place. Sign in to save files to your library.
-          </p>
-          <div className="hero-actions">
-            <button
-              className="btn btn-primary"
-              onClick={() => goToStep("transcribe")}
-              style={{ minWidth: 160, justifyContent: "center" }}
-            >
-              🎼 Open Studio
+        </nav>
+        <div className="account">
+          {signedIn ? (
+            <button className="btn btn-ghost" onClick={signOut}>
+              Sign out
             </button>
-            {isSupabaseConfigured && (
-              <button
-                className="btn"
-                onClick={signIn}
-                style={{ minWidth: 160, justifyContent: "center" }}
-              >
-                Sign in
-              </button>
-            )}
-          </div>
+          ) : (
+            <button className="btn btn-ghost" id="signInBtn" onClick={signIn}>
+              Sign in
+            </button>
+          )}
         </div>
-      )}
+      </header>
 
-      {step === "library" && (
-        <div className="app-grid">
-          <div className="stage">
-            <Library compact signedIn={signedIn} onSignIn={signIn} />
-          </div>
-        </div>
-      )}
+      <div className="workbench">
+        {tab === "library" && (
+          <Library signedIn={signedIn} onSignIn={signIn} />
+        )}
 
-      {step === "transcribe" && (
-        <div className="app-grid">
-          <div className="stage">
-            <Transcribe
-              compact
-              signedIn={signedIn}
-              onTranscribed={onTranscribed}
-              onGoToAnalyze={() => goToStep("analyze")}
-              onAnalyze={handleAnalyze}
-              onSignIn={signIn}
-            />
-          </div>
-        </div>
-      )}
+        {tab === "transcribe" && (
+          <Transcribe
+            signedIn={signedIn}
+            onTranscribed={onTranscribed}
+            onGoToAnalyze={() => goToTab("analyze")}
+            onAnalyze={handleAnalyze}
+          />
+        )}
 
-      {step === "analyze" && (
-        <div className="app-grid">
-          <div className="stage">
-            <h3 className="stage-h3">📊 Analysis</h3>
-            {analyzeStatus && <p className="muted" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
+        {tab === "analyze" && (
+          <div className="card">
+            <h3 className="card-title"><span className="glyph">📊</span> Analyze</h3>
+            {analyzeStatus && <p className="status" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
             {analysisError && (
-              <div className="panel" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
+              <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
                 <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
               </div>
             )}
@@ -154,10 +134,12 @@ export default function Studio({
               numNotes={lastResult?.num_notes ?? 0}
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="footer">basic-pitch · FluidSynth · abcjs</div>
+      <div className="footer">basic-pitch · FluidSynth · abcjs · Supabase</div>
+
+      <div className="toast" id="toast" />
     </div>
   );
 }
