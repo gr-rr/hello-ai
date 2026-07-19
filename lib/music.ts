@@ -156,18 +156,35 @@ export async function enhanceAudio(
 }
 
 export async function analyzeAudio(
-  dataBase64: string,
-  fmt = "wav",
-  midiBase64?: string,
+  midiBase64: string,
 ): Promise<TranscribeResult["analysis"]> {
   return apiFetch("/api/music/analyze", {
     method: "POST",
-    body: JSON.stringify(
-      midiBase64
-        ? { audio_base64: dataBase64, fmt, midi_base64: midiBase64 }
-        : { audio_base64: dataBase64, fmt },
-    ),
+    body: JSON.stringify({ midi_base64: midiBase64 }),
   }) as Promise<TranscribeResult["analysis"]>;
+}
+
+export async function listMidiFiles(): Promise<LibFile[]> {
+  const uid = await userId();
+  if (!uid) return [];
+  const prefix = `midi/${uid}`;
+  const files = await listFiles("midi", prefix);
+  return files
+    .filter((f) => !f.name.endsWith("/"))
+    .map((f: FileMeta) => {
+      const path = `${prefix}/${f.name}`;
+      const displayName = f.name
+        .replace(/^\d+-/, "")
+        .replace(/_/g, " ")
+        .replace(/\.mid$/i, "");
+      return {
+        name: displayName,
+        url: getPublicUrl("midi", path),
+        id: path,
+        size: f.metadata?.size,
+        created_at: f.created_at,
+      };
+    });
 }
 
 export function midiToDataUrl(base64: string): string {
