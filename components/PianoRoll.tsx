@@ -56,7 +56,7 @@ export default function PianoRoll({
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || typeof el.scrollTo !== "function") return;
     const viewLeft = el.scrollLeft;
     const viewRight = viewLeft + el.clientWidth;
     if (playheadX < viewLeft + 20 || playheadX > viewRight - 40) {
