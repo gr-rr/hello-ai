@@ -5,6 +5,8 @@ import {
   transcribeAudio,
   enhanceAudio,
   listLibrary,
+  uploadToLibrary,
+  saveTranscription,
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
@@ -128,6 +130,8 @@ export default function Transcribe({
     setRecording(false);
   }
 
+  const [saved, setSaved] = useState(false);
+
   function reset() {
     setState("idle");
     setResult(null);
@@ -135,6 +139,23 @@ export default function Transcribe({
     setStatus("");
     setShowLibPicker(false);
     setPlayhead(0);
+    setSaved(false);
+  }
+
+  async function saveToLibrary() {
+    if (!result || !result.wav_url) return;
+    try {
+      setStatus("Saving to library…");
+      const blob = await (await fetch(result.wav_url)).blob();
+      const { id } = await uploadToLibrary(audioName || "transcription.wav", blob);
+      if (result.notes.length) {
+        await saveTranscription(id, result.notes);
+      }
+      setSaved(true);
+      setStatus("✓ Saved to library");
+    } catch (err) {
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "save failed"));
+    }
   }
 
   async function onSelectLibraryFile(file: LibFile) {
@@ -237,6 +258,14 @@ export default function Transcribe({
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
+              {!saved && signedIn && (
+                <button className="btn" onClick={saveToLibrary}>
+                  💾 Save to library
+                </button>
+              )}
+              {saved && (
+                <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
+              )}
               {onGoToAnalyze && (
                 <button className="btn btn-primary" onClick={() => onGoToAnalyze()}>
                   📊 Analyze

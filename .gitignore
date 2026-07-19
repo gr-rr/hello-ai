@@ -31,3 +31,5 @@ test-results/
 # Agent of Empires worktrees (config.toml is tracked)
 .worktrees/
 ../hello-ai-worktrees/
+.mock-deploy/
+design/mockups/workbench-functional.html

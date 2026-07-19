@@ -49,4 +49,14 @@ export function getPublicUrl(bucket: string, path: string): string {
   return data.publicUrl;
 }
 
+export async function downloadText(
+  bucket: string,
+  path: string,
+): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.storage.from(bucket).download(path);
+  if (error || !data) return null;
+  return data.text();
+}
+
 
