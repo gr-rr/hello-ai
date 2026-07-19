@@ -45,7 +45,7 @@ export default function Studio({
     setAnalyzeStatus("Analyzing audio…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(audioBase64, fmt);
+      const result = await analyzeAudio(audioBase64, fmt, lastResult?.midi_base64);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
