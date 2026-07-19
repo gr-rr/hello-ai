@@ -12,6 +12,7 @@ import {
   type LibFile,
 } from "@/lib/music";
 import { useAuth } from "@/components/AuthProvider";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { FEATURES } from "@/lib/features";
 import Score from "@/components/Score";
 import PianoRoll from "@/components/PianoRoll";
@@ -39,12 +40,14 @@ export default function Transcribe({
   onTranscribed,
   onGoToAnalyze,
   onAnalyze,
+  onSignIn,
 }: {
   compact?: boolean;
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
   onAnalyze?: (audioBase64: string, fmt: string, name: string) => void;
+  onSignIn?: () => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -232,7 +235,7 @@ export default function Transcribe({
                 </p>
               )}
             </>
-          ) : (
+          ) : signedIn ? (
             <>
               <div
                 className="drop-zone"
@@ -261,13 +264,18 @@ export default function Transcribe({
                   </button>
                 )}
               </div>
-
-              {!signedIn && (
-                <p className="muted" style={{ fontSize: 13, textAlign: "center", margin: "8px 0 0" }}>
-                  Transcribe freely — sign in to save results to your library.
-                </p>
-              )}
             </>
+          ) : (
+            <div className="panel" style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+              <p className="muted" style={{ margin: 0 }}>
+                Sign in to transcribe audio into MIDI and sheet music.
+              </p>
+              {onSignIn && isSupabaseConfigured && (
+                <button className="btn btn-primary" onClick={onSignIn} style={{ minWidth: 160, justifyContent: "center" }}>
+                  Sign in
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}

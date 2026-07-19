@@ -3,11 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Home from '@/app/page'
 
 vi.mock('@/components/Studio', () => ({
-  default: ({ signedIn }: { signedIn: boolean }) => (
-    <div data-testid="studio-mock" data-signed-in={String(signedIn)}>
-      Studio
-    </div>
-  ),
+  default: () => <div data-testid="studio-mock">Studio</div>,
 }))
 
 vi.mock('@/components/Auth', () => ({
@@ -21,7 +17,7 @@ vi.mock('@/components/AuthProvider', () => ({
 
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn(), forward: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }))
 
 describe('Home (page)', () => {
@@ -34,7 +30,9 @@ describe('Home (page)', () => {
     expect(screen.getByTestId('studio-mock')).toBeInTheDocument()
   })
 
-  it('renders Studio signed out when unauthenticated', async () => {
+  it('renders Studio when unauthenticated and auth is not bypassed', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    vi.stubEnv('NEXT_PUBLIC_MOCK_ENABLED', 'false')
     const useAuthMod = await import('@/components/AuthProvider')
     vi.spyOn(useAuthMod, 'useAuth').mockReturnValue({
       user: null,
