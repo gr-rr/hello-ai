@@ -8,7 +8,6 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
-from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -32,7 +31,7 @@ logger = logging.getLogger("backend")
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
 _LIBRARY_KEY_RE = re.compile(r"^library/[0-9a-f]{32}-[\w.\-]+$")
@@ -94,10 +93,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # Local cache for trained adapters (persisted on the VM volume).
 ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
 os.makedirs(ADAPTER_ROOT, exist_ok=True)
-# Cap the number of cached adapter directories to bound disk usage; least
-# recently used dirs are evicted. Trained-job adapters live under ADAPTER_ROOT
-# too, but re-downloads from Supabase make eviction safe.
-ADAPTER_CACHE_MAX = int(os.environ.get("ADAPTER_CACHE_MAX", "20"))
 
 # In-memory job status (mirrors Supabase jobs row; Supabase is source of truth
 # when configured, this is the fallback for quick status updates).
@@ -197,66 +192,65 @@ def _append_log(job_id: str, msg: str):
 
 
 def _run_training(job_id: str, req: TrainRequest):
-    """Run a training job. The caller (`train`) has already acquired
-    `_training_slot`; this function owns releasing it exactly once."""
     sb = _sb()
     if sb:
         sb.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
     try:
-        # Resolve dataset text.
-        if req.dataset_text:
-            text = req.dataset_text
-        elif req.dataset_path:
-            sb2 = _sb()
-            if not sb2:
-                raise RuntimeError("Supabase not configured for dataset fetch")
-            data = sb2.storage.from_("datasets").download(req.dataset_path)
-            text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
-        else:
-            raise ValueError("no dataset provided")
+        with _training_slot:
+            # Resolve dataset text.
+            if req.dataset_text:
+                text = req.dataset_text
+            elif req.dataset_path:
+                sb2 = _sb()
+                if not sb2:
+                    raise RuntimeError("Supabase not configured for dataset fetch")
+                data = sb2.storage.from_("datasets").download(req.dataset_path)
+                text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
+            else:
+                raise ValueError("no dataset provided")
 
-        rows = load_dataset_jsonl(text)
+            rows = load_dataset_jsonl(text)
 
-        adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
-        params = {
-            "lora_r": req.lora_r,
-            "lora_alpha": req.lora_alpha,
-            "epochs": req.epochs,
-            "learning_rate": req.learning_rate,
-            "max_seq_len": req.max_seq_len or 1024,
-            "batch_size": req.batch_size,
-        }
-        train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
+            adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
+            params = {
+                "lora_r": req.lora_r,
+                "lora_alpha": req.lora_alpha,
+                "epochs": req.epochs,
+                "learning_rate": req.learning_rate,
+                "max_seq_len": req.max_seq_len or 1024,
+                "batch_size": req.batch_size,
+            }
+            train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
 
-        # Persist adapter to Supabase if configured.
-        adapter_path = f"adapters/{job_id}"
-        sb3 = _sb()
-        if sb3:
-            for fname in os.listdir(adapter_dir):
-                with open(os.path.join(adapter_dir, fname), "rb") as f:
-                    sb3.storage.from_("adapters").upload(
-                        f"{job_id}/{fname}",
-                        f.read(),
-                        file_options={"content-type": "application/octet-stream"},
-                    )
-            sb3.table("models").insert(
-                {
-                    "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
-                    "base_model": req.base_model,
-                    "job_id": job_id,
-                    "adapter_path": adapter_path,
-                }
-            ).execute()
+            # Persist adapter to Supabase if configured.
+            adapter_path = f"adapters/{job_id}"
+            sb3 = _sb()
+            if sb3:
+                for fname in os.listdir(adapter_dir):
+                    with open(os.path.join(adapter_dir, fname), "rb") as f:
+                        sb3.storage.from_("adapters").upload(
+                            f"{job_id}/{fname}",
+                            f.read(),
+                            file_options={"content-type": "application/octet-stream"},
+                        )
+                sb3.table("models").insert(
+                    {
+                        "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
+                        "base_model": req.base_model,
+                        "job_id": job_id,
+                        "adapter_path": adapter_path,
+                    }
+                ).execute()
 
-        if sb:
-            sb.table("jobs").update(
-                {
-                    "status": "done",
-                    "finished_at": _now(),
-                    "loss_log": _job_logs.get(job_id, ""),
-                }
-            ).eq("id", job_id).execute()
-        _append_log(job_id, "DONE")
+            if sb:
+                sb.table("jobs").update(
+                    {
+                        "status": "done",
+                        "finished_at": _now(),
+                        "loss_log": _job_logs.get(job_id, ""),
+                    }
+                ).eq("id", job_id).execute()
+            _append_log(job_id, "DONE")
     except Exception as e:
         logger.exception("training failed")
         _append_log(job_id, f"ERROR: {e}")
@@ -268,8 +262,6 @@ def _run_training(job_id: str, req: TrainRequest):
                     "finished_at": _now(),
                 }
             ).eq("id", job_id).execute()
-    finally:
-        _training_slot.release()
 
 
 @app.get("/models/base")
@@ -288,42 +280,38 @@ def train(
     # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
     if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
         raise HTTPException(status_code=503, detail="training is disabled")
-    if not req.dataset_text and not req.dataset_path:
-        raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
     # Single-slot guard: only one training run at a time on the CPU-only VM.
-    # The slot is held until `_run_training` releases it in its finally block.
     if not _training_slot.acquire(blocking=False):
         raise HTTPException(
             status_code=409,
             detail="a training job is already running — wait for it to finish",
         )
-    try:
-        job_id = uuid.uuid4().hex
-        params = {
-            "lora_r": req.lora_r,
-            "lora_alpha": req.lora_alpha,
-            "epochs": req.epochs,
-            "learning_rate": req.learning_rate,
-            "max_seq_len": req.max_seq_len or 1024,
-            "batch_size": req.batch_size,
-            "name": req.name,
-        }
-        sb = _sb()
-        if sb:
-            sb.table("jobs").insert(
-                {
-                    "id": job_id,
-                    "base_model": req.base_model,
-                    "params": params,
-                    "dataset_path": req.dataset_path,
-                    "status": "queued",
-                }
-            ).execute()
-        _job_logs[job_id] = "queued"
-        background_tasks.add_task(_run_training, job_id, req)
-    except Exception:
-        _training_slot.release()
-        raise
+    _training_slot.release()  # _run_training re-acquires it for the actual run.
+    if not req.dataset_text and not req.dataset_path:
+        raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
+    job_id = uuid.uuid4().hex
+    params = {
+        "lora_r": req.lora_r,
+        "lora_alpha": req.lora_alpha,
+        "epochs": req.epochs,
+        "learning_rate": req.learning_rate,
+        "max_seq_len": req.max_seq_len or 1024,
+        "batch_size": req.batch_size,
+        "name": req.name,
+    }
+    sb = _sb()
+    if sb:
+        sb.table("jobs").insert(
+            {
+                "id": job_id,
+                "base_model": req.base_model,
+                "params": params,
+                "dataset_path": req.dataset_path,
+                "status": "queued",
+            }
+        ).execute()
+    _job_logs[job_id] = "queued"
+    background_tasks.add_task(_run_training, job_id, req)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -352,27 +340,6 @@ def list_models(_auth=Depends(verify_token)):
     return {"models": res.data or []}
 
 
-def _evict_adapter_cache(keep_dir: str) -> None:
-    """Evict least-recently-used adapter dirs beyond ADAPTER_CACHE_MAX."""
-    import shutil
-
-    try:
-        entries = [
-            os.path.join(ADAPTER_ROOT, name)
-            for name in os.listdir(ADAPTER_ROOT)
-            if os.path.isdir(os.path.join(ADAPTER_ROOT, name))
-        ]
-    except FileNotFoundError:
-        return
-    if len(entries) <= ADAPTER_CACHE_MAX:
-        return
-    entries.sort(key=lambda p: os.path.getmtime(p))
-    for path in entries[: len(entries) - ADAPTER_CACHE_MAX]:
-        if path == keep_dir:
-            continue
-        shutil.rmtree(path, ignore_errors=True)
-
-
 def _resolve_adapter(model_ref: str, base_model: str):
     """Return (base_model, adapter_dir_or_None) for a model reference."""
     if model_ref in ("base", "", None):
@@ -392,25 +359,20 @@ def _resolve_adapter(model_ref: str, base_model: str):
                         data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
                         with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
                             fh.write(data if isinstance(data, bytes | bytearray) else data.read())
-                    _evict_adapter_cache(adapter_dir)
             return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
     return base_model, None
 
 
 @app.post("/compare")
 @limiter.limit("5/minute")
-async def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
+def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
-    base_a, ad_a = await run_in_threadpool(_resolve_adapter, req.model_a, req.base_model)
-    base_b, ad_b = await run_in_threadpool(_resolve_adapter, req.model_b, req.base_model)
+    base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
+    base_b, ad_b = _resolve_adapter(req.model_b, req.base_model)
     try:
-        a_text = await run_in_threadpool(
-            ft_generate, base_a, ad_a, req.prompt, req.max_new_tokens, req.temperature
-        )
-        b_text = await run_in_threadpool(
-            ft_generate, base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature
-        )
+        a_text = ft_generate(base_a, ad_a, req.prompt, req.max_new_tokens, req.temperature)
+        b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
     except Exception as e:
         logger.exception("compare failed")
         raise HTTPException(status_code=500, detail="compare failed") from e
@@ -419,7 +381,7 @@ async def compare(req: CompareRequest, request: Request, _auth=Depends(verify_to
 
 @app.post("/generate", response_model=GenerateResponse)
 @limiter.limit("5/minute")
-async def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)):
+def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(status_code=400, detail="prompt is required")
 
@@ -432,8 +394,7 @@ async def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_
     )
 
     try:
-        wav_bytes = await run_in_threadpool(
-            generate_audio,
+        wav_bytes = generate_audio(
             prompt=req.prompt.strip(),
             duration=req.duration,
             guidance_scale=req.guidance_scale,
@@ -445,7 +406,7 @@ async def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_
         raise HTTPException(status_code=500, detail="generation failed") from e
 
     if req.upload:
-        url = await run_in_threadpool(_upload_to_supabase, wav_bytes, req)
+        url = _upload_to_supabase(wav_bytes, req)
         return GenerateResponse(audio_url=url, duration=req.duration)
 
     b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -494,23 +455,20 @@ def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
 # ---------------------------------------------------------------------------
 # Music features: library + transcription
 # ---------------------------------------------------------------------------
-class LibraryUploadRequest(BaseModel):
-    data_base64: str
-    name: str | None = None
-    fmt: str = "wav"
-
-
 @app.post("/music/library")
 @limiter.limit("10/minute")
-async def upload_library(req: LibraryUploadRequest, request: Request, _auth=Depends(verify_token)):
+async def upload_library(req: dict, request: Request, _auth=Depends(verify_token)):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
     """
-    name = (req.name or uuid.uuid4().hex).replace("/", "_")
-    fmt = _sanitize_fmt(req.fmt or "wav")
+    name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
+    fmt = _sanitize_fmt(req.get("fmt") or "wav")
+    data_b64 = req.get("data_base64")
+    if not data_b64:
+        raise HTTPException(status_code=400, detail="data_base64 required")
     try:
-        raw = base64.b64decode(req.data_base64)
+        raw = base64.b64decode(data_b64)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid base64") from e
     if len(raw) > MAX_UPLOAD_BYTES:
@@ -520,7 +478,7 @@ async def upload_library(req: LibraryUploadRequest, request: Request, _auth=Depe
         )
     ext = fmt.lstrip(".")
     path = f"library/{uuid.uuid4().hex}-{name}.{ext}"
-    url = await run_in_threadpool(_sb_upload, "library", path, raw, f"audio/{ext}")
+    url = _sb_upload("library", path, raw, f"audio/{ext}")
     return {"path": path, "url": url}
 
 
@@ -533,7 +491,7 @@ class EnhanceRequest(BaseModel):
 
 @app.post("/music/enhance")
 @limiter.limit("20/minute")
-async def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token)):
+def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_optional)):
     """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
 
     This is the audio-quality preprocessing step, run before transcription or
@@ -563,7 +521,7 @@ async def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_to
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
     try:
-        cleaned = await run_in_threadpool(enhance_audio, audio, fmt=req.fmt)
+        cleaned = enhance_audio(audio, fmt=req.fmt)
     except Exception as e:
         logger.exception("enhance failed")
         raise HTTPException(status_code=500, detail="enhance failed") from e
@@ -571,13 +529,13 @@ async def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_to
     out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
     if req.upload:
         path = f"library/{uuid.uuid4().hex}-enhanced.wav"
-        out["url"] = await run_in_threadpool(_sb_upload, "library", path, cleaned, "audio/wav")
+        out["url"] = _sb_upload("library", path, cleaned, "audio/wav")
     return out
 
 
 @app.post("/music/transcribe")
 @limiter.limit("10/minute")
-async def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_token)):
+def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_token_optional)):
     """Transcribe audio -> MIDI (+ synthesized WAV + note events).
 
     Accepts raw audio as base64, or a path in the `library` bucket.
@@ -606,8 +564,7 @@ async def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(ver
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
     try:
-        result = await run_in_threadpool(
-            transcribe_audio,
+        result = transcribe_audio(
             audio,
             fmt=req.fmt,
             onset_threshold=req.onset_threshold,
@@ -628,8 +585,8 @@ async def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(ver
     if req.upload:
         midi_path = f"midi/{uuid.uuid4().hex}.mid"
         wav_path = f"midi/{uuid.uuid4().hex}.wav"
-        out["midi_url"] = await run_in_threadpool(_sb_upload, "midi", midi_path, midi, "audio/midi")
-        out["wav_url"] = await run_in_threadpool(_sb_upload, "midi", wav_path, wav, "audio/wav")
+        out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
+        out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
 
 
@@ -639,7 +596,7 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
-async def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
+def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
     """Analyze a MIDI file for key, tempo, time signature, and chords.
 
     Requires midi_base64 from a prior transcription.
@@ -655,35 +612,12 @@ async def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_to
             f.write(midi_bytes)
 
         try:
-            result = await run_in_threadpool(analyze_from_midi, midi_path)
+            result = analyze_from_midi(midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None
 
     return result
-
-
-@app.delete("/music/library/transcription/{record_id:path}")
-@limiter.limit("30/minute")
-def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
-    """Delete a saved transcription from the `transcriptions` bucket.
-
-    Keys are shaped `transcriptions/<uid>/<name>`; only the owner may delete.
-    Registered before the `library/{path}` catch-all so it is matched first.
-    """
-    key = record_id.replace("transcriptions/", "", 1)
-    segments = key.split("/")
-    if len(segments) < 2:
-        raise HTTPException(status_code=400, detail="invalid path")
-    user_id = segments[0]
-    authed_user_id = getattr(auth.user, "id", None)
-    if user_id != authed_user_id:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    sb = _sb()
-    if not sb:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
-    sb.storage.from_("transcriptions").remove([key])
-    return {"status": "deleted"}
 
 
 @app.delete("/music/library/{path:path}")
@@ -702,4 +636,15 @@ def delete_library_file(path: str, request: Request, auth=Depends(verify_token))
         raise HTTPException(status_code=500, detail="Supabase not configured")
     key = path.replace("library/", "", 1)
     sb.storage.from_("library").remove([key])
+    return {"status": "deleted"}
+
+
+@app.delete("/music/library/transcription/{record_id:path}")
+@limiter.limit("30/minute")
+def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
+    """Delete a saved transcription from the `transcriptions` bucket."""
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    sb.storage.from_("transcriptions").remove([record_id])
     return {"status": "deleted"}
