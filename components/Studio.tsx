@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Library from "./library";
@@ -25,6 +25,7 @@ export default function Studio({
   signedIn?: boolean;
 }) {
   const router = useRouter();
+  const analyzeInputRef = useRef<HTMLInputElement>(null);
   const safeTab = TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
   const [tab, setTab] = useState<TabId>(safeTab as TabId);
   const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
@@ -58,6 +59,13 @@ export default function Studio({
   function goToTab(id: TabId) {
     setTab(id);
     router.replace(`/?tab=${id}`, { scroll: false });
+  }
+
+  async function handleAnalyzeFile(file: File) {
+    const buf = await file.arrayBuffer();
+    const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+    const fmt = file.name.split(".").pop()?.toLowerCase() ?? "wav";
+    await handleAnalyze(b64, fmt, file.name);
   }
 
   async function signIn() {
@@ -125,6 +133,31 @@ export default function Studio({
             {analysisError && (
               <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
                 <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
+              </div>
+            )}
+            {!analysis && !analyzeStatus && (
+              <div style={{ marginBottom: 16 }}>
+                <p className="muted" style={{ fontSize: 13 }}>
+                  Upload audio to analyze its key, tempo, time signature, and chords.
+                </p>
+                <button
+                  className="btn btn-primary"
+                  style={{ marginTop: 8 }}
+                  onClick={() => analyzeInputRef.current?.click()}
+                >
+                  ⬆ Upload to analyze
+                </button>
+                <input
+                  ref={analyzeInputRef}
+                  type="file"
+                  accept="audio/*"
+                  style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) await handleAnalyzeFile(f);
+                  }}
+                />
               </div>
             )}
             <Analysis

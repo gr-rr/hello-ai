@@ -43,6 +43,8 @@ export default function Transcribe({
   const [state, setState] = useState<State>("idle");
   const [result, setResult] = useState<TranscribeResult | null>(null);
   const [audioName, setAudioName] = useState("");
+  const [analyzeBase64, setAnalyzeBase64] = useState("");
+  const [analyzeFmt, setAnalyzeFmt] = useState("wav");
   const [status, setStatus] = useState("");
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);
   const [showLibPicker, setShowLibPicker] = useState(false);
@@ -80,6 +82,8 @@ export default function Transcribe({
       setStatus("Transcribing…");
       const res = await transcribeAudio(transcribeBase64, fmt);
       setResult(res);
+      setAnalyzeBase64(transcribeBase64);
+      setAnalyzeFmt(fmt);
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
       onTranscribed?.(res, audioName);
@@ -132,6 +136,8 @@ export default function Transcribe({
     setState("idle");
     setResult(null);
     setAudioName("");
+    setAnalyzeBase64("");
+    setAnalyzeFmt("wav");
     setStatus("");
     setShowLibPicker(false);
     setPlayhead(0);
@@ -237,8 +243,20 @@ export default function Transcribe({
               <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              {onGoToAnalyze && (
-                <button className="btn btn-primary" onClick={() => onGoToAnalyze()}>
+              {onGoToAnalyze && onAnalyze && (
+                <button
+                  className="btn btn-primary"
+                  onClick={async () => {
+                    if (analyzeBase64) {
+                      try {
+                        await onAnalyze(analyzeBase64, analyzeFmt, audioName);
+                      } catch {
+                        /* analysisError surfaces on the Analyze tab */
+                      }
+                    }
+                    onGoToAnalyze();
+                  }}
+                >
                   📊 Analyze
                 </button>
               )}
