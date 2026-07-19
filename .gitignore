@@ -27,3 +27,7 @@ test-results/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Agent of Empires worktrees (config.toml is tracked)
+.worktrees/
+../hello-ai-worktrees/

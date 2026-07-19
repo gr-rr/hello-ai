@@ -1,81 +1,62 @@
-# Parallel Agent Workflow — Orchestration Tooling
+# Parallel Agent Workflow (Agent of Empires)
 
-This repo ships scripts to let the lead agent (`opencode`) spawn many
-sub-agents in parallel, each isolated in its own git worktree + tmux
-session, each opening its own PR, with a built-in auto-merge mechanism.
+Parallel OpenCode agents are managed by [Agent of Empires](https://github.com/agent-of-empires/agent-of-empires) (`aoe`), a tmux + git-worktree session manager. It replaces the old `spawn_agent.sh` / `orchestrate.sh` scripts.
 
-## Files
+## Install
 
-- `scripts/spawn_agent.sh` — creates one worktree + tmux agent.
-- `scripts/orchestrate.sh` — reads a task list, spawns all agents, polls PRs, auto-merges.
-- `scripts/auto_merge.sh` — merges one PR into `main` (handles branch protection).
-- `tasks.example.json` — example task list (do not run real agents from it).
+```
+brew install aoe
+```
 
-## How to use
+## One-time repo setup
 
-1. Create a task list as a JSON array. Each entry is:
+Config lives in `.agent-of-empires/config.toml` (committed):
 
-   ```json
-   { "branch": "feat/my-feature", "title": "Short title", "prompt": "Full agent prompt" }
-   ```
+- `default_tool = "opencode"` — every session runs OpenCode
+- `worktree.enabled = true` — each session gets its own git worktree + branch
+- `on_create` / `on_launch` hooks — `npm ci` + copy `.env.local` so MSW-backed dev works in each worktree
 
-2. Make sure you are on a clean `main` with `origin/main` fetched.
+## Daily use — run from a real terminal (needs a TTY)
 
-3. Run the orchestrator:
+Launch the dashboard TUI:
 
-   ```bash
-   ./scripts/orchestrate.sh --tasks tasks.json
-   ```
+```
+aoe
+```
 
-   This spawns one `tmux` session per entry named `agent-<branch>`, each
-   running `opencode` inside `.worktrees/<branch>`. The script then polls
-   `gh pr list` / `gh pr status` and auto-merges approved/mergeable PRs.
+Spawn one agent per task, each isolated in its own worktree + branch:
 
-4. Monitor a running agent:
+```
+aoe add . -t m2-analysis   -c opencode -w feat/m2-analysis   -b -l
+aoe add . -t m3-library    -c opencode -w feat/m3-library    -b -l
+```
 
-   ```bash
-   tmux attach -t agent-<branch>
-   ```
+Flags: `-t` title, `-c opencode` agent, `-w <branch>` worktree branch, `-b` new branch, `-l` launch now.
 
-   Detach with `Ctrl-b d`.
+Drive / monitor:
 
-5. To spawn a single agent manually:
+```
+aoe list                    # all sessions
+aoe status                  # waiting / running / idle summary
+aoe send <title> "message"  # send a prompt to a running agent
+aoe                         # TUI dashboard (attach, watch, approve)
+```
 
-   ```bash
-   ./scripts/spawn_agent.sh feat/my-feature /path/to/prompt.txt
-   ```
+Remote/web dashboard (optional):
 
-   It is idempotent: if the worktree already exists it skips creation.
+```
+aoe serve                   # http dashboard, prints URL
+```
 
-## How auto-merge works
+## Merging
 
-`scripts/auto_merge.sh <pr_number>`:
+When a branch is green, merge with the protection-lift helper (temporarily lifts `main` branch protection, merges, restores it):
 
-1. Temporarily **deletes** branch protection on `main`
-   (`gh api -X DELETE repos/gr-rr/hello-ai/branches/main/protection`).
-2. Checks out `main`, fast-forwards (or merges) the PR branch and pushes.
-3. **Restores** protection exactly:
-
-   ```json
-   {
-     "required_status_checks": {"strict": true, "contexts": ["build"]},
-     "enforce_admins": true,
-     "required_pull_request_reviews": null,
-     "restrictions": null
-   }
-   ```
-
-## Protection-restore safety
-
-Protection is always restored. `auto_merge.sh` installs a `trap ... EXIT`
-so the `PUT` that re-creates protection runs even if the merge or push
-fails partway. If the restore itself fails, a `WARN` is printed but the
-script continues rather than leaving `main` unprotected silently.
+```
+scripts/auto_merge.sh <pr_number>
+```
 
 ## Notes
 
-- The orchestrator merges only PRs that are `MERGEABLE` and `APPROVED`
-  (or already `MERGED`). Adjust the gating in `orchestrate.sh` if your
-  review policy differs.
-- Never run the example task list against real agents — it contains dummy
-  prompts.
+- `aoe` needs an interactive terminal for `-l` (launch). Don't run it from a non-TTY context.
+- Clean up finished sessions with `aoe remove <title>` (worktrees are removed automatically).
