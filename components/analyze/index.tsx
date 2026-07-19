@@ -41,9 +41,9 @@ function getDiatonicChords(tonic: string, mode: string) {
 }
 
 const QUALITY_COLORS: Record<string, { bg: string; text: string }> = {
-  major: { bg: "rgba(59,130,246,0.15)", text: "#93c5fd" },
-  minor: { bg: "rgba(192,132,252,0.15)", text: "#c084fc" },
-  dim: { bg: "rgba(239,68,68,0.15)", text: "#fca5a5" },
+  major: { bg: "var(--quality-major-bg)", text: "var(--quality-major-text)" },
+  minor: { bg: "var(--quality-minor-bg)", text: "var(--quality-minor-text)" },
+  dim: { bg: "var(--quality-dim-bg)", text: "var(--quality-dim-text)" },
 };
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];

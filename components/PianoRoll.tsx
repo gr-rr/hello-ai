@@ -6,9 +6,9 @@ type Note = TranscribeResult["notes"][number];
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const NOTE_COLORS: Record<string, string> = {
-  C: "#3b82f6", "C#": "#8b5cf6", D: "#a855f7", "D#": "#d946ef",
-  E: "#ec4899", F: "#f43f5e", "F#": "#f97316", G: "#f59e0b",
-  "G#": "#eab308", A: "#10b981", "A#": "#06b6d4", B: "#6366f1",
+  C: "var(--note-c)", "C#": "var(--note-cs)", D: "var(--note-d)", "D#": "var(--note-ds)",
+  E: "var(--note-e)", F: "var(--note-f)", "F#": "var(--note-fs)", G: "var(--note-g)",
+  "G#": "var(--note-gs)", A: "var(--note-a)", "A#": "var(--note-as)", B: "var(--note-b)",
 };
 
 function pitchToName(p: number): string {

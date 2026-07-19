@@ -48,6 +48,16 @@
   --ease: cubic-bezier(0.22,1,0.36,1);
   --dur: 200ms;
   --grad-accent: linear-gradient(135deg, #c084fc, #a855f7, #f59e0b);
+
+  /* per-note chromatic colors for the piano roll */
+  --note-c: #3b82f6; --note-cs: #8b5cf6; --note-d: #a855f7; --note-ds: #d946ef;
+  --note-e: #ec4899; --note-f: #f43f5e; --note-fs: #f97316; --note-g: #f59e0b;
+  --note-gs: #eab308; --note-a: #10b981; --note-as: #06b6d4; --note-b: #6366f1;
+
+  /* chord-quality badges */
+  --quality-major-bg: rgba(59,130,246,0.15); --quality-major-text: #93c5fd;
+  --quality-minor-bg: rgba(192,132,252,0.15); --quality-minor-text: #c084fc;
+  --quality-dim-bg: rgba(239,68,68,0.15); --quality-dim-text: #fca5a5;
   --grad-accent-2: linear-gradient(135deg, #a855f7, #f59e0b);
 }
 
