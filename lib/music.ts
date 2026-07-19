@@ -30,8 +30,17 @@ export type LibFile = {
   created_at?: string;
 };
 
+export type Transcription = {
+  id: string;
+  title: string;
+  notes: { pitch: number; start: number; end: number; velocity: number }[];
+  wav_url?: string;
+  created_at?: string;
+};
+
 const LIBRARY_BUCKET = "library";
 const MIDI_BUCKET = "midi";
+const TRANSCRIPTIONS_BUCKET = "transcriptions";
 
 async function userPrefix(): Promise<string> {
   const uid = await userId();
@@ -76,6 +85,31 @@ export async function deleteFromLibrary(id: string): Promise<void> {
   await apiFetch(`/api/music/library/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
+export async function listTranscriptions(): Promise<Transcription[]> {
+  const uid = await userId();
+  if (!uid) return [];
+  const prefix = `transcriptions/${uid}`;
+  const files = await listFiles(TRANSCRIPTIONS_BUCKET, prefix);
+  return files
+    .filter((f) => !f.name.endsWith("/"))
+    .map((f: FileMeta) => {
+      const path = `${prefix}/${f.name}`;
+      return {
+        id: path,
+        title: f.name.replace(/^\d+-/, "").replace(/_/g, " ").replace(/\.json$/i, ""),
+        notes: [],
+        wav_url: getPublicUrl(TRANSCRIPTIONS_BUCKET, path),
+        created_at: f.created_at,
+      } satisfies Transcription;
+    });
+}
+
+export async function deleteTranscription(id: string): Promise<void> {
+  const uid = await userId();
+  if (!uid) throw new Error("Sign in to delete from library");
+  await apiFetch(`/api/music/transcriptions/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function transcribeAudio(
   dataBase64: string,
   fmt = "wav",
@@ -94,6 +128,16 @@ export async function enhanceAudio(
     method: "POST",
     body: JSON.stringify({ audio_base64: dataBase64, fmt, upload: false }),
   }) as Promise<{ wav_base64: string; url?: string }>;
+}
+
+export async function analyzeAudio(
+  dataBase64: string,
+  fmt = "wav",
+): Promise<TranscribeResult["analysis"]> {
+  return apiFetch("/api/music/analyze", {
+    method: "POST",
+    body: JSON.stringify({ audio_base64: dataBase64, fmt }),
+  }) as Promise<TranscribeResult["analysis"]>;
 }
 
 export function midiToDataUrl(base64: string): string {

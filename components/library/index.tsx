@@ -2,9 +2,18 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
-import { uploadToLibrary, listLibrary, deleteFromLibrary, type LibFile } from "@/lib/music";
+import {
+  uploadToLibrary,
+  listLibrary,
+  listTranscriptions,
+  deleteFromLibrary,
+  deleteTranscription,
+  type LibFile,
+  type Transcription,
+} from "@/lib/music";
 import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
+import PianoRoll from "@/components/PianoRoll";
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return "";
@@ -28,10 +37,22 @@ function formatDate(dateStr?: string): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export default function Library({ compact }: { compact?: boolean }) {
+export default function Library({
+  compact,
+  signedIn,
+  onSignIn,
+}: {
+  compact?: boolean;
+  signedIn?: boolean;
+  onSignIn?: () => void;
+}) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<LibFile[]>([]);
+  const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [libraryError, setLibraryError] = useState("");
+  const [openTranscription, setOpenTranscription] = useState<Transcription | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -60,9 +81,22 @@ export default function Library({ compact }: { compact?: boolean }) {
     }
   }
 
+  async function refreshTranscriptions() {
+    if (!isSupabaseConfigured) return;
+    try {
+      setTranscriptions(await listTranscriptions());
+    } catch (e) {
+      setLibraryError(e instanceof Error ? e.message : "list failed");
+    }
+  }
+
   useEffect(() => {
-    refresh();
-  }, []);
+    if (signedIn) refreshTranscriptions();
+  }, [signedIn]);
+
+  useEffect(() => {
+    if (signedIn) refresh();
+  }, [signedIn]);
 
   useEffect(() => {
     return () => {
@@ -99,6 +133,19 @@ export default function Library({ compact }: { compact?: boolean }) {
       setStatus(`Deleted ${name}`);
       if (playing === id) stopAudio();
       await refresh();
+    } catch (err) {
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "delete failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onDeleteTranscription(id: string, title: string) {
+    setBusy(true);
+    try {
+      await deleteTranscription(id);
+      setStatus(`Deleted ${title}`);
+      await refreshTranscriptions();
     } catch (err) {
       setStatus("⚠️ " + (err instanceof Error ? err.message : "delete failed"));
     } finally {
@@ -218,14 +265,14 @@ export default function Library({ compact }: { compact?: boolean }) {
     }
     setMusopenLoading(true);
     setMusopenWorks([]);
-    setStatus("Loading MusOpen\u2026");
+    setStatus("Loading MusOpen…");
     try {
       const works = await fetchWorks();
       setMusopenWorks(works);
       setMusopenOpen(true);
       setStatus(`${works.length} works loaded from MusOpen`);
     } catch (err) {
-      setStatus("\u26A0\uFE0F " + (err instanceof Error ? err.message : "MusOpen failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "MusOpen failed"));
     } finally {
       setMusopenLoading(false);
     }
@@ -277,58 +324,80 @@ export default function Library({ compact }: { compact?: boolean }) {
       )}
       {compact && <h3 className="stage-h3">📁 Library</h3>}
 
-      <div
-        ref={dropRef}
-        className="drop-zone"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => !recording && inputRef.current?.click()}
-        style={{ opacity: recording ? 0.4 : 1, pointerEvents: recording ? "none" : "auto" }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="audio/*"
-          onChange={onUpload}
-          disabled={busy}
-          style={{ display: "none" }}
-        />
-        <span className="drop-icon">+</span>
-        <span className="muted">Drop audio here or click to browse</span>
-      </div>
+      {!signedIn ? (
+        <div className="panel" style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 12, alignItems: "center" }}>
+          <p className="muted" style={{ margin: 0 }}>
+            Sign in to access your saved library and upload audio.
+          </p>
+          {onSignIn && isSupabaseConfigured && (
+            <button className="btn btn-primary" onClick={onSignIn} style={{ minWidth: 160, justifyContent: "center" }}>
+              Sign in
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          <div
+            ref={dropRef}
+            className="drop-zone"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => !recording && inputRef.current?.click()}
+            style={{ opacity: recording ? 0.4 : 1, pointerEvents: recording ? "none" : "auto" }}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept="audio/*"
+              onChange={onUpload}
+              disabled={busy}
+              style={{ display: "none" }}
+            />
+            <span className="drop-icon">+</span>
+            <span className="muted">Drop audio here or click to browse</span>
+          </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 8 }}>
-        {!recording ? (
-          <button className="btn" onClick={startRecording} disabled={busy} style={{ minWidth: 100 }}>
-            <span style={{ color: "var(--danger)" }}>●</span> Record
-          </button>
-        ) : (
-          <button className="btn btn-primary" onClick={stopRecording}>
-            ■ Stop
-          </button>
-        )}
-        {recording && (
-          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span className="record-dot" />
-            <span className="muted" style={{ fontFamily: "monospace", fontSize: 14 }}>
-              {formatTime(recordTimer)}
-            </span>
-          </span>
-        )}
-        <button
-          className="btn"
-          onClick={openMusopen}
-          disabled={busy || !!importingTrack}
-          style={{ minWidth: 100 }}
-        >
-          {musopenLoading ? "\u23F3" : musopenOpen ? "\u2715 Close" : "\uD83C\uDFB5 MusOpen"}
-        </button>
-      </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 8 }}>
+            {!recording ? (
+              <button className="btn" onClick={startRecording} disabled={busy} style={{ minWidth: 100 }}>
+                <span style={{ color: "var(--danger)" }}>●</span> Record
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={stopRecording}>
+                ■ Stop
+              </button>
+            )}
+            {recording && (
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="record-dot" />
+                <span className="muted" style={{ fontFamily: "monospace", fontSize: 14 }}>
+                  {formatTime(recordTimer)}
+                </span>
+              </span>
+            )}
+            <button
+              className="btn"
+              onClick={openMusopen}
+              disabled={busy || !!importingTrack}
+              style={{ minWidth: 100 }}
+            >
+              {musopenLoading ? "\u23F3" : musopenOpen ? "\u2715 Close" : "\uD83C\uDFB5 MusOpen"}
+            </button>
+          </div>
+        </>
+      )}
 
-      {musopenOpen && musopenWorks.length > 0 && (
+      {musopenOpen && (
         <div className="panel" style={{ marginBottom: 8, maxHeight: 280, overflowY: "auto" }}>
-          <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Select a work to import:</div>
+          {musopenWorks.length === 0 ? (
+            <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+              No works available right now. MusOpen&apos;s public API is currently
+              unavailable — visit <a href="https://musopen.org/music" target="_blank" rel="noreferrer">musopen.org/music</a> to browse the catalog.
+            </p>
+          ) : (
+            <>
+              <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 6 }}>Select a work to import:</div>
           {musopenWorks.map((w) => {
             const hasRecording = fetchFirstRecording(w) !== null;
             return (
@@ -362,6 +431,8 @@ export default function Library({ compact }: { compact?: boolean }) {
               </div>
             );
           })}
+            </>
+          )}
         </div>
       )}
 
@@ -418,6 +489,79 @@ export default function Library({ compact }: { compact?: boolean }) {
       )}
 
       <span className="status">{status}</span>
+
+      <div className="panel">
+        <h3>Transcriptions</h3>
+        {!isSupabaseConfigured && (
+          <p className="muted">Supabase not configured — connect to enable storage.</p>
+        )}
+        {isSupabaseConfigured && loadingLibrary && (
+          <p className="muted">Loading\u2026</p>
+        )}
+        {isSupabaseConfigured && libraryError && (
+          <p className="muted" style={{ color: "var(--danger)" }}>⚠️ {libraryError}</p>
+        )}
+        {isSupabaseConfigured && !loadingLibrary && !libraryError && transcriptions.length === 0 && (
+          <p className="muted">
+            No transcriptions yet. Transcribe audio and tap “Save to library”.
+          </p>
+        )}
+        <ul className="filelist">
+          {transcriptions.map((t) => (
+            <li key={t.id} className={openTranscription?.id === t.id ? "playing" : ""}>
+              <div className="file-info">
+                <span className="file-name">{t.title}</span>
+                <span className="muted" style={{ fontSize: 11, display: "flex", gap: 8 }}>
+                  <span>{t.notes.length} notes</span>
+                  {t.created_at ? <span>{formatDate(t.created_at)}</span> : null}
+                </span>
+              </div>
+              <div className="file-actions">
+                <button className="chip" onClick={() => setOpenTranscription(t)}>
+                  {"\u{1F4DC} Open"}
+                </button>
+                <button
+                  className="chip ghost danger"
+                  onClick={() => onDeleteTranscription(t.id, t.title)}
+                  disabled={busy}
+                >
+                  ✕ Delete
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {openTranscription && (
+        <div className="panel" style={{ marginTop: 8, marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+            <span style={{ fontWeight: 500, fontSize: 13 }}>{openTranscription.title}</span>
+            <span className="muted" style={{ fontSize: 11 }}>{openTranscription.notes.length} notes</span>
+          </div>
+          {openTranscription.wav_url && (
+            <audio
+              controls
+              src={openTranscription.wav_url}
+              style={{ width: "100%", marginBottom: 8 }}
+            />
+          )}
+          {openTranscription.notes.length > 0 && (
+            <div className="panel">
+              <PianoRoll notes={openTranscription.notes} />
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
+            <button
+              className="chip ghost"
+              onClick={() => setOpenTranscription(null)}
+              style={{ fontSize: 12 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <h3>Saved files</h3>

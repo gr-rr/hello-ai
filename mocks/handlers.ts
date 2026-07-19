@@ -38,11 +38,44 @@ export const handlers = [
       num_notes: fakeNotes.length,
       midi_base64: midiBase64,
       wav_base64: sampleWavOutputBase64,
+      midi_url: "https://example.com/mock-transcription.mid",
+      wav_url: "https://example.com/mock-transcription.wav",
       analysis: {
         key: { tonic: "C", mode: "major", confidence: 0.8 },
         tempo: { bpm: 120, confidence: 0.92 },
         time_signature: { numerator: 4, denominator: 4, confidence: 0.95 },
       },
     });
+  }),
+
+  http.post("/api/music/library", async ({ request }) => {
+    await delay(200);
+    const body = (await request.json()) as {
+      title?: string;
+      midi_url?: string;
+      wav_url?: string;
+      notes?: unknown[];
+    };
+    const id = Array.from({ length: 32 }, () =>
+      Math.floor(Math.random() * 16).toString(16),
+    ).join("");
+    return HttpResponse.json({
+      id,
+      title: body.title ?? "Untitled transcription",
+      midi_url: body.midi_url,
+      wav_url: body.wav_url,
+      notes: body.notes ?? [],
+      created_at: new Date().toISOString(),
+    });
+  }),
+
+  http.get("/api/music/library", async () => {
+    await delay(200);
+    return HttpResponse.json({ items: [] });
+  }),
+
+  http.delete("/api/music/library/transcription/:recordId", async () => {
+    await delay(150);
+    return HttpResponse.json({ status: "deleted" });
   }),
 ];
