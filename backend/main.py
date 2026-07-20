@@ -14,7 +14,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from analyze import analyze_from_midi
+from analyze import analyze_audio, analyze_from_midi
 from finetune_server import (
     generate as ft_generate,
 )
