@@ -21,10 +21,7 @@ async function seedSession(page: Page) {
 
 async function openHome(page: Page) {
   await page.goto("/");
-  await page
-    .locator(".stepper, button:has-text('Sign In'), .drop-zone")
-    .first()
-    .waitFor({ timeout: 15_000 });
+  await page.locator(".nav").first().waitFor({ timeout: 15_000 });
 }
 
 test.describe("P2: sign-in flow reaches Studio", () => {
@@ -34,21 +31,19 @@ test.describe("P2: sign-in flow reaches Studio", () => {
     await seedSession(page);
     await openHome(page);
 
-    const stepper = page.locator(".stepper");
-    await expect(stepper).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".nav")).toBeVisible({ timeout: 15_000 });
     await expect(
       page.getByRole("button", { name: /Transcribe/ }),
     ).toBeVisible();
   });
 
-  test("studio stepper navigates between Library and Transcribe tabs", async ({
+  test("studio nav navigates between Library and Transcribe tabs", async ({
     page,
   }) => {
     await seedSession(page);
     await openHome(page);
 
-    const stepper = page.locator(".stepper");
-    await expect(stepper).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator(".nav")).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole("button", { name: /Library/ }).click();
     await expect(page.locator(".drop-zone").first()).toBeVisible({
@@ -57,7 +52,7 @@ test.describe("P2: sign-in flow reaches Studio", () => {
 
     await page.getByRole("button", { name: /Transcribe/ }).click();
     await expect(
-      page.getByRole("heading", { name: /Transcribe/ }),
+      page.locator(".card-title", { hasText: /Transcribe/ }),
     ).toBeVisible({ timeout: 10_000 });
   });
 });
