@@ -38,7 +38,23 @@ _LIBRARY_KEY_RE = re.compile(r"^library/[0-9a-f]{32}-[\w.\-]+$")
 
 
 def _now() -> str:
+    """Current UTC time as an ISO-8601 string (no timezone naive literals)."""
     return datetime.now(UTC).isoformat()
+
+
+def _decode_base64_guarded(data_b64: str, limit: int = MAX_UPLOAD_BYTES) -> bytes:
+    """Decode base64 audio, rejecting malformed input (400) or oversized
+    payloads (413) before any further processing."""
+    try:
+        raw = base64.b64decode(data_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid base64") from None
+    if len(raw) > limit:
+        raise HTTPException(
+            status_code=413,
+            detail=f"payload too large (max {limit} bytes)",
+        )
+    return raw
 
 
 def _valid_library_key(library_path: str) -> str | None:
@@ -172,6 +188,7 @@ class TranscribeRequest(BaseModel):
 
 
 def _sb():
+    """Lazily build a Supabase client from env, or None when unconfigured."""
     import os
 
     from supabase import create_client
@@ -184,6 +201,8 @@ def _sb():
 
 
 def _append_log(job_id: str, msg: str):
+    """Append a line to the in-memory job log (capped) and mirror it to the
+    Supabase `jobs.loss_log` column when storage is configured."""
     with _job_lock:
         _job_logs[job_id] = (_job_logs.get(job_id, "") + msg + "\n").strip()[-4000:]
     sb = _sb()
@@ -467,15 +486,7 @@ async def upload_library(req: dict, request: Request, _auth=Depends(verify_token
     data_b64 = req.get("data_base64")
     if not data_b64:
         raise HTTPException(status_code=400, detail="data_base64 required")
-    try:
-        raw = base64.b64decode(data_b64)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="invalid base64") from e
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-        )
+    raw = _decode_base64_guarded(data_b64)
     ext = fmt.lstrip(".")
     path = f"library/{uuid.uuid4().hex}-{name}.{ext}"
     url = _sb_upload("library", path, raw, f"audio/{ext}")
@@ -499,15 +510,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_op
     WAV (base64) and, when upload=True, a stored URL.
     """
     if req.audio_base64:
-        try:
-            audio = base64.b64decode(req.audio_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="invalid base64") from e
-        if len(audio) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-            )
+        audio = _decode_base64_guarded(req.audio_base64)
     elif req.library_path:
         sb = _sb()
         if not sb:
@@ -542,15 +545,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
     Stores midi + wav to Supabase when upload=True.
     """
     if req.audio_base64:
-        try:
-            audio = base64.b64decode(req.audio_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="invalid base64") from e
-        if len(audio) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-            )
+        audio = _decode_base64_guarded(req.audio_base64)
     elif req.library_path:
         sb = _sb()
         if not sb:
