@@ -76,19 +76,31 @@ export async function listLibrary(): Promise<LibFile[]> {
   if (!uid) return [];
   const prefix = await userPrefix();
   const files = await listFiles(LIBRARY_BUCKET, prefix);
+
+  // List existing transcription JSONs once so we only download the ones that
+  // actually exist — avoids a 400/404 per library file with no saved notes.
+  let notesNames = new Set<string>();
+  try {
+    const noteFiles = await listFiles(TRANSCRIPTIONS_BUCKET, uid);
+    notesNames = new Set(noteFiles.filter((f) => !f.name.endsWith("/")).map((f) => f.name));
+  } catch {
+    notesNames = new Set();
+  }
+
   const items = await Promise.all(
     files
       .filter((f) => !f.name.endsWith("/"))
       .map(async (f: FileMeta) => {
         const path = `${prefix}/${f.name}`;
         const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
-        const notesPath = `${uid}/${f.name}.json`;
         let notes;
-        try {
-          const raw = await downloadText(TRANSCRIPTIONS_BUCKET, notesPath);
-          if (raw) notes = JSON.parse(raw);
-        } catch {
-          notes = undefined;
+        if (notesNames.has(`${f.name}.json`)) {
+          try {
+            const raw = await downloadText(TRANSCRIPTIONS_BUCKET, `${uid}/${f.name}.json`);
+            if (raw) notes = JSON.parse(raw);
+          } catch {
+            notes = undefined;
+          }
         }
         return {
           name: displayName,

@@ -23,9 +23,13 @@ function formatSize(bytes?: number): string {
 export default function Library({
   signedIn,
   onSignIn,
+  onTranscribe,
+  onAnalyze,
 }: {
   signedIn?: boolean;
   onSignIn?: () => void;
+  onTranscribe?: (file: LibFile) => void;
+  onAnalyze?: (file: LibFile) => void;
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -423,6 +427,16 @@ export default function Library({
                     <button className="icon-btn" onClick={() => togglePlay(f.id, f.url)}>
                       {playing === f.id && !paused ? "⏸" : "▶"}
                     </button>
+                    {onTranscribe && (
+                      <button className="chip" onClick={() => onTranscribe(f)}>
+                        🎼 Transcribe
+                      </button>
+                    )}
+                    {onAnalyze && (
+                      <button className="chip" onClick={() => onAnalyze(f)}>
+                        📊 Analyze
+                      </button>
+                    )}
                     <button className="icon-btn ghost danger" onClick={() => onDelete(f.id, f.name)} disabled={busy}>
                       ✕
                     </button>
