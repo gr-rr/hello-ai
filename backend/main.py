@@ -608,7 +608,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
     has_audio = bool(req.audio_base64)
     has_midi = bool(req.midi_base64)
     if not has_audio and not has_midi:
-        raise HTTPException(status_code=400, detail="audio_base64 or midi_base64 required")
+        raise HTTPException(status_code=422, detail="audio_base64 or midi_base64 required")
 
     with tempfile.TemporaryDirectory() as td:
         audio_path = None
@@ -645,6 +645,28 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
     return result
 
 
+@app.delete("/music/library/transcription/{record_id:path}")
+@limiter.limit("30/minute")
+def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
+    """Delete a saved transcription from the `transcriptions` bucket.
+
+    Keys are shaped `transcriptions/<user_id>/<record>.json`; only the owning
+    user may delete (defense-in-depth alongside storage RLS)."""
+    segments = record_id.split("/")
+    if len(segments) < 2 or segments[0] != "transcriptions":
+        raise HTTPException(status_code=400, detail="invalid path")
+    user_id = segments[1]
+    authed_user_id = getattr(auth.user, "id", None)
+    if user_id != authed_user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured")
+    key = record_id.replace("transcriptions/", "", 1)
+    sb.storage.from_("transcriptions").remove([key])
+    return {"status": "deleted"}
+
+
 @app.delete("/music/library/{path:path}")
 @limiter.limit("30/minute")
 def delete_library_file(path: str, request: Request, auth=Depends(verify_token)):
@@ -661,15 +683,4 @@ def delete_library_file(path: str, request: Request, auth=Depends(verify_token))
         raise HTTPException(status_code=500, detail="Supabase not configured")
     key = path.replace("library/", "", 1)
     sb.storage.from_("library").remove([key])
-    return {"status": "deleted"}
-
-
-@app.delete("/music/library/transcription/{record_id:path}")
-@limiter.limit("30/minute")
-def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
-    """Delete a saved transcription from the `transcriptions` bucket."""
-    sb = _sb()
-    if not sb:
-        raise HTTPException(status_code=500, detail="Supabase not configured")
-    sb.storage.from_("transcriptions").remove([record_id])
     return {"status": "deleted"}
