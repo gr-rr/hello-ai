@@ -11,26 +11,12 @@ import {
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
+import { audioFmtFromBlob, audioFmtFromName } from "@/lib/audio";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
-
-function audioFmtFromBlob(blob: Blob): string {
-  const type = blob.type.toLowerCase();
-  if (type.includes("ogg")) return "ogg";
-  if (type.includes("mp4") || type.includes("m4a")) return "mp4";
-  if (type.includes("flac")) return "flac";
-  if (type.includes("mp3") || type.includes("mpeg")) return "mp3";
-  return "wav";
-}
-
-function audioFmtFromName(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["ogg", "mp4", "m4a", "flac", "mp3", "wav", "webm"].includes(ext)) return ext === "m4a" ? "mp4" : ext;
-  return "wav";
-}
 
 export default function Transcribe({
   signedIn,

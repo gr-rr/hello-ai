@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { uploadFile, getPublicUrl, listFiles, downloadText, deleteFile, type FileMeta } from "./storage";
 import { apiFetch } from "./api";
+import { audioExtFromName } from "./audio";
 
 async function userId(): Promise<string | null> {
   if (!supabase) return null;
@@ -54,7 +55,7 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<{ url: 
   if (!supabase) throw new Error("Supabase not configured");
   const uid = await userId();
   if (!uid) throw new Error("Sign in to save to library");
-  const fmt = (name.split(".").pop() || "wav").toLowerCase();
+  const fmt = audioExtFromName(name);
   const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
   const prefix = await userPrefix();
   const path = `${prefix}/${Date.now()}-${safeName}`;
