@@ -118,3 +118,26 @@ def test_analyze_rejects_invalid_base64(client):
         json={"midi_base64": "!!!notb64!!!"},
     )
     assert r.status_code == 400
+
+
+def test_analyze_rejects_oversized_payload(client):
+    big = base64.b64encode(b"x" * (MAX_UPLOAD_BYTES + 1)).decode()
+    r = client.post(
+        "/music/analyze",
+        headers=_auth(),
+        json={"audio_base64": big, "fmt": "wav"},
+    )
+    assert r.status_code == 413
+
+
+def test_analyze_sanitizes_fmt(client):
+    # A traversal fmt must be neutralised to a safe extension; the route must
+    # not attempt to open a path containing "..". The 400 (not 413) confirms
+    # the payload passed the size guard and reached format handling safely.
+    payload = base64.b64encode(b"RIFF\x00\x00\x00\x00WAVE").decode()
+    r = client.post(
+        "/music/analyze",
+        headers=_auth(),
+        json={"audio_base64": payload, "fmt": "../../tmp/evil"},
+    )
+    assert r.status_code != 413

@@ -619,7 +619,12 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                 audio_bytes = base64.b64decode(req.audio_base64, validate=True)
             except Exception:
                 raise HTTPException(status_code=400, detail="invalid audio base64") from None
-            ext = "wav" if req.fmt.lower() in ("wav", "wave") else req.fmt.lower()
+            if len(audio_bytes) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+                )
+            ext = _sanitize_fmt(req.fmt).lstrip(".")
             audio_path = os.path.join(td, f"input.{ext}")
             with open(audio_path, "wb") as f:
                 f.write(audio_bytes)
