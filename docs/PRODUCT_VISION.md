@@ -13,8 +13,9 @@ and compose or generate new music.
    link from external sources.
 
 2. **Convert unstructured audio → symbolic representations** — audio to MIDI
-   (via basic-pitch), then to sheet music (via abcjs). Future representations
-   may include chord charts, lead sheets, piano rolls, or DAW export.
+   (via basic-pitch), then to a piano-roll visualization in the browser.
+   Sheet music (via abcjs) is a planned representation; future formats may
+   include chord charts, lead sheets, or DAW export.
 
 3. **Music analysis** — high-level summaries: key / tempo / time signature
    detection, harmonic analysis, chord recognition, structural breakdown
@@ -70,9 +71,10 @@ User Audio → [Library] → [Enhance] → [Transcribe (basic-pitch)]
                                     MIDI / Notes
                                          ↓
                               ┌──────────┼──────────┐
-                              ↓          ↓          ↓
-                         Score (abcjs)  Analysis  Generation
-                                        (future)   (future)
+                               ↓          ↓          ↓
+                       Piano roll /  Analysis  Generation
+                       Score (abcjs,  (live)    (backend
+                        planned)                implemented)
 ```
 
 The frontend is a Next.js app with React Server Components for static

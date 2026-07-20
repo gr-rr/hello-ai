@@ -55,15 +55,17 @@ app/
   api/                — Next.js route handlers (proxy to backend)
 components/
   Studio.tsx          — page shell (topbar + hero + grid)
-  transcribe/         — audio → MIDI → sheet music
+  transcribe/         — audio → MIDI → piano roll
   library/            — file upload / manage / play
-  Score.tsx           — abcjs score rendering + synth
+  Spectrogram.tsx     — WaveSurfer spectrogram widget
 lib/
   music.ts            — core API: transcribe, enhance, upload, list, delete
   supabase.ts         — Supabase client (graceful fallback)
   storage.ts          — generic storage helpers
   backend.ts          — reverse proxy to Oracle VM
-  abc.ts              — MIDI notes → ABC notation
+  notes.ts            — pitch → note-name helpers
+  analyze.ts          — note-statistics computation
+  canvas.ts           — canvas color / CSS-var helpers
 design/
   tokens.json         — design tokens (colors, spacing, typography)
   mockups/            — HTML mockups (design SOT)

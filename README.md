@@ -1,6 +1,6 @@
 # hello-ai · Music AI Studio
 
-Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a transcription (basic-pitch on an Oracle VM), and a synthesized, cursor-highlighted score you can play back in the browser (abcjs). Files persist to Supabase, and a lightweight analysis (key, tempo, time signature) is shown after transcription.
+Turn audio into MIDI and a **playable piano-roll visualization**. Upload or record audio, get a transcription (basic-pitch on an Oracle VM), and a synthesized rendering you can play back in the browser. Files persist to Supabase, and a lightweight analysis (key, tempo, time signature, chords) is shown after transcription.
 
 ## Live Demo
 
@@ -48,16 +48,17 @@ scripts/               — CI/CD + auto-merge helpers
 ### 🎵 Core Studio
 
 - **Library** (`/?tab=library`) — Upload, record, play, and delete audio in Supabase
-- **Transcribe** (`/?tab=transcribe`) — Audio → MIDI (basic-pitch) → rendered sheet music with playback
-- **Analysis** — Key / tempo / time-signature detection shown inline after a transcription
+- **Transcribe** (`/?tab=transcribe`) — Audio → MIDI (basic-pitch) → piano-roll visualization with playback
+- **Analysis** — Key / tempo / time-signature / chords detection shown inline after a transcription
 
 ### 🌐 Live Features
 
 | Concern | Location |
 |---------|----------|
 | Page shell | `components/Studio.tsx` (topbar + stepper grid) |
-| Transcribe | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
-| Library | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
+| Transcribe | `components/transcribe/index.tsx`, `components/PianoRoll.tsx`, `lib/music.ts` |
+| Analysis | `components/analyze/index.tsx`, `lib/analyze.ts`, `lib/notes.ts` |
+| Library | `components/library/index.tsx`, `components/Visualizer.tsx`, `components/Spectrogram.tsx`, `lib/storage.ts` |
 | Backend proxy | `lib/backend.ts`, `app/api/**/route.ts` |
 | Design SOT | `design/tokens.json`, `design/mockups/*` |
 | E2E journeys | `tests/e2e/journey.spec.ts` |
@@ -82,7 +83,7 @@ npx playwright test tests/visual
 
 ### Production Features
 
-- **Auth** — Supabase implicit OAuth flow, seamless session handling
+- **Auth** — Supabase PKCE OAuth flow, seamless session handling
 - **Error Tracking** — Sentry SDK + Sentry MCP for agent self-diagnosis
 - **CI/CD** — Vercel auto-deploys `main`, blocking PR checks (E2E + lint + build)
 - **Visual QA** — Argos CI diff against design mockups
@@ -162,11 +163,11 @@ The `commit` script still uses `aicommits` for message drafting.
 
 ## Roadmap
 
-- **Phase 1: Foundation** ✅ Current — Core transcription + library management
-- **Phase 2: Analysis** 🔜 Next — Key/tempo detection + chord recognition
+- **Phase 1: Foundation** ✅ — Core transcription + library management
+- **Phase 2: Analysis** ✅ — Key/tempo detection + chord recognition
 - **Phase 3: Composition** 🎹 — Interactive chord/progression playground
-- **Phase 4: Generation** 🤖 — Style-conditioned music generation
-- **Phase 5: Fine-tuning** 🧬 — Personalized models from user library
+- **Phase 4: Generation** 🤖 — Style-conditioned music generation (backend `/generate` + `/compare` implemented; UI pending)
+- **Phase 5: Fine-tuning** 🧬 — Personalized models from user library (backend `/train` + `/models` implemented; UI pending)
 
 ## Documentation
 

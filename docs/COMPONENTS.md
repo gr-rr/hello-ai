@@ -9,14 +9,15 @@ components/                    — All React components
   Studio.tsx                  — Main page shell (topbar + stepper)
   Auth.tsx                    — Sign-in button / OAuth handler
   AuthProvider.tsx            — Supabase session management
+  Landing.tsx                 — Non-auth landing page
   Library/                    — Library UI suite
     index.tsx                 — Library control panel (upload, list, playback)
-    Visualizer.tsx            — Audio waveform visualizer
-  PianoRoll.tsx              — Interactive piano keyboard
-  Score.tsx                  — abcjs sheet music renderer + audio player
-  Transcribe/                — Transcription UI (drop zone, status, results)
+    Visualizer.tsx            — Audio waveform + spectrogram visualizer
+  Spectrogram.tsx             — WaveSurfer spectrogram widget
+  PianoRoll.tsx               — Interactive piano keyboard / note timeline
+  Transcribe/                 — Transcription UI (drop zone, status, results)
     index.tsx                 — Core audio → MIDI flow
-  analyze/                   — Analysis display widgets
+  analyze/                    — Analysis display widgets
     index.tsx                 — Key/tempo/time-signature display
 ```
 
@@ -28,7 +29,6 @@ All components follow the same patterns:
 
 ```tsx
 import { useState } from "react";
-import { cn } from "@/lib/utils";  // Utility for className merging
 
 export default function Component({ prop, onAction }) {
   const [state, setState] = useState("idle");
@@ -168,39 +168,7 @@ const [cleanAudio, setCleanAudio] = useState(null);  // Enhanced audio for reana
 
 ---
 
-### 3. Score.tsx - Sheet Music Renderer
-
-**Location**: `components/Score.tsx`
-
-Renders abcjs sheet music with interactive playback controls and audio visualization.
-
-**Features**
-
-- **abcjs Integration**: Full abcjs rendering with responsive layout
-- **Audio Player**: Native browser audio controls with waveform visualization
-- **Interactive Cursor**: Highlights current note in piano roll and sheet music
-- **Responsive**: Scales properly on mobile and desktop
-
-**Props**
-
-```tsx
-{
-  notes: TranscribeResult["notes"];      // Note data from transcription
-  analysis?: TranscribeResult["analysis"];  // Optional analysis data
-  audioBase64?: string;  // Audio data for playback
-  onAnalysis?: (result) => void;  // Analysis completion callback
-}
-```
-
-**Component Patterns**
-
-- **abcjs Configuration**: Custom styling for score appearance
-- **Audio Sync**: Real-time sync between playback and piano roll highlighting
-- **Error Handling**: Graceful fallback when abcjs fails to load
-
----
-
-### 4. PianoRoll.tsx - Interactive Piano Keyboard
+### 3. PianoRoll.tsx - Interactive Piano Keyboard
 
 **Location**: `components/PianoRoll.tsx`
 
@@ -234,7 +202,7 @@ Interactive piano keyboard that displays notes from transcription and allows use
 
 ---
 
-### 5. Analysis/index.tsx - Music Analysis Display
+### 4. Analysis/index.tsx - Music Analysis Display
 
 **Location**: `components/analyze/index.tsx`
 
@@ -254,7 +222,6 @@ Displays key/tempo/time-signature analysis results from the audio processing pha
   analysis?: TranscribeResult["analysis"];  // Complete analysis result
   notes: TranscribeResult["notes"];        // Raw notes data
   audioName?: string;                       // Track name
-  numNotes?: number;                         // Note count
 }
 ```
 
@@ -266,7 +233,7 @@ Displays key/tempo/time-signature analysis results from the audio processing pha
 
 ---
 
-### 6. Library/index.tsx - Audio Library Manager
+### 5. Library/index.tsx - Audio Library Manager
 
 **Location**: `components/library/index.tsx`
 
@@ -284,9 +251,7 @@ Comprehensive audio file manager with upload, playback, deletion, and MusOpen in
 
 ```tsx
 {
-  compact?: boolean;         // Minimal UI for embedded contexts
   signedIn?: boolean;        // Auth status
-  onSignIn?: () => void;     // Trigger sign-in flow
 }
 ```
 
@@ -307,7 +272,7 @@ Comprehensive audio file manager with upload, playback, deletion, and MusOpen in
 
 ---
 
-### 7. Visualizer.tsx - Audio Waveform Display
+### 6. Visualizer.tsx - Audio Waveform Display
 
 **Location**: `components/Visualizer.tsx`
 
@@ -324,7 +289,7 @@ Visual waveform display for audio playback with real-time updating.
 
 ```tsx
 {
-  audioRef: React.RefObject<HTMLAudioElement>;  // Audio element reference
+  audioRef: React.MutableRefObject<HTMLAudioElement | null>;  // Audio element reference
 }
 ```
 
@@ -336,18 +301,18 @@ Visual waveform display for audio playback with real-time updating.
 
 ---
 
-### 8. Auth.tsx & AuthProvider.tsx - Authentication
+### 7. Auth.tsx & AuthProvider.tsx - Authentication
 
 **Location**: `components/Auth.tsx`, `components/AuthProvider.tsx`
 
-Supabase authentication using implicit OAuth flow (Google).
+Supabase authentication using PKCE OAuth flow (Google).
 
 **Features**
 
-- **Implicit Flow**: Uses Supabase implicit OAuth (`flowType: "implicit"`)
+- **PKCE Flow**: Uses Supabase PKCE OAuth (`flowType: "pkce"`, `detectSessionInUrl: false`)
 - **Session Management**: Browser storage with automatic renewal
 - **Google Provider**: Google OAuth for authentication
-- **Callback Handling**: Routes OAuth callback to `/auth/callback` (future)
+- **Callback Handling**: `app/auth/callback/route.ts` exchanges the code and redirects to `app/auth/confirm/page.tsx`
 
 **Component Patterns**
 
@@ -357,7 +322,7 @@ Supabase authentication using implicit OAuth flow (Google).
 
 ---
 
-### 9. Landing.tsx - Non-Auth Landing Page
+### 8. Landing.tsx - Non-Auth Landing Page
 
 **Location**: `components/Landing.tsx`
 
@@ -446,7 +411,6 @@ export default function ComponentName({ prop }: { prop: string }) {
 
 ### 3. Update Dependencies
 
-- Add component to `lib/features.ts` for feature flagging
 - Add API route if backend integration needed
 - Update tests if core user flow
 - Add to Studio.tsx if part of main workflow

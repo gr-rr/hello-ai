@@ -45,12 +45,10 @@ full flow.
   `app/auth/callback/route.ts` and this test's guard will need updating.
 
 - **P3 — Transcribe (mocked backend).** An authenticated user picks a library file
-  (or "Upload new…") → the mocked `/api/music/enhance` + `/api/music/transcribe`
-  respond → the **Piano Roll** (`.piano-roll-container`) and **Sheet Music**
-  (`.score-abc`, rendered by abcjs) appear, plus an audio player and a MIDI download
-  link. Runs fully offline against the mock backend — no ffmpeg / real backend.
-  (There is currently no `FEATURES.sheetMusic` flag; the score always renders. If
-  such a flag is added, gate the `.score-abc` assertion on it.)
+   (or "Upload new…") → the mocked `/api/music/enhance` + `/api/music/transcribe`
+   respond → the **Piano Roll** (`.piano-roll-container`) appears, plus an audio
+   player and a MIDI download link. Runs fully offline against the mock backend —
+   no ffmpeg / real backend. (Sheet music is not currently rendered.)
 
 - **P4 — Library browse / upload.** A user opens the Library tab, sees the empty
   state, uploads audio (hidden file input), and the file appears with metadata; it

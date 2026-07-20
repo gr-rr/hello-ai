@@ -8,13 +8,13 @@ understand, analyze, and create music — regardless of their existing knowledge
 **Core transcription + library management.**
 - Audio upload (drag-drop or click) + recording
 - WAV → MIDI via basic-pitch (backend)
-- MIDI → sheet music via abcjs (browser)
+- MIDI → piano-roll visualization (browser); sheet-music rendering (abcjs) is a planned representation
 - Library: upload, list, delete, play (Supabase Storage)
 - MIDI download
 
 **Status:** DELIVERED. Tests pass, CI green, docs written.
 
-## Phase 2: Music Analysis 🔜 (Next)
+## Phase 2: Music Analysis ✅ (Delivered)
 
 **Understand what's in the music.**
 - Key / tempo / time signature detection
@@ -28,6 +28,10 @@ understand, analyze, and create music — regardless of their existing knowledge
 (beginners who want to learn, musicians who want to understand songs, producers
 who want to analyze references). It feeds directly into Phase 3 (composition
 playground needs chord suggestions).
+
+**Status:** Key / tempo / time-signature / chord progression / note-level
+statistics are delivered (frontend `components/analyze` + backend `analyze.py`).
+Structural breakdown (verse/chorus/bridge) and similarity search remain future work.
 
 **Effort estimate:** Medium. Most analysis can run client-side (abcjs has
 some built-in). Chord recognition needs a model on the backend.
@@ -85,6 +89,9 @@ ordered by user impact / implementation difficulty.
 
 ## Current focus
 
-**Phase 2: Music Analysis** — start with key/tempo detection + chord
-recognition as the first analysis features. These give the most immediate
-value and are the most requested by users.
+**Phase 3: Interactive Composition** — chord progression suggestions and an
+interactive piano-roll / score editor built on the delivered analysis.
+
+> Note: the Generation (`/generate`, `/compare`) and Fine-tuning (`/train`,
+> `/models`, `/models/base`) backend endpoints are already implemented in
+> `backend/`; surfacing them in the Studio UI is tracked under Phases 4–5.

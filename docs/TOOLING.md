@@ -8,7 +8,7 @@
 | **Argos** | Visual diff (screenshots vs baseline) | `.github/workflows/argos.yml` |
 | **Supabase** | Storage + DB (browser-side anon key) | `lib/supabase.ts` |
 | **FastAPI** | Backend audio processing (Oracle VM) | `backend/` |
-| **abcjs** | Sheet music rendering + MIDI playback | `components/Score.tsx` |
+| **abcjs** | Sheet-music rendering dependency (retained for a planned score feature; `app/layout.tsx` imports `abcjs/abcjs-audio.css`) | `app/layout.tsx` |
 | **basic-pitch** | WAV → MIDI transcription (backend) | `backend/music_features.py` |
 | **FluidSynth** | MIDI → WAV synthesis (backend) | `backend/music_features.py` |
 | **Vercel** | Hosting + CI (build + deploy) | Project linked to GitHub |

@@ -1,5 +1,13 @@
 # Changelog
 
+> ⚠️ **Accuracy note.** Entries below are historical. Some early claims are
+> stale and contradict the current code — notably the 2026-07-17 entry states
+> that `app/api/music/library/route.ts` was removed (it still exists) and that
+> MusicGen / TrainStudio / CompareStudio were removed (the Generation and
+> Fine-tuning backend endpoints — `/generate`, `/compare`, `/train`, `/models`
+> — remain implemented in `backend/`). Treat `git log` and the live code as the
+> source of truth; see `docs/audits/` for the full findings register.
+
 ## 2026-07-17 — Comprehensive codebase cleanup + UX overhaul
 
 ### Layout redesign
@@ -51,3 +59,29 @@
 - Token consistency audit (hardcoded values → CSS variables)
 - Score visual improvements (styling the abcjs player)
 - Waveform visualization for audio playback
+
+## 2026-07-20 — Architecture review cleanup
+
+- **Docs reconciliation** against the live code:
+  - `docs/COMPONENTS.md`, `README.md`, `LOCAL_DEV.md`, `TOOLING.md` no longer
+    reference the deleted `components/Score.tsx` / `lib/abc.ts` /
+    `lib/features.ts` / `lib/utils.ts`.
+  - Auth flow documented as **PKCE** with `app/auth/callback/route.ts` +
+    `app/auth/confirm/page.tsx` (was incorrectly described as implicit flow).
+  - `docs/API.md` corrected: `/music/transcribe`, `/music/enhance`,
+    `/music/analyze` use `verify_token_optional` (anonymous allowed) and the
+    real rate limits; `/models` is not admin-only; generation upload bucket is
+    `audio`.
+  - Storage bucket list corrected to `library, midi, audio, transcriptions,
+    enhanced, analysis, datasets, adapters` (`tracks` is a DB table, not a bucket).
+- **Frontend dead code removed**: unused `Transcription` type, `MIDI_BUCKET`,
+  `listTranscriptions`, `midiToDataUrl`, `wavToDataUrl` in `lib/music.ts`;
+  unused `numNotes`/`onSignIn` props; inlined `withAlpha` duplicated in
+  `Visualizer`/`Spectrogram` extracted to `lib/canvas.ts`; hardcoded error
+  color replaced with the `--danger-border` token; orphaned `GET /api/music/library`
+  proxy (targeted a non-existent backend route) dropped.
+- **Backend hardening**: `/music/analyze` now enforces the `MAX_UPLOAD_BYTES`
+  (413) guard and sanitizes `fmt` via `_sanitize_fmt()` (closes a local
+  write-traversal hole); regression tests added.
+- **E2E alignment**: journeys no longer assert the removed `.score-abc`
+  renderer; they exercise the shipped piano-roll + audio + MIDI-download flow.

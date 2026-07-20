@@ -1,6 +1,6 @@
 # hello-ai API Reference
 
-This document describes all FastAPI endpoints in the `/api/*` route handlers. All endpoints require authentication unless explicitly marked as public. The frontend proxies all API calls through `lib/backend.ts` (`proxyToBackend`).
+This document describes all FastAPI endpoints in the `/api/*` route handlers. Most endpoints require authentication. `/music/transcribe`, `/music/enhance`, and `/music/analyze` use `verify_token_optional` so the Studio works without sign-in; all other routes require `verify_token`. The frontend proxies all API calls through `lib/backend.ts` (`proxyToBackend`).
 
 ## Table of Contents
 
@@ -33,10 +33,10 @@ This document describes all FastAPI endpoints in the `/api/*` route handlers. Al
 Transcribe audio → MIDI + WAV + note events. Stores results in Supabase `midi` + `audio` buckets when `upload=true`.
 
 #### Authentication
-Required: `verify_token` middleware (service-role auth)
+Optional: `verify_token_optional` (anonymous requests allowed)
 
 #### Rate Limit
-20 requests per minute
+10 requests per minute
 
 #### Request Body
 
@@ -96,7 +96,7 @@ Required: `verify_token` middleware (service-role auth)
 Lightweight audio cleanup: denoise (afftdn), declip (adeclip), EBU R128 normalize. Runs transparently before transcription.
 
 #### Authentication
-Required: `verify_token` middleware
+Optional: `verify_token_optional` (anonymous requests allowed)
 
 #### Rate Limit
 20 requests per minute
@@ -134,7 +134,7 @@ Required: `verify_token` middleware
 Analyze audio for key/tempo/time-signature/chords using librosa on the Oracle backend.
 
 #### Authentication
-Required: `verify_token` middleware
+Optional: `verify_token_optional` (anonymous requests allowed)
 
 #### Rate Limit
 30 requests per minute
@@ -240,6 +240,8 @@ Required: `verify_token` middleware
 - User ID must match the authenticated user
 - Path must start with `library/`
 
+> Note: path validation currently re-implements the check with `path.split("/")` + the discouraged `path.replace("library/", "", 1)` rather than `_valid_library_key()`. Prefer the safe helper to avoid traversal.
+
 #### Response
 
 ```json
@@ -254,7 +256,9 @@ Required: `verify_token` middleware
 
 **DELETE** `/music/library/transcription/{record_id:path}`
 
-Delete a saved transcription from the `transcriptions` bucket. Admin functionality.
+Delete a saved transcription from the `transcriptions` bucket. Requires any authenticated user (no admin distinction).
+
+> Known gaps (see `docs/audits/CODE_REVIEW.md` P1-5): this route performs **no ownership check** (IDOR — any authenticated user can delete any transcription), and it is currently **unreachable** because the greedy `/music/library/{path:path}` route is registered first and matches `/music/library/transcription/*` (its `segments[0] != "library"` → `400`).
 
 #### Authentication
 Required: `verify_token` middleware
@@ -373,7 +377,7 @@ Required: `verify_token` middleware
 
 **GET** `/models`
 
-List all user LoRA models (admin only).
+List all user LoRA models.
 
 #### Authentication
 Required: `verify_token` middleware
@@ -513,7 +517,7 @@ Required: `verify_token` middleware
 ```json
 {
   "audio_base64": "base64-encoded-wav-bytes",  // if upload=false
-  "audio_url": "https://.../tracks/<uuid>.wav",  // if upload=true
+  "audio_url": "https://.../audio/tracks/<uuid>.wav",  // if upload=true (bucket: `audio`)
   "format": "wav",
   "duration": 5
 }
