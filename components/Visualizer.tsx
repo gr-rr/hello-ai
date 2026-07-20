@@ -24,6 +24,23 @@ export default function Visualizer({ audioRef }: Props) {
 
     let cancelled = false;
 
+    const styles = getComputedStyle(document.documentElement);
+    const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
+    const bg = styles.getPropertyValue("--bg").trim() || "#0b0d12";
+    const withAlpha = (hex: string, alpha: number) => {
+      const m = /^#([0-9a-f]{6})$/i.exec(hex);
+      if (!m) return hex;
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+    };
+
+    // Browsers create the AudioContext suspended until a user gesture.
+    // If it stays suspended, cross-origin audio routed through Web Audio is
+    // silenced. Resume it on play so gallery/saved playback actually sounds.
+    const resume = () => {
+      if (ctxRef.current?.state === "suspended") ctxRef.current.resume().catch(() => {});
+    };
+
     async function setup() {
       const audioEl = audio;
       if (!audioEl) return;
@@ -48,12 +65,6 @@ export default function Visualizer({ audioRef }: Props) {
       source.connect(analyser);
       analyser.connect(ctx.destination);
 
-      // Browsers create the AudioContext suspended until a user gesture.
-      // If it stays suspended, cross-origin audio routed through Web Audio is
-      // silenced. Resume it on play so gallery/saved playback actually sounds.
-      const resume = () => {
-        if (ctx.state === "suspended") ctx.resume().catch(() => {});
-      };
       audioEl.addEventListener("play", resume);
 
       const bufferLength = analyser.frequencyBinCount;
@@ -66,12 +77,12 @@ export default function Visualizer({ audioRef }: Props) {
 
         const w = canvas!.width;
         const h = canvas!.height;
-        canvasCtx!.fillStyle = "#0b0d12";
+        canvasCtx!.fillStyle = bg;
         canvasCtx!.fillRect(0, 0, w, h);
 
         // Waveform
         canvasCtx!.lineWidth = 2;
-        canvasCtx!.strokeStyle = "#6ea8fe";
+        canvasCtx!.strokeStyle = accent;
         canvasCtx!.beginPath();
         const sliceWidth = w / bufferLength;
         let x = 0;
@@ -95,8 +106,7 @@ export default function Visualizer({ audioRef }: Props) {
           const idx = Math.floor((i / bars) * bufferLength);
           const mag = dataArray[idx] / 255;
           const barH = mag * specH;
-          const hue = 220 - mag * 160;
-          canvasCtx!.fillStyle = `hsl(${hue}, 80%, ${30 + mag * 40}%)`;
+          canvasCtx!.fillStyle = withAlpha(accent, 0.3 + mag * 0.6);
           canvasCtx!.fillRect(i * barW, y0 + (specH - barH), barW - 1, barH);
         }
       };
@@ -111,6 +121,7 @@ export default function Visualizer({ audioRef }: Props) {
       // The AudioContext + source are cached and reused per element, so tear
       // down only this effect's connections; don't close the shared context.
       sourceRef.current?.disconnect();
+      audio.removeEventListener("play", resume);
     };
   }, [audioRef]);
 
