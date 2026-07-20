@@ -4,31 +4,48 @@ How hello-ai is put together, and how to ship changes safely without manual QA.
 
 ## 1. System at a glance
 
+```mermaid
+flowchart TB
+  subgraph Browser["Browser — Next.js app (Vercel)"]
+    Studio["Studio shell (topbar + stepper tabs)"]
+    Transcribe["Transcribe — audio → MIDI + piano roll"]
+    Library["Library — Supabase Storage"]
+    Analyze["Analyze — key / tempo / chords"]
+    Visuals["Visualizer · Spectrogram · PianoRoll"]
+    MSW["MSW mocks (dev + CI E2E)"]
+  end
+
+  Studio --> Transcribe & Library & Analyze
+  Transcribe --> Visuals
+  Library --> Visuals
+
+  Transcribe -- "proxyToBackend" --> APIGW["app/api/* route handlers"]
+  Analyze -- "proxyToBackend" --> APIGW
+  Library -- "anon key (PKCE)" --> SB
+  Transcribe -. "mocked in CI" .-> MSW
+
+  subgraph VM["Oracle Cloud VM (always-free ARM)"]
+    Caddy["Caddy reverse proxy → FastAPI :8000 (HTTPS/Let's Encrypt)"]
+    FastAPI["FastAPI (backend/main.py)"]
+    BP["basic-pitch transcription"]
+    FS["FluidSynth MIDI→WAV"]
+    FF["ffmpeg enhance"]
+    AN["librosa analyze"]
+    GEN["MusicGen + LoRA fine-tune"]
+    Caddy --> FastAPI
+    FastAPI --> BP & FS & FF & AN & GEN
+  end
+
+  APIGW -- "server-side fetch (MUSIC_BACKEND_URL)" --> Caddy
+  FastAPI -- "SERVICE-ROLE key" --> SB
+
+  classDef store fill:#161130,stroke:#a855f7,color:#eeeaff;
+  class SB store;
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Browser (Next.js app on Vercel)                                       │
-│   - app/page.tsx → <Studio> layout (single-page 2‑column grid)        │
-│   - Left column: Transcribe (→ MIDI + sheet music)                     │
-│   - Right column: Library (Supabase Storage)                           │
-│                                                                        │
-│   Talks to:                                                            │
-│     (a) Supabase  — directly from the browser (anon key) for storage  │
-│     (b) /api/*    — Next.js route handlers that proxy to the backend  │
-└───────────────┬───────────────────────────┬──────────────────────────┘
-                │ (a) anon key              │ (b) server-side fetch
-                ▼                            ▼
-        ┌───────────────┐          ┌─────────────────────────────────────┐
-        │  Supabase     │          │  Oracle Cloud VM (always-free ARM)   │
-        │  (storage +   │          │  gricci-testing.duckdns.org (Caddy→  │
-        │   db, free)   │          │  FastAPI :8000)                      │
-        │               │          │  - basic-pitch transcription         │
-        │  buckets:     │          │  - FluidSynth MIDI→WAV               │
-        │   library/midi│          │  - ffmpeg enhance                    │
-        │   audio/tracks│          │                                     │
-        │   datasets/   │          │  Uses Supabase SERVICE-ROLE key for  │
-        │   adapters    │          │  server-side storage.               │
-        └───────────────┘          └─────────────────────────────────────┘
-```
+
+> Rendered above is the canonical diagram. The browser never talks to the
+> Oracle backend directly: all backend calls go through `app/api/*` →
+> `lib/backend.ts` (`proxyToBackend`).
 
 Key rule: **the browser never talks to the Oracle backend directly.** All backend
 calls go through `app/api/*` → `lib/backend.ts` (`proxyToBackend`), which forwards
@@ -94,13 +111,15 @@ with no manual clicking:
 
 | Concern            | Path |
 |--------------------|------|
-| Page shell         | `components/Studio.tsx` (topbar + stepper grid) |
-| Transcribe         | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
-| Library            | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
+| Page shell         | `components/Studio.tsx` (topbar + stepper tabs) |
+| Transcribe         | `components/transcribe/index.tsx`, `components/PianoRoll.tsx`, `lib/music.ts`, `lib/notes.ts` |
+| Analyze            | `components/analyze/index.tsx`, `lib/analyze.ts`, `lib/notes.ts` |
+| Library            | `components/library/index.tsx`, `components/Visualizer.tsx`, `components/Spectrogram.tsx`, `lib/storage.ts` |
+| Canvas helpers     | `lib/canvas.ts` (shared `withAlpha` / CSS-var resolvers) |
 | Backend proxy      | `lib/backend.ts`, `app/api/**/route.ts` |
-| Supabase client    | `lib/supabase.ts` (browser, anon; graceful fallback) |
+| Supabase client    | `lib/supabase.ts` (browser, anon; PKCE; graceful fallback) |
 | Design SOT         | `design/tokens.json`, `design/mockups/*` |
-| E2E journeys       | `tests/e2e/journey.spec.ts` |
+| E2E journeys       | `tests/e2e/journey.spec.ts`, `tests/e2e/user-paths.spec.ts` |
 | Visual QA          | `tests/visual/preview.spec.ts`, `.github/workflows/argos.yml` |
 | CI gate            | `.github/workflows/ci.yml` |
 | Backend (VM code)  | `backend/` (FastAPI) — separate deploy, not on Vercel |
@@ -116,7 +135,11 @@ with no manual clicking:
 
 ## 5. Data model (Supabase)
 
-Storage buckets (RLS allows anon insert/select so the app works without login):
-`library`, `midi`, `audio`, `tracks`, `datasets`, `adapters`.
-DB tables (backend-written, service-role): `jobs`, `models`.
+Storage buckets (see `supabase/migrations/` for RLS; some allow anon
+insert/select so the app works without login):
+`library`, `midi`, `audio`, `transcriptions`, `enhanced`, `analysis`,
+`datasets`, `adapters`. Note: `tracks` is a **database table**, not a bucket;
+the `enhanced` and `analysis` buckets exist but are not currently written by
+the backend.
+DB tables (backend-written, service-role): `jobs`, `models`, `tracks`.
 Migrations live in `supabase/migrations/`.
