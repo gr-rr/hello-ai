@@ -26,8 +26,53 @@ from finetune_server import (
 from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
 from musicgen_server import generate_audio
 
-logging.basicConfig(level=logging.INFO)
+# ---------------------------------------------------------------------------
+# Observability: structured JSON logs + request correlation + Sentry
+# ---------------------------------------------------------------------------
+import json
+import uuid
+import contextvars
+
+_request_id_ctx = contextvars.ContextVar("request_id", default="none")
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            "req_id": getattr(record, "req_id", "none"),
+        }
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+        return json.dumps(payload, ensure_ascii=False)
+
+
+_json_handler = logging.StreamHandler()
+_json_handler.setFormatter(_JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_json_handler], force=True)
 logger = logging.getLogger("backend")
+
+try:
+    import sentry_sdk
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    from sentry_sdk.integrations.fastapi import FastAPIIntegration
+
+    _sentry_dsn = os.environ.get("SENTRY_DSN_BACKEND") or os.environ.get("SENTRY_DSN")
+    if _sentry_dsn:
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            environment=os.environ.get("SENTRY_ENV", "production"),
+            integrations=[StarletteIntegration(), FastAPIIntegration()],
+            traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+            send_default_pii=False,
+            release=os.environ.get("RELEASE", "backend@0.2.0"),
+        )
+        logger.info("sentry_initialized")
+except ImportError:
+    logger.warning("sentry_sdk_not_installed")
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
@@ -89,6 +134,33 @@ def verify_token_optional(
 app = FastAPI(title="hello-ai backend", version="0.2.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.middleware("http")
+async def observability_middleware(request: Request, call_next):
+    req_id = request.headers.get("x-request-id") or uuid.uuid4().hex[:16]
+    token = _request_id_ctx.set(req_id)
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("request_failed", extra={"req_id": req_id})
+        raise
+    finally:
+        _request_id_ctx.reset(token)
+    duration_ms = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["x-request-id"] = req_id
+    logger.info(
+        "request_handled",
+        extra={
+            "req_id": req_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+    return response
 
 # Local cache for trained adapters (persisted on the VM volume).
 ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")

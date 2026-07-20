@@ -65,6 +65,7 @@ services:
       args:
         USER_ID: 501
         GROUP_ID: 501
+    container_name: music-ai-backend
     working_dir: /workspace
     user: "501:501"
     command: >
@@ -79,6 +80,16 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
       - BACKEND_URL=http://backend:8000
       - SOUNDFONT_PATH=/workspace/backend/soundfonts/FluidR3_GM.sf2
+      - SENTRY_DSN_BACKEND=${SENTRY_DSN_BACKEND:-${SENTRY_DSN:-}}
+      - SENTRY_ENV=${SENTRY_ENV:-development}
+      - RELEASE=${RELEASE:-backend@dev}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
 
 volumes:
   opencode_node_modules:
