@@ -118,3 +118,38 @@ def test_analyze_rejects_invalid_base64(client):
         json={"midi_base64": "!!!notb64!!!"},
     )
     assert r.status_code == 400
+
+
+def test_analyze_rejects_oversize_audio(client, monkeypatch):
+    monkeypatch.setattr(main, "analyze_audio", lambda *a, **k: {"key": {}})
+    monkeypatch.setattr(main, "analyze_from_midi", lambda *a, **k: {"key": {}})
+    big = base64.b64encode(b"x" * (MAX_UPLOAD_BYTES + 1)).decode()
+    r = client.post(
+        "/music/analyze",
+        headers=_auth(),
+        json={"audio_base64": big, "fmt": "wav"},
+    )
+    assert r.status_code == 413
+
+
+def test_analyze_accepts_library_path(client, monkeypatch):
+    monkeypatch.setattr(main, "analyze_from_midi", lambda *a, **k: {"key": {}, "tempo": {}})
+    sb = _FakeSB()
+    sb.storage.store["owner-1/x.mid"] = b"MThd\x00\x00\x00\x06\x00\x00"
+    monkeypatch.setattr(main, "_sb", lambda: sb)
+    r = client.post(
+        "/music/analyze",
+        headers=_auth(),
+        json={"library_path": "midi/owner-1/x.mid"},
+    )
+    assert r.status_code == 200
+    assert isinstance(r.json(), dict)
+
+
+def test_analyze_rejects_invalid_library_path(client):
+    r = client.post(
+        "/music/analyze",
+        headers=_auth(),
+        json={"library_path": "../escape"},
+    )
+    assert r.status_code == 400
