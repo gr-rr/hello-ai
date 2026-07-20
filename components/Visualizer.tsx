@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { resolveCssVar, withAlpha } from "@/lib/canvas";
 
 type Props = {
   audioRef: React.MutableRefObject<HTMLAudioElement | null>;
@@ -24,15 +25,8 @@ export default function Visualizer({ audioRef }: Props) {
 
     let cancelled = false;
 
-    const styles = getComputedStyle(document.documentElement);
-    const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
-    const bg = styles.getPropertyValue("--bg").trim() || "#0b0d12";
-    const withAlpha = (hex: string, alpha: number) => {
-      const m = /^#([0-9a-f]{6})$/i.exec(hex);
-      if (!m) return hex;
-      const n = parseInt(m[1], 16);
-      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-    };
+    const accent = resolveCssVar("--accent", "#c084fc");
+    const bg = resolveCssVar("--bg", "#0b0d12");
 
     // Browsers create the AudioContext suspended until a user gesture.
     // If it stays suspended, cross-origin audio routed through Web Audio is

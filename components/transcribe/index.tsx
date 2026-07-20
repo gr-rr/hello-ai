@@ -342,7 +342,7 @@ export default function Transcribe({
       )}
 
       {state === "error" && (
-        <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginTop: 12 }}>
+        <div className="card" style={{ borderColor: "var(--danger-border)", marginTop: 12 }}>
           <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
           <button className="btn" onClick={reset}>Try again</button>
         </div>

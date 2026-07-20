@@ -8,7 +8,6 @@ type Props = {
   analysis: TranscribeResult["analysis"] | null | undefined;
   notes: TranscribeResult["notes"];
   audioName: string;
-  numNotes: number;
 };
 
 function tonicToIndex(tonic: string): number {
@@ -34,7 +33,7 @@ function getDiatonicChords(tonic: string, mode: string) {
   });
 }
 
-export default function Analysis({ analysis, notes, audioName, numNotes }: Props) {
+export default function Analysis({ analysis, notes, audioName }: Props) {
   if (!analysis?.key) {
     return (
       <p className="muted">

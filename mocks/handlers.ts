@@ -80,11 +80,6 @@ export const handlers = [
     });
   }),
 
-  http.get("/api/music/library", async () => {
-    await delay(200);
-    return HttpResponse.json({ items: [] });
-  }),
-
   http.delete("/api/music/library/transcription/:recordId", async () => {
     await delay(150);
     return HttpResponse.json({ status: "deleted" });

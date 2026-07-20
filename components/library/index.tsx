@@ -22,10 +22,8 @@ function formatSize(bytes?: number): string {
 
 export default function Library({
   signedIn,
-  onSignIn,
 }: {
   signedIn?: boolean;
-  onSignIn?: () => void;
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -442,14 +440,6 @@ export default function Library({
         </div>
       )}
 
-      <style>{`
-        .pb-track { cursor: pointer; position: relative; }
-        .record-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--danger); animation:pulse-record 1s ease-in-out infinite; }
-        .toolbar { display:flex; gap:var(--s-2); flex-wrap:wrap; margin-top:var(--s-3); }
-        .empty { text-align:center; color:var(--muted); font-size:var(--fs-sm); padding:var(--s-5) var(--s-4); border:1px dashed var(--border); border-radius:var(--r-md); }
-        .drop-zone.disabled { opacity:0.4; cursor:not-allowed; }
-        .drop-zone.disabled:hover { border-color:var(--border); background:transparent; }
-      `}</style>
     </div>
   );
 }

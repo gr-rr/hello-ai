@@ -15,6 +15,7 @@
   --accent-soft-2: rgba(245,158,11,0.1);
   --danger: #ef4444;
   --danger-soft: rgba(239,68,68,0.1);
+  --danger-border: rgba(239,68,68,0.3);
   --success: #34d399;
   --success-soft: rgba(52,211,153,0.1);
   --border: rgba(255,255,255,0.06);
@@ -448,3 +449,10 @@ html,body {
 
 /* ── Workbench (single-column) ── */
 .workbench { display:grid; grid-template-columns:1fr; gap:var(--s-5); flex:1; }
+
+/* ── Library (moved from inline <style> in components/library) ── */
+.pb-track { cursor:pointer; position:relative; }
+.toolbar { display:flex; gap:var(--s-2); flex-wrap:wrap; margin-top:var(--s-3); }
+.empty { text-align:center; color:var(--muted); font-size:var(--fs-sm); padding:var(--s-5) var(--s-4); border:1px dashed var(--border); border-radius:var(--r-md); }
+.drop-zone.disabled { opacity:0.4; cursor:not-allowed; }
+.drop-zone.disabled:hover { border-color:var(--border); background:transparent; }

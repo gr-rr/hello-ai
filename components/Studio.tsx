@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, listMidiFiles, type TranscribeResult, type LibFile } from "@/lib/music";
+import { analyzeAudio, listMidiFiles, blobToBase64, type TranscribeResult, type LibFile } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -76,8 +76,7 @@ export default function Studio({
       const res = await fetch(item.url);
       if (!res.ok) throw new Error(`download failed: ${res.status}`);
       const blob = await res.blob();
-      const buf = await blob.arrayBuffer();
-      const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
+      const b64 = await blobToBase64(blob);
       await handleAnalyze(undefined, b64, item.name);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "download failed");
@@ -130,9 +129,9 @@ export default function Studio({
       </header>
 
       <div className="workbench">
-        {tab === "library" && (
-          <Library signedIn={signedIn} onSignIn={signIn} />
-        )}
+          {tab === "library" && (
+            <Library signedIn={signedIn} />
+          )}
 
         {tab === "transcribe" && (
           <Transcribe
@@ -149,7 +148,7 @@ export default function Studio({
             {analyzeStatus && <p className="status" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
 
             {analysisError && !analysis && !analyzeStatus && (
-              <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
+              <div className="card" style={{ borderColor: "var(--danger-border)", marginBottom: 12 }}>
                 <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
               </div>
             )}
@@ -193,7 +192,6 @@ export default function Studio({
                 analysis={analysis}
                 notes={lastResult?.notes ?? []}
                 audioName={audioName}
-                numNotes={lastResult?.num_notes ?? 0}
               />
             )}
           </div>

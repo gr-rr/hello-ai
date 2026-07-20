@@ -42,16 +42,7 @@ export type LibFile = {
   notes?: { pitch: number; start: number; end: number; velocity: number }[];
 };
 
-export type Transcription = {
-  id: string;
-  title: string;
-  notes: { pitch: number; start: number; end: number; velocity: number }[];
-  wav_url?: string;
-  created_at?: string;
-};
-
 const LIBRARY_BUCKET = "library";
-const MIDI_BUCKET = "midi";
 const TRANSCRIPTIONS_BUCKET = "transcriptions";
 
 async function userPrefix(): Promise<string> {
@@ -128,25 +119,6 @@ export async function deleteFromLibrary(id: string): Promise<void> {
   }
 }
 
-export async function listTranscriptions(): Promise<Transcription[]> {
-  const uid = await userId();
-  if (!uid) return [];
-  const prefix = `transcriptions/${uid}`;
-  const files = await listFiles(TRANSCRIPTIONS_BUCKET, prefix);
-  return files
-    .filter((f) => !f.name.endsWith("/"))
-    .map((f: FileMeta) => {
-      const path = `${prefix}/${f.name}`;
-      return {
-        id: path,
-        title: f.name.replace(/^\d+-/, "").replace(/_/g, " ").replace(/\.json$/i, ""),
-        notes: [],
-        wav_url: getPublicUrl(TRANSCRIPTIONS_BUCKET, path),
-        created_at: f.created_at,
-      } satisfies Transcription;
-    });
-}
-
 export async function transcribeAudio(
   dataBase64: string,
   fmt = "wav",
@@ -201,10 +173,4 @@ export async function listMidiFiles(): Promise<LibFile[]> {
     });
 }
 
-export function midiToDataUrl(base64: string): string {
-  return `data:audio/midi;base64,${base64}`;
-}
 
-export function wavToDataUrl(base64: string): string {
-  return `data:audio/wav;base64,${base64}`;
-}
