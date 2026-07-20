@@ -1,9 +1,12 @@
 import base64
+import contextvars
+import json
 import logging
 import os
 import re
 import tempfile
 import threading
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -25,13 +28,6 @@ from finetune_server import (
 )
 from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
 from musicgen_server import generate_audio
-
-# ---------------------------------------------------------------------------
-# Observability: structured JSON logs + request correlation + Sentry
-# ---------------------------------------------------------------------------
-import json
-import uuid
-import contextvars
 
 _request_id_ctx = contextvars.ContextVar("request_id", default="none")
 
@@ -56,9 +52,9 @@ logging.basicConfig(level=logging.INFO, handlers=[_json_handler], force=True)
 logger = logging.getLogger("backend")
 
 try:
-    import sentry_sdk
-    from sentry_sdk.integrations.starlette import StarletteIntegration
-    from sentry_sdk.integrations.fastapi import FastAPIIntegration
+    import sentry_sdk  # noqa: I001
+    from sentry_sdk.integrations.starlette import StarletteIntegration  # noqa: I001
+    from sentry_sdk.integrations.fastapi import FastAPIIntegration  # noqa: I001
 
     _sentry_dsn = os.environ.get("SENTRY_DSN_BACKEND") or os.environ.get("SENTRY_DSN")
     if _sentry_dsn:
@@ -161,6 +157,7 @@ async def observability_middleware(request: Request, call_next):
         },
     )
     return response
+
 
 # Local cache for trained adapters (persisted on the VM volume).
 ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
