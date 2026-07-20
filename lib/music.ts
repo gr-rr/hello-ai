@@ -61,7 +61,6 @@ async function userPrefix(): Promise<string> {
 export async function uploadToLibrary(name: string, blob: Blob): Promise<{ url: string; id: string }> {
   if (!supabase) throw new Error("Supabase not configured");
   const uid = await userId();
-  if (!uid) throw new Error("Sign in to save to library");
   const fmt = (name.split(".").pop() || "wav").toLowerCase();
   const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
   const prefix = await userPrefix();
@@ -71,8 +70,6 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<{ url: 
 }
 
 export async function listLibrary(): Promise<LibFile[]> {
-  const uid = await userId();
-  if (!uid) return [];
   const prefix = await userPrefix();
   const files = await listFiles(LIBRARY_BUCKET, prefix);
   const items = await Promise.all(
@@ -122,8 +119,7 @@ export async function deleteFromLibrary(id: string): Promise<void> {
 
 export async function listTranscriptions(): Promise<Transcription[]> {
   const uid = await userId();
-  if (!uid) return [];
-  const prefix = `transcriptions/${uid}`;
+  const prefix = `transcriptions/${uid ?? "dev"}`;
   const files = await listFiles(TRANSCRIPTIONS_BUCKET, prefix);
   return files
     .filter((f) => !f.name.endsWith("/"))
@@ -170,8 +166,7 @@ export async function analyzeAudio(
 
 export async function listMidiFiles(): Promise<LibFile[]> {
   const uid = await userId();
-  if (!uid) return [];
-  const prefix = `midi/${uid}`;
+  const prefix = `midi/${uid ?? "dev"}`;
   const files = await listFiles("midi", prefix);
   return files
     .filter((f) => !f.name.endsWith("/"))

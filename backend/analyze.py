@@ -305,6 +305,9 @@ def analyze_from_midi(midi_path: str) -> dict[str, object]:
     result: dict[str, object] = {
         "key": _key_from_pc_vector(pc_hist),
         "chords": _chords_from_frames(frames),
+        # Default to 4/4 so clients never receive a null time_signature
+        # (many transcribed MIDI files carry no time-signature metadata).
+        "time_signature": TimeSigResult(numerator=4, denominator=4, confidence=0.0),
     }
 
     tempo = _midi_tempo(pm)

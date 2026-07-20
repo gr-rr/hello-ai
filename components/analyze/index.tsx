@@ -53,8 +53,9 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
       : `This piece is in ${analysis.key.tonic} minor. Common chords: ${chordLabels}.`;
 
   const cKey = Math.round(analysis.key.confidence * 100);
-  const cTempo = Math.round(analysis.tempo.confidence * 100);
-  const cSig = Math.round(analysis.time_signature.confidence * 100);
+  const cTempo = Math.round((analysis.tempo?.confidence ?? 0) * 100);
+  const ts = analysis.time_signature;
+  const cSig = Math.round((ts?.confidence ?? 0) * 100);
 
   return (
     <div>
@@ -75,7 +76,7 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
         </div>
         <div className="stat fade-in" style={{ animationDelay: ".1s" }}>
           <span className="s-label">Time signature</span>
-          <span className="s-value">{analysis.time_signature.numerator}/{analysis.time_signature.denominator}</span>
+          <span className="s-value">{analysis.time_signature?.numerator ?? 4}/{analysis.time_signature?.denominator ?? 4}</span>
           <div className="confidence-track"><div className="confidence-fill" style={{ width: `${cSig}%` }} /></div>
           <span className="confidence-pct">{cSig}%</span>
         </div>
