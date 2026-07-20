@@ -26,7 +26,7 @@ export default function Visualizer({ audioRef }: Props) {
 
     const styles = getComputedStyle(document.documentElement);
     const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
-    const bg = styles.getPropertyValue("--bg").trim() || "#0b0d12";
+    const bg = styles.getPropertyValue("--bg").trim() || "#080515";
     const withAlpha = (hex: string, alpha: number) => {
       const m = /^#([0-9a-f]{6})$/i.exec(hex);
       if (!m) return hex;
