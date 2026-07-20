@@ -37,11 +37,15 @@ export default function Transcribe({
   onTranscribed,
   onGoToAnalyze,
   onAnalyze,
+  libraryFileToLoad,
+  onClearLibraryFile,
 }: {
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
   onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string) => void;
+  libraryFileToLoad?: LibFile | null;
+  onClearLibraryFile?: () => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -69,6 +73,13 @@ export default function Transcribe({
       });
   }, []);
 
+  useEffect(() => {
+    if (libraryFileToLoad) {
+      onSelectLibraryFile(libraryFileToLoad);
+      onClearLibraryFile?.();
+    }
+  }, [libraryFileToLoad]);
+
   async function processBlob(blob: Blob, fmtOverride?: string) {
     setResult(null);
     setShowLibPicker(false);
@@ -95,6 +106,17 @@ export default function Transcribe({
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
       onTranscribed?.(res, audioName);
+
+      if (signedIn && res.wav_url && res.notes.length > 0) {
+        try {
+          const audioBlob = await (await fetch(res.wav_url)).blob();
+          const { id } = await uploadToLibrary(audioName || "transcription.wav", audioBlob);
+          await saveTranscription(id, res.notes);
+          setSaved(true);
+        } catch {
+          /* auto-save failure is non-critical */
+        }
+      }
     } catch (err) {
       setState("error");
       setStatus("⚠️ " + (err instanceof Error ? err.message : "transcription failed"));

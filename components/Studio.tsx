@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, listMidiFiles, type TranscribeResult, type LibFile } from "@/lib/music";
+import { analyzeAudio, listLibrary, blobToBase64, type TranscribeResult, type LibFile } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -34,10 +34,11 @@ export default function Studio({
   const [analyzeStatus, setAnalyzeStatus] = useState("");
   const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
   const [showAnalyzeLibPicker, setShowAnalyzeLibPicker] = useState(false);
+  const [pendingLibFile, setPendingLibFile] = useState<LibFile | null>(null);
 
   useEffect(() => {
     if (tab === "analyze") {
-      listMidiFiles().then(setAnalyzeLibFiles).catch(() => {});
+      listLibrary().then(setAnalyzeLibFiles).catch(() => {});
     }
   }, [tab]);
 
@@ -71,18 +72,27 @@ export default function Studio({
   async function handleAnalyzeLibrary(item: LibFile) {
     setShowAnalyzeLibPicker(false);
     setAudioName(item.name);
-    setAnalyzeStatus("Downloading MIDI…");
+    setAnalyzeStatus("Downloading audio…");
     try {
       const res = await fetch(item.url);
       if (!res.ok) throw new Error(`download failed: ${res.status}`);
       const blob = await res.blob();
-      const buf = await blob.arrayBuffer();
-      const b64 = btoa(new Uint8Array(buf).reduce((s, b) => s + String.fromCharCode(b), ""));
-      await handleAnalyze(undefined, b64, item.name);
+      const b64 = await blobToBase64(blob);
+      await handleAnalyze(b64, undefined, item.name);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "download failed");
       setAnalyzeStatus("");
     }
+  }
+
+  function handleLibraryTranscribe(file: LibFile) {
+    setPendingLibFile(file);
+    goToTab("transcribe");
+  }
+
+  function handleLibraryAnalyze(file: LibFile) {
+    goToTab("analyze");
+    handleAnalyzeLibrary(file);
   }
 
   async function signIn() {
@@ -131,7 +141,12 @@ export default function Studio({
 
       <div className="workbench">
         {tab === "library" && (
-          <Library signedIn={signedIn} onSignIn={signIn} />
+          <Library
+            signedIn={signedIn}
+            onSignIn={signIn}
+            onTranscribe={handleLibraryTranscribe}
+            onAnalyze={handleLibraryAnalyze}
+          />
         )}
 
         {tab === "transcribe" && (
@@ -140,6 +155,8 @@ export default function Studio({
             onTranscribed={onTranscribed}
             onGoToAnalyze={() => goToTab("analyze")}
             onAnalyze={handleAnalyze}
+            libraryFileToLoad={pendingLibFile}
+            onClearLibraryFile={() => setPendingLibFile(null)}
           />
         )}
 
