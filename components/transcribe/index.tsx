@@ -80,7 +80,7 @@ export default function Transcribe({
     }
   }, [libraryFileToLoad]);
 
-  async function processBlob(blob: Blob, fmtOverride?: string) {
+  async function processBlob(blob: Blob, fmtOverride?: string, sourceLibId?: string | null) {
     setResult(null);
     setShowLibPicker(false);
     setPlayhead(0);
@@ -109,9 +109,13 @@ export default function Transcribe({
 
       if (signedIn && res.wav_url && res.notes.length > 0) {
         try {
-          const audioBlob = await (await fetch(res.wav_url)).blob();
-          const { id } = await uploadToLibrary(audioName || "transcription.wav", audioBlob);
-          await saveTranscription(id, res.notes);
+          if (sourceLibId) {
+            await saveTranscription(sourceLibId, res.notes);
+          } else {
+            const audioBlob = await (await fetch(res.wav_url)).blob();
+            const { id } = await uploadToLibrary(audioName || "transcription.wav", audioBlob);
+            await saveTranscription(id, res.notes);
+          }
           setSaved(true);
         } catch {
           /* auto-save failure is non-critical */
@@ -214,7 +218,7 @@ export default function Transcribe({
       const res = await fetch(file.url);
       if (!res.ok) throw new Error(`download failed: ${res.status}`);
       const blob = await res.blob();
-      await processBlob(blob, audioFmtFromName(file.name));
+      await processBlob(blob, audioFmtFromName(file.name), file.id);
     } catch (err) {
       setState("error");
       setStatus("⚠️ " + (err instanceof Error ? err.message : "download failed"));
