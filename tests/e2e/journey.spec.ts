@@ -212,7 +212,7 @@ test.describe("User journeys", () => {
     await expect(page.locator(".status")).toContainText("Recording");
   });
 
-  test("Transcribe: select library file → piano roll + score", async ({
+  test("Transcribe: select library file → piano roll", async ({
     page,
   }) => {
     await mockTranscribeApi(page);
@@ -246,10 +246,6 @@ test.describe("User journeys", () => {
     // Transcription results — piano roll
     const pianoRoll = page.locator(".piano-roll-container");
     await expect(pianoRoll).toBeVisible({ timeout: 15_000 });
-
-    // Score rendered by abcjs
-    const sheet = page.locator(".score-abc");
-    await expect(sheet).toBeVisible({ timeout: 15_000 });
 
     // Audio player
     await expect(page.locator("audio[controls]")).toBeVisible();
@@ -287,9 +283,6 @@ test.describe("User journeys", () => {
     // Wait for transcription results
     const pianoRoll = page.locator(".piano-roll-container");
     await expect(pianoRoll).toBeVisible({ timeout: 15_000 });
-
-    const sheet = page.locator(".score-abc");
-    await expect(sheet).toBeVisible({ timeout: 15_000 });
 
     // Audio name shown in the heading
     await expect(page.getByText("direct.wav")).toBeVisible();

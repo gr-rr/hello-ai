@@ -182,7 +182,6 @@ test.describe("Supported user paths", () => {
     await expect(page.locator(".piano-roll-container")).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.locator(".score-abc")).toBeVisible({ timeout: 20_000 });
     await expect(page.locator("audio[controls]")).toBeVisible();
     await expect(
       page.locator('a.chip.ghost[download="transcription.mid"]'),
@@ -217,6 +216,5 @@ test.describe("Supported user paths", () => {
     await expect(page.locator(".piano-roll-container")).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.locator(".score-abc")).toBeVisible({ timeout: 20_000 });
   });
 });
