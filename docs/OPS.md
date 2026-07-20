@@ -18,9 +18,9 @@ Oracle VM  ── docker compose ──► backend (FastAPI :8000)
               Grafana (dashboards)
 ```
 
-The backend currently has **no GitHub Actions deploy**. Changes are picked up only when the
-container is rebuilt on the VM (see Deploy). This is the #1 cause of "my BE change didn't
-show up" — rebuild before concluding the code is wrong.
+Backend deploys run via `deploy-backend.yml` (on push to `main` for `backend/**`) and
+via `scripts/deploy.sh` on the VM. Changes are only live once the container is rebuilt on
+the VM (see Deploy) — rebuild before concluding a BE change "didn't show up".
 
 ## Environment
 
@@ -46,28 +46,6 @@ The script pulls, rebuilds the backend container, polls `GET /health/ready`, and
 **auto-rolls back to the previous commit** if the backend is not healthy within
 `HEALTH_TIMEOUT` seconds (default 60). Always tail logs after a deploy.
 
-## Logs
-
-- Backend emits **structured JSON** to stdout: `{ts, level, logger, msg, req_id, ...}`.
-  Every HTTP request gets a `x-request-id` (echoed in the response header) so you can
-  correlate a user-facing error to the exact log line.
-- View live: `docker compose logs -f backend`.
-- Opt-in Grafana/Loki (recommended for the VM):
-
-  ```bash
-  docker compose -f docker-compose.observability.yml up -d
-  # Grafana on http://<vm>:3001  (admin / $GRAFANA_PASSWORD, default "admin")
-  # Loki datasource is auto-provisioned; query: {container="music-ai-backend"}
-  ```
-
-## Health
-
-| Endpoint | Meaning |
-|---|---|
-| `GET /health` | Liveness — always `ok`. |
-| `GET /health/live` | Liveness alias. |
-| `GET /health/ready` | Readiness — `supabase: true/false`. Returns `degraded` if Supabase is unconfigured. Used by the deploy gate. |
-
 ## Restart / rollback
 
 ```bash
@@ -76,17 +54,36 @@ docker compose restart backend           # restart without rebuild
 git checkout <prev_commit> && ./scripts/deploy.sh   # manual rollback
 ```
 
-## Errors (Sentry)
+# Monitoring & Status — where do I look?
+All reachable by a human without touching code. Commands run from your machine unless marked 'on the VM'.
 
-- Backend exceptions are captured by `sentry-sdk` (FastAPI/Starlette integration).
-  Verify the backend DSN is set: `docker compose exec backend printenv SENTRY_DSN_BACKEND`.
-- Frontend client + server + edge Sentry are wired in `instrumentation.ts`,
-  `sentry.server.config.ts`, `sentry.edge.config.ts`, and `app/global-error.tsx`.
+## Sentry (errors + traces)
+Two Sentry setups, both env-gated (silent if DSN empty):
+- Frontend: `NEXT_PUBLIC_SENTRY_DSN` (Vercel project vars + `.env.local`).
+- Backend: `SENTRY_DSN_BACKEND` (falls back to `SENTRY_DSN`); set in `.env.local` on the VM (`docker-compose.yml:83`).
+Verify on VM: `docker compose exec backend printenv SENTRY_DSN_BACKEND` and `docker compose logs backend | grep sentry_initialized`.
+A DSN looks like `https://<key>@<org>.<region>.ingest.sentry.io/<project_id>`. To reach the dashboard: open https://sentry.io/ → org switcher → your org → **Issues** (exceptions) and **Performance/Traces** (latency). The org slug + project names are NOT in the repo — derive from `.env.local` DSN or your Sentry account. Backend releases tagged via `RELEASE` (default `backend@0.2.0`).
 
-## Known gaps (tracked)
+## Logs (Loki / Promtail / Grafana)
+Backend emits structured JSON to stdout (`{ts,level,logger,msg,req_id}` + `exc` on errors; per-request `{req_id,method,path,status,duration_ms}`). Every request gets `x-request-id` echoed in the response header — copy it to find the exact log line.
+Live tail (always works, on VM): `docker compose logs -f backend`.
+Grafana/Loki are opt-in: `docker compose -f docker-compose.observability.yml up -d` → Grafana on `:3001`, Loki `:3100`. If `3001` isn't reachable, `ssh -L 3001:localhost:3001 <vm-user>@<vm-ip>` then open http://localhost:3001 (admin / `$GRAFANA_PASSWORD`). Query Loki: `{container="music-ai-backend"} |= "request_failed"` or `|= "req_id=abc123"`.
 
-- No CI deploy pipeline — deploys are manual on the VM.
-- `docker-compose.yml` backend runs with `--reload` (dev). Production should use
-  `--workers 2` (or gunicorn) without `--reload`; see `scripts/deploy.sh`.
-- No metrics/OpenTelemetry yet — Sentry traces cover request latency; add OTel → Grafana
-  Tempo later if needed.
+## Health (is the backend up?)
+`curl https://gricci-testing.duckdns.org/health/live` → `{"status":"alive"}`; `/health/ready` → `{"status":"ready","supabase":true}`. First thing to check after a deploy; `ready` returns `degraded` + `supabase:false` if env vars missing.
+
+## CI (did my PR break anything?)
+Repo → Actions tab. Workflows: `build.yml` (build+vitest, blocks), `ci.yml` (lint+typecheck+ruff+pytest, blocks), `e2e.yml` (Playwright vs mocks, blocks), `argos.yml` (visual, NON-blocking), `codeql.yml`, `gitleaks.yml`, `dependency-review.yml`, `deploy-backend.yml` (push only).
+
+## Argos (visual diffs)
+`https://app.argos-ci.com` (needs `ARGOS_TOKEN` repo secret); also comments a visual diff on each PR. Non-blocking by design.
+
+## Supabase (storage/DB/auth/RLS)
+Dashboard from `.env.local` `SUPABASE_URL` (`https://<ref>.supabase.co` → supabase.com/dashboard/project/<ref>). Check buckets, `jobs`/`models` tables, Auth users, RLS policies (`supabase/migrations/`).
+
+## Links to add (owner-only — paste from your accounts, never commit tokens)
+- [ ] Sentry org slug + frontend/backend project URLs
+- [ ] Supabase project dashboard URL
+- [ ] Grafana base URL / VM IP (and whether 3001 is exposed)
+- [ ] Argos project URL
+- [ ] Backend public URL for health curls
