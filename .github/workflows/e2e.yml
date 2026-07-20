@@ -39,6 +39,8 @@ jobs:
         run: npx playwright install chromium --with-deps
       - name: Build
         run: npm run build
+        env:
+          NEXT_PUBLIC_MOCK_ENABLED: "true"
       - name: Start Next.js
         run: npm run start &
         env:
