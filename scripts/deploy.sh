@@ -70,6 +70,9 @@ ensure_repo
 
 PREV_HEAD="$(git rev-parse --short HEAD)"
 
+echo "[deploy] stopping old containers"
+docker compose -f "$COMPOSE" down --remove-orphans 2>/dev/null || true
+
 echo "[deploy] rebuilding backend"
 docker compose -f "$COMPOSE" up -d --build backend
 
