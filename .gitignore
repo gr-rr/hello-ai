@@ -49,3 +49,4 @@ design/mockups/workbench-functional.html
 
 # python virtualenv (never commit)
 .venv/
+scripts/vm-ssh-key

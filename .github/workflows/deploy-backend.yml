@@ -24,9 +24,12 @@ jobs:
           username: ${{ secrets.ORACLE_VM_USER }}
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           script: |
-            set -e
+            set -euo pipefail
+            if [ ! -d ~/hello-ai/.git ]; then
+              echo "[deploy] cloning repo"
+              rm -rf ~/hello-ai
+              git clone https://github.com/gr-rr/hello-ai.git ~/hello-ai
+            fi
             cd ~/hello-ai
-            git pull origin main
-            cd backend
-            docker compose up --build -d
-            docker image prune -f
+            chmod +x scripts/deploy.sh
+            scripts/deploy.sh
