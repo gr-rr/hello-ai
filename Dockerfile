@@ -44,4 +44,6 @@ WORKDIR /workspace
 
 USER dev
 
+ENV PATH="/home/dev/.local/bin:$PATH"
+
 CMD ["/bin/bash"]
