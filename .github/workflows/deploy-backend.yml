@@ -30,10 +30,11 @@ jobs:
             cd ~/hello-ai
             if [ ! -d .git ]; then
               echo "[deploy] re-initializing git"
-              git init
+              git init -b main
               git remote add origin https://github.com/gr-rr/hello-ai.git || git remote set-url origin https://github.com/gr-rr/hello-ai.git
               git fetch origin main
               git reset --hard origin/main
+              git branch --set-upstream-to=origin/main main
             fi
             chmod +x scripts/deploy.sh
             scripts/deploy.sh
