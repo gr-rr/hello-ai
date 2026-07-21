@@ -29,7 +29,6 @@ jobs:
             set -euo pipefail
             if [ ! -d ~/hello-ai/.git ]; then
               echo "[deploy] cloning repo"
-              rm -rf ~/hello-ai
               git clone https://github.com/gr-rr/hello-ai.git ~/hello-ai
             fi
             cd ~/hello-ai
