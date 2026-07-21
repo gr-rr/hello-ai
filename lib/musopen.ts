@@ -1,34 +1,45 @@
 export type MusopenWork = {
-  id: number;
+  id: string;
   title: string;
   composer: string;
   century: string;
   epoch: string;
   recordings: {
-    id: number;
+    id: string;
     url: string;
     duration: number;
     format: string;
   }[];
 };
 
-export type MusopenApiWork = {
-  id: number;
-  title: string;
-  composer_name: string;
-  century: string;
-  epoch: string;
-  instrument: string;
-  recordings?: {
-    id: number;
-    file_url: string;
-    file_path: string;
-    duration: number;
-    format: string;
-  }[];
+type ArchiveSearchResult = {
+  response: {
+    numFound: number;
+    docs: {
+      identifier: string;
+      title: string;
+      creator: string | string[];
+    }[];
+  };
 };
 
-const MUSOPEN_API = process.env.NEXT_PUBLIC_MUSOPEN_API || "https://api.musopen.org/v1/works";
+type ArchiveFile = {
+  name: string;
+  format: string;
+  size: string;
+  length?: string;
+};
+
+type ArchiveMetadata = {
+  metadata: {
+    identifier: string;
+    title: string;
+    creator: string | string[];
+  };
+  result: ArchiveFile[];
+};
+
+const ARCHIVE_SEARCH = "https://archive.org/advancedsearch.php";
 
 export type FetchWorksResult = {
   works: MusopenWork[];
@@ -37,39 +48,77 @@ export type FetchWorksResult = {
 
 export async function fetchWorks(limit = 30): Promise<FetchWorksResult> {
   try {
-    const res = await fetch(`${MUSOPEN_API}?limit=${limit}`);
+    const params = new URLSearchParams({
+      q: "mediatype:audio AND (collection:opensource OR collection:audiosharing) AND format:(MP3 OR FLAC OR Ogg Vorbis)",
+      fl: "identifier,title,creator",
+      rows: String(limit),
+      output: "json",
+      sort: "downloads desc",
+    });
+    const res = await fetch(`${ARCHIVE_SEARCH}?${params}`);
     if (!res.ok) {
       return {
         works: [],
-        error: `MusOpen API unavailable (${res.status}). Browse the catalog at https://musopen.org/music instead.`,
+        error: `Internet Archive API unavailable (${res.status}). Browse https://archive.org/audio instead.`,
       };
     }
-    const json = await res.json();
-    const data: MusopenApiWork[] = json?.data ?? json?.works ?? [];
-    if (!Array.isArray(data) || data.length === 0) return { works: [] };
-    return { works: data.map(normalizeWork) };
+    const json: ArchiveSearchResult = await res.json();
+    const docs = json?.response?.docs ?? [];
+    if (docs.length === 0) return { works: [] };
+
+    const works = await Promise.all(docs.map(normalizeSearchResult));
+    return { works };
   } catch (err) {
     return {
       works: [],
-      error: `MusOpen API unreachable. ${err instanceof Error ? err.message : ""}`.trim(),
+      error: `Internet Archive unreachable. ${err instanceof Error ? err.message : ""}`.trim(),
     };
   }
 }
 
-function normalizeWork(raw: MusopenApiWork): MusopenWork {
+async function normalizeSearchResult(doc: ArchiveSearchResult["response"]["docs"][0]): Promise<MusopenWork> {
+  const creator = Array.isArray(doc.creator) ? doc.creator[0] : doc.creator ?? "Unknown";
+  const files = await fetchItemFiles(doc.identifier);
   return {
-    id: raw.id,
-    title: raw.title,
-    composer: raw.composer_name,
-    century: raw.century ?? "",
-    epoch: raw.epoch ?? "",
-    recordings: (raw.recordings ?? []).map((r) => ({
-      id: r.id,
-      url: r.file_url || `https://api.musopen.org${r.file_path}`,
-      duration: r.duration ?? 0,
-      format: r.format ?? "mp3",
-    })),
+    id: doc.identifier,
+    title: doc.title || doc.identifier,
+    composer: creator,
+    century: "",
+    epoch: "",
+    recordings: files,
   };
+}
+
+async function fetchItemFiles(identifier: string): Promise<MusopenWork["recordings"]> {
+  try {
+    const res = await fetch(`https://archive.org/metadata/${identifier}/files`);
+    if (!res.ok) return [];
+    const json = await res.json();
+    const files: ArchiveFile[] = json?.result ?? [];
+    return files
+      .filter((f) => isAudioFormat(f.format) && !f.name.includes("_spectrogram"))
+      .slice(0, 3)
+      .map((f) => ({
+        id: `${identifier}/${f.name}`,
+        url: `https://archive.org/download/${identifier}/${encodeURIComponent(f.name)}`,
+        duration: f.length ? parseFloat(f.length) : 0,
+        format: extFromFormat(f.format),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function isAudioFormat(format: string): boolean {
+  const lower = format.toLowerCase();
+  return lower.includes("mp3") || lower.includes("flac") || lower.includes("ogg") || lower.includes("vorbis");
+}
+
+function extFromFormat(format: string): string {
+  const lower = format.toLowerCase();
+  if (lower.includes("flac")) return "flac";
+  if (lower.includes("ogg") || lower.includes("vorbis")) return "ogg";
+  return "mp3";
 }
 
 export function fetchFirstRecording(work: MusopenWork): MusopenWork["recordings"][number] | null {
