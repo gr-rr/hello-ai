@@ -759,7 +759,8 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                 data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
             except Exception as e:
                 err_msg = str(e)
-                if "404" in err_msg or "not_found" in err_msg.lower() or "Object not found" in err_msg:
+                err_lower = err_msg.lower()
+                if "404" in err_msg or "not_found" in err_lower or "Object not found" in err_msg:
                     raise HTTPException(status_code=404, detail="file not found in library") from e
                 raise HTTPException(status_code=500, detail="storage error") from e
             raw = data if isinstance(data, bytes | bytearray) else data.read()
