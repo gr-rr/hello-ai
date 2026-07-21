@@ -9,7 +9,7 @@ import {
   type LibFile,
   type Transcription,
 } from "@/lib/music";
-import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
+import { fetchWorks, searchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
@@ -50,6 +50,7 @@ export default function Library({
   const [musopenWorks, setMusopenWorks] = useState<MusopenWork[]>([]);
   const [musopenOpen, setMusopenOpen] = useState(false);
   const [musopenLoading, setMusopenLoading] = useState(false);
+  const [archiveQuery, setArchiveQuery] = useState("");
   const [importingTrack, setImportingTrack] = useState<string | null>(null);
 
   const dropRef = useRef<HTMLDivElement>(null);
@@ -253,6 +254,23 @@ export default function Library({
     }
   }
 
+  async function doArchiveSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!archiveQuery.trim()) return;
+    setMusopenLoading(true);
+    setMusopenWorks([]);
+    setStatus("Searching…");
+    try {
+      const { works, error } = await searchWorks(archiveQuery);
+      setMusopenWorks(works);
+      setStatus(error ? "⚠️ " + error : `${works.length} tracks found`);
+    } catch (err) {
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "Search failed"));
+    } finally {
+      setMusopenLoading(false);
+    }
+  }
+
   async function importFromArchive(work: MusopenWork) {
     const recording = fetchFirstRecording(work);
     if (!recording) {
@@ -333,7 +351,19 @@ export default function Library({
       )}
 
       {musopenOpen && (
-        <div className="card" style={{ maxHeight: 280, overflowY: "auto" }}>
+        <div className="card" style={{ maxHeight: 320, overflowY: "auto" }}>
+          <form onSubmit={doArchiveSearch} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <input
+              className="input"
+              placeholder="Search music (e.g. Beethoven, piano, jazz)"
+              value={archiveQuery}
+              onChange={(e) => setArchiveQuery(e.target.value)}
+              style={{ flex: 1, fontSize: "var(--fs-sm)" }}
+            />
+            <button className="chip" type="submit" disabled={musopenLoading || !archiveQuery.trim()}>
+              {musopenLoading ? "…" : "Search"}
+            </button>
+          </form>
           {musopenWorks.length === 0 ? (
             <p className="muted" style={{ fontSize: "var(--fs-sm)", margin: 0 }}>
               No results. Try{" "}

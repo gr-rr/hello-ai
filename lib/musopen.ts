@@ -46,10 +46,19 @@ export type FetchWorksResult = {
   error?: string;
 };
 
+const MUSIC_BASE = "mediatype:audio AND format:(MP3 OR FLAC OR Ogg Vorbis)";
+
 export async function fetchWorks(limit = 30): Promise<FetchWorksResult> {
+  return searchWorks("classical piano orchestral", limit);
+}
+
+export async function searchWorks(query: string, limit = 20): Promise<FetchWorksResult> {
   try {
+    const q = query.trim()
+      ? `${MUSIC_BASE} AND (${query.trim()})`
+      : `${MUSIC_BASE} AND (classical OR piano OR orchestral OR symphony OR sonata)`;
     const params = new URLSearchParams({
-      q: "mediatype:audio AND (collection:opensource OR collection:audiosharing) AND format:(MP3 OR FLAC OR Ogg Vorbis)",
+      q,
       fl: "identifier,title,creator",
       rows: String(limit),
       output: "json",
