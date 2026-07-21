@@ -36,3 +36,6 @@ design/mockups/workbench-functional.html
 
 .credentials
 .infra-guide.md
+
+# python virtualenv (never commit)
+.venv/
