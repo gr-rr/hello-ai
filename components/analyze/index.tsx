@@ -112,9 +112,9 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
               <span key={i} className="chip">{c.label}</span>
             ))}
           </div>
-          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "4px 0 0" }}>
-            {progression.length} segments · {progression[0].start.toFixed(1)}s–{progression[progression.length - 1].end.toFixed(1)}s
-          </p>
+            <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "var(--s-1) 0 0" }}>
+              {progression.length} segments · {progression[0].start.toFixed(1)}s–{progression[progression.length - 1].end.toFixed(1)}s
+            </p>
         </>
       )}
 
@@ -137,7 +137,7 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16, borderColor: "var(--border-strong)", color: "var(--muted)", fontSize: "var(--fs-sm)", lineHeight: 1.5 }}>
+      <div className="card" style={{ marginTop: "var(--s-4)", borderColor: "var(--border-strong)", color: "var(--muted)", fontSize: "var(--fs-sm)", lineHeight: "var(--line-height-base)" }}>
         {theoryText}
       </div>
     </div>

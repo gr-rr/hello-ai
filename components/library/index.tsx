@@ -7,6 +7,7 @@ import {
   listLibrary,
   deleteFromLibrary,
   type LibFile,
+  type Transcription,
 } from "@/lib/music";
 import { fetchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
@@ -20,17 +21,31 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function normalizeTrackName(name: string): string {
+  return name
+    .replace(/^\d+-/, "")
+    .replace(/_/g, " ")
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .toLowerCase();
+}
+
 export default function Library({
   signedIn,
   onSignIn,
   onTranscribe,
   onAnalyze,
+  transcriptions,
 }: {
   signedIn?: boolean;
   onSignIn?: () => void;
   onTranscribe?: (file: LibFile) => void;
   onAnalyze?: (file: LibFile) => void;
+  transcriptions?: Transcription[];
 }) {
+  const transcribedTitles = new Set(
+    (transcriptions ?? []).map((t) => normalizeTrackName(t.title)),
+  );
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<LibFile[]>([]);
@@ -281,7 +296,7 @@ export default function Library({
 
   return (
     <div className="card">
-      <h3 className="card-title"><span className="glyph">📁</span> Library</h3>
+      <h3 className="card-title"><span className="glyph">▤</span> Library</h3>
 
       <div
         ref={dropRef}
@@ -302,7 +317,7 @@ export default function Library({
         />
         <span className="drop-icon">+</span>
         <span className="muted">{signedIn ? "Drop audio to save to your library" : "Sign in to save audio to your library"}</span>
-        <span className="muted" style={{ fontSize: 12 }}>WAV · MP3 · M4A</span>
+        <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>WAV · MP3 · M4A</span>
       </div>
 
       <div className="toolbar">
@@ -314,12 +329,12 @@ export default function Library({
           onClick={openMusopen}
           disabled={busy || !!importingTrack}
         >
-          {musopenLoading ? "⏳" : musopenOpen ? "✕ Close" : "🎵 MusOpen"}
+          {musopenLoading ? "Loading…" : musopenOpen ? "✕ Close" : "MusOpen"}
         </button>
       </div>
 
       {recording && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginTop: "var(--s-2)" }}>
           <span className="record-dot" />
           <span className="muted" style={{ fontFamily: "monospace" }}>
             {formatTime(recordTimer)}
@@ -330,8 +345,8 @@ export default function Library({
       {musopenOpen && (
         <div className="card" style={{ maxHeight: 280, overflowY: "auto" }}>
           {musopenWorks.length === 0 ? (
-            <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-              MusOpen API currently unavailable — visit{" "}
+              <p className="muted" style={{ fontSize: "var(--fs-sm)", margin: 0 }}>
+                MusOpen API currently unavailable — visit{" "}
               <a href="https://musopen.org/music" target="_blank" rel="noreferrer">musopen.org/music</a>.
             </p>
           ) : (
@@ -349,7 +364,7 @@ export default function Library({
                       opacity: !hasRecording || importingTrack !== null ? 0.5 : 1,
                     }}
                   >
-                    <div style={{ fontSize: 13, lineHeight: 1.4 }}>
+                     <div style={{ fontSize: "var(--fs-sm)", lineHeight: 1.4 }}>
                       <span style={{ fontWeight: 500 }}>{w.composer}</span>
                       <span className="muted"> — </span>
                       <span>{w.title}</span>
@@ -360,7 +375,7 @@ export default function Library({
                       disabled={!hasRecording || !!importingTrack}
                       onClick={() => importFromMusopen(w)}
                     >
-                      {importingTrack === w.title ? "⏳" : hasRecording ? "Import" : "No audio"}
+                      {importingTrack === w.title ? "Importing…" : hasRecording ? "Import" : "No audio"}
                     </button>
                   </div>
                 );
@@ -373,14 +388,14 @@ export default function Library({
       <audio ref={audioRef} crossOrigin="anonymous" style={{ display: "none" }} />
 
       {playing && nowPlaying && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-            <span style={{ fontWeight: 500, fontSize: 13 }}>{nowPlaying.name}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="muted" style={{ fontFamily: "monospace", fontSize: 12 }}>
+        <div className="card" style={{ marginTop: "var(--s-3)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--s-1)" }}>
+            <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }}>{nowPlaying.name}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
+              <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
                 {formatTime(currentTime)} / {formatTime(duration || 0)}
               </span>
-              <button className="icon-btn ghost" onClick={stopAudio} title="Close" style={{ fontSize: 13, padding: 0, lineHeight: 1 }}>✕</button>
+              <button className="icon-btn ghost" onClick={stopAudio} title="Close" style={{ fontSize: "var(--fs-xs)", padding: 0, lineHeight: 1 }}>✕</button>
             </div>
           </div>
           <div
@@ -428,13 +443,13 @@ export default function Library({
                       {playing === f.id && !paused ? "⏸" : "▶"}
                     </button>
                     {onTranscribe && (
-                      <button className="chip" onClick={() => onTranscribe(f)}>
-                        🎼 Transcribe
+                      <button className="icon-btn" onClick={() => onTranscribe(f)}>
+                        Transcribe
                       </button>
                     )}
                     {onAnalyze && (
-                      <button className="chip" onClick={() => onAnalyze(f)}>
-                        📊 Analyze
+                      <button className="icon-btn" onClick={() => onAnalyze(f)}>
+                        Analyze
                       </button>
                     )}
                     <button className="icon-btn ghost danger" onClick={() => onDelete(f.id, f.name)} disabled={busy}>
@@ -444,7 +459,11 @@ export default function Library({
                 </div>
                 <div className="track-artifacts">
                   <span className="artifact"><span className="dot" /> Original audio</span>
-                  <span className="artifact pending"><span className="dot" /> MIDI — transcribe to generate</span>
+                  {transcribedTitles.has(normalizeTrackName(f.name)) ? (
+                    <span className="artifact done"><span className="dot" /> MIDI — transcribed</span>
+                  ) : (
+                    <span className="artifact pending"><span className="dot" /> MIDI — transcribe to generate</span>
+                  )}
                 </div>
               </div>
             ))
