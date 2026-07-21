@@ -33,7 +33,6 @@ export default function Studio({
   const [analysisError, setAnalysisError] = useState("");
   const [analyzeStatus, setAnalyzeStatus] = useState("");
   const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
-  const [showAnalyzeLibPicker, setShowAnalyzeLibPicker] = useState(false);
   const [pendingLibFile, setPendingLibFile] = useState<LibFile | null>(null);
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
 
@@ -45,6 +44,12 @@ export default function Studio({
       listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
     }
   }, [tab, signedIn]);
+
+  function refreshTranscriptions() {
+    if (signedIn) {
+      listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
+    }
+  }
 
   function onTranscribed(result: TranscribeResult, name: string) {
     setLastResult(result);
@@ -79,7 +84,6 @@ export default function Studio({
   }
 
   async function handleAnalyzeLibrary(item: LibFile) {
-    setShowAnalyzeLibPicker(false);
     setAudioName(item.name);
     await handleAnalyze(undefined, undefined, item.name, item.id);
   }
@@ -157,12 +161,43 @@ export default function Studio({
             onAnalyze={handleAnalyze}
             libraryFileToLoad={pendingLibFile}
             onClearLibraryFile={() => setPendingLibFile(null)}
+            onTranscriptionSaved={refreshTranscriptions}
           />
         )}
 
         {tab === "analyze" && (
           <div className="card">
             <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
+
+            {!analysis && !analyzeStatus && (
+              <div className="section-label">Select a transcribed track</div>
+            )}
+
+            {!analysis && !analyzeStatus && analyzeLibFiles.filter(f => f.notes?.length).length === 0 && (
+              <p className="muted" style={{ textAlign: "center", margin: "var(--s-4) 0" }}>
+                No transcribed tracks in your library — transcribe one first.
+              </p>
+            )}
+
+            {!analysis && !analyzeStatus && analyzeLibFiles.filter(f => f.notes?.length).length > 0 && (
+              <div style={{ display: "flex", gap: "var(--s-2)", marginBottom: "var(--s-4)" }}>
+                <select
+                  className="select"
+                  value=""
+                  onChange={(e) => {
+                    const file = analyzeLibFiles.find(f => f.id === e.target.value);
+                    if (file) handleAnalyzeLibrary(file);
+                  }}
+                  style={{ flex: 1 }}
+                >
+                  <option value="">-- Pick a track --</option>
+                  {analyzeLibFiles.filter(f => f.notes?.length).map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {analyzeStatus && <p className="status" style={{ marginBottom: "var(--s-3)" }}>{analyzeStatus}</p>}
 
             {analysisError && !analysis && !analyzeStatus && (
@@ -171,47 +206,20 @@ export default function Studio({
               </div>
             )}
 
-            {!analysis && !analyzeStatus && !showAnalyzeLibPicker && (
-              <div className="source-grid" style={{ marginBottom: "var(--s-4)" }}>
-                <div
-                  className={`source-card${analyzeLibFiles.length > 0 ? "" : " disabled"}`}
-                  onClick={() => analyzeLibFiles.length > 0 && setShowAnalyzeLibPicker(true)}
-                >
-                  <span className="sc-icon">▤</span>
-                  <span className="sc-label">From library</span>
-                  <span className="sc-hint">
-                    {analyzeLibFiles.length === 0 ? "No transcribed songs" : "Pick a track"}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {showAnalyzeLibPicker && (
+            {analysis && (
               <>
-                <div className="section-label">Pick a saved track</div>
-                {analyzeLibFiles.map((f) => (
-                  <div key={f.id} className="track" style={{ cursor: "pointer" }} onClick={() => handleAnalyzeLibrary(f)}>
-                    <div className="track-head">
-                      <div className="track-name">{f.name}</div>
-                      <div className="track-actions">
-                        <span className="chip">Analyze</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div className="toolbar">
-                  <button className="btn btn-ghost" onClick={() => setShowAnalyzeLibPicker(false)}>Back</button>
+                <Analysis
+                  analysis={analysis}
+                  notes={lastResult?.notes ?? []}
+                  audioName={audioName}
+                  numNotes={lastResult?.num_notes ?? 0}
+                />
+                <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
+                  <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); }}>
+                    ← Analyze another track
+                  </button>
                 </div>
               </>
-            )}
-
-            {analysis && (
-              <Analysis
-                analysis={analysis}
-                notes={lastResult?.notes ?? []}
-                audioName={audioName}
-                numNotes={lastResult?.num_notes ?? 0}
-              />
             )}
           </div>
         )}
