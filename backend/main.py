@@ -682,8 +682,8 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         "wav_base64": base64.b64encode(wav).decode("ascii"),
     }
     if req.upload:
-        midi_path = f"midi/{uuid.uuid4().hex}.mid"
-        wav_path = f"midi/{uuid.uuid4().hex}.wav"
+        midi_path = f"midi/backend/{uuid.uuid4().hex}.mid"
+        wav_path = f"midi/backend/{uuid.uuid4().hex}.wav"
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
