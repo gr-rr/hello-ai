@@ -21,15 +21,6 @@ function formatSize(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function normalizeTrackName(name: string): string {
-  return name
-    .replace(/^\d+-/, "")
-    .replace(/_/g, " ")
-    .replace(/\.[^.]+$/, "")
-    .trim()
-    .toLowerCase();
-}
-
 export default function Library({
   signedIn,
   onSignIn,
@@ -43,8 +34,8 @@ export default function Library({
   onAnalyze?: (file: LibFile) => void;
   transcriptions?: Transcription[];
 }) {
-  const transcribedTitles = new Set(
-    (transcriptions ?? []).map((t) => normalizeTrackName(t.title)),
+  const transcribedIds = new Set(
+    (transcriptions ?? []).map((t) => (t.id.split("/").pop() ?? "").replace(/\.[^.]+$/, "")),
   );
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -459,7 +450,7 @@ export default function Library({
                 </div>
                 <div className="track-artifacts">
                   <span className="artifact"><span className="dot" /> Original audio</span>
-                  {transcribedTitles.has(normalizeTrackName(f.name)) ? (
+                  {transcribedIds.has((f.id.split("/").pop() ?? "").replace(/\.[^.]+$/, "")) ? (
                     <span className="artifact done"><span className="dot" /> MIDI — transcribed</span>
                   ) : (
                     <span className="artifact pending"><span className="dot" /> MIDI — transcribe to generate</span>
