@@ -224,27 +224,27 @@ export default function Library({
     setRecordTimer(0);
   }
 
-  async function openMusopen() {
+  async function openArchive() {
     if (musopenOpen) { setMusopenOpen(false); return; }
     setMusopenLoading(true);
     setMusopenWorks([]);
-    setStatus("Loading MusOpen…");
+    setStatus("Loading Internet Archive…");
     try {
       const { works, error } = await fetchWorks();
       setMusopenWorks(works);
       setMusopenOpen(true);
-      setStatus(error ? "⚠️ " + error : `${works.length} works loaded`);
+      setStatus(error ? "⚠️ " + error : `${works.length} tracks loaded`);
     } catch (err) {
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "MusOpen failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "Internet Archive failed"));
     } finally {
       setMusopenLoading(false);
     }
   }
 
-  async function importFromMusopen(work: MusopenWork) {
+  async function importFromArchive(work: MusopenWork) {
     const recording = fetchFirstRecording(work);
     if (!recording) {
-      setStatus("⚠️ No recording for " + work.title);
+      setStatus("⚠️ No audio for " + work.title);
       return;
     }
     setImportingTrack(work.title);
@@ -253,8 +253,7 @@ export default function Library({
       const res = await fetch(recording.url);
       if (!res.ok) throw new Error(`Download failed: ${res.status}`);
       const blob = await res.blob();
-      const ext = recording.format === "wav" ? "wav" : "mp3";
-      const name = `${work.composer} - ${work.title}.${ext}`.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
+      const name = `${work.composer} - ${work.title}.${recording.format}`.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
       await uploadToLibrary(name, blob);
       setStatus(`✓ Imported ${work.title}`);
       await refresh();
@@ -305,10 +304,10 @@ export default function Library({
         </button>
         <button
           className="icon-btn ghost"
-          onClick={openMusopen}
+          onClick={openArchive}
           disabled={busy || !!importingTrack}
         >
-          {musopenLoading ? "⏳" : musopenOpen ? "✕ Close" : "🎵 MusOpen"}
+          {musopenLoading ? "⏳" : musopenOpen ? "✕ Close" : "🎵 Internet Archive"}
         </button>
       </div>
 
@@ -325,12 +324,12 @@ export default function Library({
         <div className="card" style={{ maxHeight: 280, overflowY: "auto" }}>
           {musopenWorks.length === 0 ? (
             <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-              MusOpen API currently unavailable — visit{" "}
-              <a href="https://musopen.org/music" target="_blank" rel="noreferrer">musopen.org/music</a>.
+              No results found. Try{" "}
+              <a href="https://archive.org/audio" target="_blank" rel="noreferrer">archive.org/audio</a>.
             </p>
           ) : (
             <>
-              <div className="section-label">Select a work to import:</div>
+              <div className="section-label">Select a track to import:</div>
               {musopenWorks.map((w) => {
                 const hasRecording = fetchFirstRecording(w) !== null;
                 return (
@@ -352,7 +351,7 @@ export default function Library({
                     <button
                       className="chip"
                       disabled={!hasRecording || !!importingTrack}
-                      onClick={() => importFromMusopen(w)}
+                      onClick={() => importFromArchive(w)}
                     >
                       {importingTrack === w.title ? "⏳" : hasRecording ? "Import" : "No audio"}
                     </button>
