@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, listLibrary, listTranscriptions, blobToBase64, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { analyzeAudio, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -81,17 +81,7 @@ export default function Studio({
   async function handleAnalyzeLibrary(item: LibFile) {
     setShowAnalyzeLibPicker(false);
     setAudioName(item.name);
-    setAnalyzeStatus("Downloading MIDI…");
-    try {
-      const res = await fetch(item.url);
-      if (!res.ok) throw new Error(`download failed: ${res.status}`);
-      const blob = await res.blob();
-      const b64 = await blobToBase64(blob);
-      await handleAnalyze(undefined, b64, item.name, item.id);
-    } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : "download failed");
-      setAnalyzeStatus("");
-    }
+    await handleAnalyze(undefined, undefined, item.name, item.id);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
@@ -226,8 +216,6 @@ export default function Studio({
           </div>
         )}
       </div>
-
-      <div className="footer">basic-pitch · FluidSynth · abcjs · Supabase</div>
 
       <div className="toast" id="toast" />
     </div>
