@@ -107,9 +107,9 @@ def _valid_library_key(storage_path: str) -> str | None:
     if not storage_path or ".." in storage_path:
         return None
     if _LIBRARY_KEY_RE.match(storage_path):
-        return storage_path[len("library/"):]
+        return storage_path[len("library/") :]
     if _MIDI_KEY_RE.match(storage_path):
-        return storage_path[len("midi/"):]
+        return storage_path[len("midi/") :]
     return None
 
 
