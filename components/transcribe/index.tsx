@@ -41,6 +41,7 @@ export default function Transcribe({
   onAnalyze,
   libraryFileToLoad,
   onClearLibraryFile,
+  onTranscriptionSaved,
 }: {
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
@@ -48,6 +49,7 @@ export default function Transcribe({
   onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
+  onTranscriptionSaved?: () => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -86,6 +88,7 @@ export default function Transcribe({
     setResult(null);
     setShowLibPicker(false);
     setPlayhead(0);
+    setWasLibraryFile(false);
     try {
       const b64 = await blobToBase64(blob);
       const fmt = fmtOverride ?? audioFmtFromBlob(blob);
@@ -119,6 +122,7 @@ export default function Transcribe({
             await saveTranscription(id, res.notes);
           }
           setSaved(true);
+          onTranscriptionSaved?.();
         } catch {
           /* auto-save failure is non-critical */
         }
@@ -171,6 +175,7 @@ export default function Transcribe({
   }
 
   const [saved, setSaved] = useState(false);
+  const [wasLibraryFile, setWasLibraryFile] = useState(false);
 
   function reset() {
     setState("idle");
@@ -181,6 +186,7 @@ export default function Transcribe({
     setShowLibPicker(false);
     setPlayhead(0);
     setSaved(false);
+    setWasLibraryFile(false);
   }
 
   async function saveToLibrary() {
@@ -193,6 +199,7 @@ export default function Transcribe({
         await saveTranscription(id, result.notes);
       }
       setSaved(true);
+      onTranscriptionSaved?.();
       setStatus("✓ Saved to library");
     } catch (err) {
       setStatus("⚠️ " + (err instanceof Error ? err.message : "save failed"));
@@ -202,6 +209,7 @@ export default function Transcribe({
   async function onSelectLibraryFile(file: LibFile) {
     setAudioName(file.name);
     setShowLibPicker(false);
+    setWasLibraryFile(true);
 
     if (file.notes && file.notes.length > 0) {
       setResult({
@@ -229,6 +237,7 @@ export default function Transcribe({
         try {
           await saveTranscription(file.id, res.notes);
           setSaved(true);
+          onTranscriptionSaved?.();
         } catch {
           /* auto-save failure is non-critical */
         }
@@ -329,7 +338,7 @@ export default function Transcribe({
                   </button>
                 )}
               {saved && (
-                <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
+                <span className="chip" style={{ cursor: "default" }}>{wasLibraryFile ? "✓ Transcribed" : "✓ Saved"}</span>
               )}
               {onGoToAnalyze && onAnalyze && (result?.wav_base64 || result?.midi_base64) && (
                   <button
