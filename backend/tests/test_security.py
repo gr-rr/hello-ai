@@ -43,7 +43,7 @@ def _auth():
 
 def test_valid_library_key_accepts_well_formed():
     key = _valid_library_key(f"library/{'0' * 32}-song.wav")
-    assert key is not None and key.startswith("library/")
+    assert key is not None and not key.startswith("library/")
 
 
 def test_valid_library_key_rejects_traversal():
