@@ -215,15 +215,27 @@ export default function Transcribe({
       return;
     }
 
-    setStatus("Downloading…");
+    setState("transcribing");
+    setStatus("Transcribing from library…");
     try {
-      const res = await fetch(file.url);
-      if (!res.ok) throw new Error(`download failed: ${res.status}`);
-      const blob = await res.blob();
-      await processBlob(blob, audioFmtFromName(file.name), file.id);
+      const res = await transcribeAudio(undefined, audioFmtFromName(file.name), file.id);
+      setResult(res);
+      setAnalyzeBase64(res.wav_base64 ?? "");
+      setState("populated");
+      setStatus(`${res.num_notes} notes extracted`);
+      onTranscribed?.(res, audioName);
+
+      if (signedIn && res.notes.length > 0) {
+        try {
+          await saveTranscription(file.id, res.notes);
+          setSaved(true);
+        } catch {
+          /* auto-save failure is non-critical */
+        }
+      }
     } catch (err) {
       setState("error");
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "download failed"));
+      setStatus("⚠️ " + (err instanceof Error ? err.message : "transcription failed"));
     }
   }
 
