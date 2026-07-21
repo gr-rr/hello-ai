@@ -34,6 +34,13 @@ function getDiatonicChords(tonic: string, mode: string) {
   });
 }
 
+const CADENCE_COLORS: Record<string, string> = {
+  authentic: "var(--accent)",
+  plagal: "#6ee7b7",
+  half: "#fbbf24",
+  deceptive: "#f87171",
+};
+
 export default function Analysis({ analysis, notes, audioName, numNotes }: Props) {
   if (!analysis?.key) {
     return (
@@ -63,6 +70,11 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
       const label = q === "M" ? c.root : q === "m" ? `${c.root}m` : `${c.root}${q}`;
       return { label, start: c.start, end: c.end };
     });
+
+  const romanNumerals = analysis.roman_numerals ?? [];
+  const cadences = analysis.cadences ?? [];
+  const modulations = analysis.modulations ?? [];
+  const voiceLeading = analysis.voice_leading;
 
   return (
     <div>
@@ -96,6 +108,96 @@ export default function Analysis({ analysis, notes, audioName, numNotes }: Props
           )}
         </div>
       </div>
+
+      {romanNumerals.length > 0 && (
+        <>
+          <div className="section-label">Roman numeral analysis</div>
+          <div className="chips" style={{ flexWrap: "wrap" }}>
+            {romanNumerals.map((rn, i) => {
+              const cadMatch = cadences.find((c) => Math.abs(c.position - rn.start) < 0.5);
+              return (
+                <span
+                  key={i}
+                  className="chip"
+                  style={cadMatch ? {
+                    borderColor: CADENCE_COLORS[cadMatch.type] ?? "var(--border-strong)",
+                    boxShadow: `0 0 6px ${CADENCE_COLORS[cadMatch.type] ?? "var(--border-strong)"}`,
+                  } : undefined}
+                  title={cadMatch ? `Cadence: ${cadMatch.type} (${cadMatch.chords.join(" → ")})` : undefined}
+                >
+                  {rn.figure}
+                  {cadMatch && (
+                    <span style={{
+                      marginLeft: 4,
+                      fontSize: "var(--fs-xs)",
+                      color: CADENCE_COLORS[cadMatch.type],
+                      fontWeight: 600,
+                    }}>
+                      {cadMatch.type[0].toUpperCase()}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "var(--s-1) 0 0" }}>
+            {romanNumerals.length} chords analyzed · cadences highlighted with colored borders
+          </p>
+        </>
+      )}
+
+      {cadences.length > 0 && (
+        <>
+          <div className="section-label">Cadences</div>
+          <div className="chips">
+            {cadences.map((c, i) => (
+              <span
+                key={i}
+                className="chip"
+                style={{
+                  borderColor: CADENCE_COLORS[c.type] ?? "var(--border)",
+                  color: CADENCE_COLORS[c.type] ?? "var(--text)",
+                }}
+              >
+                {c.type} ({c.chords.join(" → ")})
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {modulations.length > 0 && (
+        <>
+          <div className="section-label">Modulations</div>
+          <div className="chips">
+            {modulations.map((m, i) => (
+              <span key={i} className="chip">
+                {m.from_key} → {m.to_key}
+                <span className="muted" style={{ marginLeft: 4, fontSize: "var(--fs-xs)" }}>
+                  @ {m.position.toFixed(1)}s
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {voiceLeading && (
+        <>
+          <div className="section-label">Voice leading</div>
+          <div className="stat-grid">
+            {(["contrary", "parallel", "oblique", "similar"] as const).map((motion) => (
+              <div key={motion} className="stat">
+                <span className="s-label">{motion}</span>
+                <span className="s-value">{Math.round(voiceLeading[motion] * 100)}%</span>
+              </div>
+            ))}
+          </div>
+          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "var(--s-1) 0 0" }}>
+            {voiceLeading.motion_summary}
+          </p>
+        </>
+      )}
 
       <div className="section-label">Diatonic chords</div>
       <div className="chips">

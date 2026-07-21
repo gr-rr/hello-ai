@@ -14,6 +14,8 @@ import {
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
+import ChromaHeatmap from "@/components/ChromaHeatmap";
+import Tonnetz from "@/components/Tonnetz";
 
 type State = "idle" | "enhancing" | "transcribing" | "populated" | "error";
 
@@ -360,6 +362,13 @@ export default function Transcribe({
           )}
 
           {result.wav_url && <Spectrogram url={result.wav_url} />}
+
+          {result.notes.length > 0 && (
+            <>
+              <ChromaHeatmap notes={result.notes} />
+              <Tonnetz notes={result.notes} />
+            </>
+          )}
         </>
       )}
 
