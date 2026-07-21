@@ -603,7 +603,7 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_op
         if not key:
             raise HTTPException(status_code=400, detail="invalid library_path")
         try:
-            data = sb.storage.from_("library").download(key[len("library/") :])
+            data = sb.storage.from_("library").download(key)
         except Exception as e:
             err_msg = str(e)
             if "404" in err_msg or "not_found" in err_msg.lower() or "Object not found" in err_msg:
@@ -652,7 +652,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         if not key:
             raise HTTPException(status_code=400, detail="invalid library_path")
         try:
-            data = sb.storage.from_("library").download(key[len("library/") :])
+            data = sb.storage.from_("library").download(key)
         except Exception as e:
             err_msg = str(e)
             if "404" in err_msg or "not_found" in err_msg.lower() or "Object not found" in err_msg:
@@ -682,8 +682,8 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         "wav_base64": base64.b64encode(wav).decode("ascii"),
     }
     if req.upload:
-        midi_path = f"midi/{uuid.uuid4().hex}.mid"
-        wav_path = f"midi/{uuid.uuid4().hex}.wav"
+        midi_path = f"midi/backend/{uuid.uuid4().hex}.mid"
+        wav_path = f"midi/backend/{uuid.uuid4().hex}.wav"
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
@@ -756,7 +756,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                 raise HTTPException(status_code=400, detail="invalid library_path")
             bucket = "midi" if req.library_path.startswith("midi/") else "library"
             try:
-                data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
+                data = sb.storage.from_(bucket).download(key)
             except Exception as e:
                 err_msg = str(e)
                 err_lower = err_msg.lower()
