@@ -11,7 +11,7 @@ REPO_URL="https://github.com/gr-rr/hello-ai.git"
 COMPOSE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 HEALTH_URL="${BACKEND_URL}/health/ready"
-MAX_WAIT="${HEALTH_TIMEOUT:-60}"
+MAX_WAIT="${HEALTH_TIMEOUT:-120}"
 
 # --- ensure repo exists and is usable ---
 ensure_repo() {
@@ -83,6 +83,8 @@ until curl -fsS "$HEALTH_URL" >/dev/null 2>&1; do
   elapsed=$((elapsed + 2))
   if [ "$elapsed" -ge "$MAX_WAIT" ]; then
     echo "[deploy] health check failed after ${MAX_WAIT}s; rolling back to ${PREV_HEAD}" >&2
+    echo "[deploy] container logs:" >&2
+    docker compose -f "$COMPOSE" logs --tail=30 backend 2>&1 >&2 || true
     git checkout -q "$PREV_HEAD"
     docker compose -f "$COMPOSE" up -d --build backend
     exit 1
