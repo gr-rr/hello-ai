@@ -34,7 +34,8 @@ jobs:
               git remote add origin https://github.com/gr-rr/hello-ai.git || git remote set-url origin https://github.com/gr-rr/hello-ai.git
               git fetch origin main
               git reset --hard origin/main
-              git branch --set-upstream-to=origin/main main
             fi
+            git branch -m master main 2>/dev/null || true
+            git branch --set-upstream-to=origin/main main 2>/dev/null || true
             chmod +x scripts/deploy.sh
             scripts/deploy.sh
