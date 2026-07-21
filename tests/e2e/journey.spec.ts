@@ -17,7 +17,7 @@ test.describe("User journeys", () => {
     await expect(
       page.getByRole("button", { name: /Record/ }),
     ).toBeVisible();
-    await expect(page.getByText(/MusOpen/i)).toBeVisible();
+    await expect(page.getByText(/Internet Archive/i)).toBeVisible();
     await expect(page.getByText(/No tracks yet/i)).toBeVisible();
   });
 
