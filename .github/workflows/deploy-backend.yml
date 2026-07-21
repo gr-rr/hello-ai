@@ -27,10 +27,13 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           script: |
             set -euo pipefail
-            if [ ! -d ~/hello-ai/.git ]; then
-              echo "[deploy] cloning repo"
-              git clone https://github.com/gr-rr/hello-ai.git ~/hello-ai
-            fi
             cd ~/hello-ai
+            if [ ! -d .git ]; then
+              echo "[deploy] re-initializing git"
+              git init
+              git remote add origin https://github.com/gr-rr/hello-ai.git || git remote set-url origin https://github.com/gr-rr/hello-ai.git
+              git fetch origin main
+              git reset --hard origin/main
+            fi
             chmod +x scripts/deploy.sh
             scripts/deploy.sh
