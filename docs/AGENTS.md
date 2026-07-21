@@ -151,6 +151,17 @@ git config core.hooksPath .githooks
 This enforces the convention via `commitlint` (the `commit` script still uses
 `aicommits` for message drafting).
 
+## Supabase credentials (stored securely, not in repo)
+
+- **URL**: `https://cijhpddqvvzyzfzmkdnn.supabase.co`
+- **Project ref**: `cijhpddqvvzyzfzmkdnn`
+- **Service role key**: stored in GitHub secret `SUPABASE_SERVICE_ROLE_KEY` and VM env `SUPABASE_SERVICE_ROLE_KEY`
+- **Anon key**: stored in GitHub secret `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `.env.local`
+- **DB password** (for psql/supabase CLI migrations): stored in AGENTS.md (this file) — do NOT commit; use env var or `~/.supabase/` config instead
+- **PAT** (Supabase CLI auth): saved to `~/.supabase/access-token` via `supabase login` — persists permanently
+- **Supabase CLI**: project is linked. Run `supabase db query --linked -f <file.sql>` to apply migrations.
+- **Note**: DB only accessible via IPv6. VM (129.146.52.142) has no IPv6 route. Use Supabase CLI `--linked` flag (management API) or Dashboard SQL editor for migrations.
+
 ## What to do when stuck
 
 - Read the docs/ directory for context

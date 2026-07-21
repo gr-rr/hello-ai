@@ -75,7 +75,7 @@ create policy "transcriptions owner insert" on storage.objects
   for insert to authenticated
   with check (
     bucket_id = 'transcriptions'
-    and (storage.foldername(name))[2] = auth.uid()::text
+    and (storage.foldername(name))[1] = auth.uid()::text
   );
 
 -- ===========================================================================
