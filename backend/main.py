@@ -602,7 +602,13 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_op
         key = _valid_library_key(req.library_path)
         if not key:
             raise HTTPException(status_code=400, detail="invalid library_path")
-        data = sb.storage.from_("library").download(key[len("library/") :])
+        try:
+            data = sb.storage.from_("library").download(key[len("library/") :])
+        except Exception as e:
+            err_msg = str(e)
+            if "404" in err_msg or "not_found" in err_msg.lower() or "Object not found" in err_msg:
+                raise HTTPException(status_code=404, detail="file not found in library") from e
+            raise HTTPException(status_code=500, detail="storage error") from e
         audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -645,7 +651,13 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         key = _valid_library_key(req.library_path)
         if not key:
             raise HTTPException(status_code=400, detail="invalid library_path")
-        data = sb.storage.from_("library").download(key[len("library/") :])
+        try:
+            data = sb.storage.from_("library").download(key[len("library/") :])
+        except Exception as e:
+            err_msg = str(e)
+            if "404" in err_msg or "not_found" in err_msg.lower() or "Object not found" in err_msg:
+                raise HTTPException(status_code=404, detail="file not found in library") from e
+            raise HTTPException(status_code=500, detail="storage error") from e
         audio = data if isinstance(data, bytes | bytearray) else data.read()
     else:
         raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
@@ -743,7 +755,14 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
             if not key:
                 raise HTTPException(status_code=400, detail="invalid library_path")
             bucket = "midi" if req.library_path.startswith("midi/") else "library"
-            data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
+            try:
+                data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
+            except Exception as e:
+                err_msg = str(e)
+                err_lower = err_msg.lower()
+                if "404" in err_msg or "not_found" in err_lower or "Object not found" in err_msg:
+                    raise HTTPException(status_code=404, detail="file not found in library") from e
+                raise HTTPException(status_code=500, detail="storage error") from e
             raw = data if isinstance(data, bytes | bytearray) else data.read()
             if req.library_path.endswith(".mid") or bucket == "midi":
                 midi_path = os.path.join(td, "input.mid")
