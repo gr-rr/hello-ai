@@ -360,10 +360,6 @@ export default function Transcribe({
           )}
 
           {result.wav_url && <Spectrogram url={result.wav_url} />}
-
-          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "6px 0 0" }}>
-            basic-pitch · FluidSynth · abcjs · Supabase — prototype, flows simulated.
-          </p>
         </>
       )}
 
