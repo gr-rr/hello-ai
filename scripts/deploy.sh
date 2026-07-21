@@ -70,6 +70,19 @@ ensure_repo
 
 PREV_HEAD="$(git rev-parse --short HEAD)"
 
+# --- write .env from environment (deploy workflow passes these) ---
+if [ -n "${SUPABASE_URL:-}" ] || [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+  echo "[deploy] writing .env from environment"
+  cat > "$REPO_DIR/.env" <<ENVEOF
+SUPABASE_URL=${SUPABASE_URL:-}
+SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+SENTRY_DSN_BACKEND=${SENTRY_DSN_BACKEND:-${SENTRY_DSN:-}}
+SENTRY_ENV=${SENTRY_ENV:-production}
+RELEASE=${RELEASE:-backend@main}
+ENVEOF
+fi
+
 echo "[deploy] stopping old containers"
 docker compose -f "$COMPOSE" down --remove-orphans 2>/dev/null || true
 docker rm -f music-ai-backend 2>/dev/null || true
