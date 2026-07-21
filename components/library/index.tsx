@@ -296,7 +296,7 @@ export default function Library({
 
   return (
     <div className="card">
-      <h3 className="card-title"><span className="glyph">📁</span> Library</h3>
+      <h3 className="card-title"><span className="glyph">▤</span> Library</h3>
 
       <div
         ref={dropRef}
@@ -329,7 +329,7 @@ export default function Library({
           onClick={openMusopen}
           disabled={busy || !!importingTrack}
         >
-          {musopenLoading ? "⏳" : musopenOpen ? "✕ Close" : "🎵 MusOpen"}
+          {musopenLoading ? "Loading…" : musopenOpen ? "✕ Close" : "MusOpen"}
         </button>
       </div>
 
@@ -375,7 +375,7 @@ export default function Library({
                       disabled={!hasRecording || !!importingTrack}
                       onClick={() => importFromMusopen(w)}
                     >
-                      {importingTrack === w.title ? "⏳" : hasRecording ? "Import" : "No audio"}
+                      {importingTrack === w.title ? "Importing…" : hasRecording ? "Import" : "No audio"}
                     </button>
                   </div>
                 );
@@ -444,12 +444,12 @@ export default function Library({
                     </button>
                     {onTranscribe && (
                       <button className="icon-btn" onClick={() => onTranscribe(f)}>
-                        🎼 Transcribe
+                        Transcribe
                       </button>
                     )}
                     {onAnalyze && (
                       <button className="icon-btn" onClick={() => onAnalyze(f)}>
-                        📊 Analyze
+                        Analyze
                       </button>
                     )}
                     <button className="icon-btn ghost danger" onClick={() => onDelete(f.id, f.name)} disabled={busy}>

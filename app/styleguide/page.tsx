@@ -112,8 +112,26 @@ export default function Styleguide() {
       </header>
 
       <p className="muted" style={{ margin: "0 0 var(--s-5)" }}>
-        Isolated component gallery for design review. Toggle the theme above to verify light/dark parity.
+        Isolated component gallery for design review — the single source of truth for the
+        design system. Toggle the theme above to verify light/dark parity. Every component in
+        the app must be built from these tokens and primitives; extend the token system, never
+        invent ad-hoc styled elements.
       </p>
+
+      <Section title="Design principles (what NOT to do)" fileLine="app/globals.css">
+        <ul className="muted" style={{ margin: 0, paddingLeft: "var(--s-4)", display: "grid", gap: "var(--s-1)", fontSize: "var(--fs-sm)", lineHeight: "var(--line-height-base)" }}>
+          <li>No giant gradients as decoration — gradients are reserved for brand accents only.</li>
+          <li>No glassmorphism / heavy blur backdrops everywhere — keep surfaces solid tokens.</li>
+          <li>No random colors — every color comes from a CSS variable token.</li>
+          <li>No inconsistent spacing — use the 8px scale (--s-1…--s-8), never ad-hoc px.</li>
+          <li>Max two brand colors (--accent, --accent-2) plus neutrals.</li>
+          <li>Max two font families (sans + mono) from the type scale.</li>
+          <li>No emoji icons — use text labels or SVG glyphs.</li>
+          <li>No huge border radius — radius is fixed and modest (--r-sm…--r-lg).</li>
+          <li>Never invent a new Button / Card / Input variant — extend tokens only.</li>
+          <li>At most 1–2 signature hover/state animations; the rest stays functional.</li>
+        </ul>
+      </Section>
 
       <Section title="Color roles" fileLine="app/globals.css:4">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "var(--s-3)" }}>
@@ -177,6 +195,22 @@ export default function Styleguide() {
         </div>
       </Section>
 
+      <Section title="Inputs & labels" fileLine="app/globals.css:356">
+        <div style={{ display: "grid", gap: "var(--s-3)", maxWidth: 360 }}>
+          <div>
+            <label className="label">Track name</label>
+            <input className="input" placeholder="e.g. Moonlight Sonata" />
+          </div>
+          <div>
+            <label className="label">Library</label>
+            <select className="sel" style={{ width: "100%" }}>
+              <option>All tracks</option>
+              <option>Transcribed</option>
+            </select>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Surfaces, feedback & media" fileLine="app/globals.css:101">
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--s-3)" }}>
           <div className="surface">.surface (default)</div>
@@ -225,8 +259,8 @@ export default function Styleguide() {
             <div className="track-meta"><span>3.2 MB</span></div>
             <div className="track-actions">
               <button className="icon-btn">▶</button>
-              <button className="icon-btn">🎼 Transcribe</button>
-              <button className="icon-btn">📊 Analyze</button>
+              <button className="icon-btn">Transcribe</button>
+              <button className="icon-btn">Analyze</button>
               <button className="icon-btn ghost danger">✕</button>
             </div>
           </div>
@@ -241,8 +275,8 @@ export default function Styleguide() {
             <div className="track-meta"><span>5.1 MB</span></div>
             <div className="track-actions">
               <button className="icon-btn">⏸</button>
-              <button className="icon-btn">🎼 Transcribe</button>
-              <button className="icon-btn">📊 Analyze</button>
+              <button className="icon-btn">Transcribe</button>
+              <button className="icon-btn">Analyze</button>
               <button className="icon-btn ghost danger">✕</button>
             </div>
           </div>
@@ -257,7 +291,7 @@ export default function Styleguide() {
         <div className="source-grid">
           <div className="source-card"><span className="sc-icon">⬆</span><span className="sc-label">Upload file</span><span className="sc-hint">WAV · MP3 · M4A</span></div>
           <div className="source-card"><span className="sc-icon">●</span><span className="sc-label">Record</span><span className="sc-hint">Use your mic</span></div>
-          <div className="source-card disabled"><span className="sc-icon">📁</span><span className="sc-label">From library</span><span className="sc-hint">No saved tracks</span></div>
+          <div className="source-card disabled"><span className="sc-icon">▤</span><span className="sc-label">From library</span><span className="sc-hint">No saved tracks</span></div>
         </div>
       </Section>
 
@@ -270,7 +304,7 @@ export default function Styleguide() {
             </div>
             <div style={{ display: "flex", gap: "var(--s-2)" }}>
               <button className="btn">Save to library</button>
-              <button className="btn btn-primary">📊 Analyze</button>
+              <button className="btn btn-primary">Analyze</button>
               <button className="btn btn-ghost">✕ Clear</button>
             </div>
           </div>

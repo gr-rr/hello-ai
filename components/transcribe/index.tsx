@@ -229,7 +229,7 @@ export default function Transcribe({
 
   return (
     <div className="card">
-      <h3 className="card-title"><span className="glyph">🎼</span> Transcribe</h3>
+      <h3 className="card-title"><span className="glyph">♪</span> Transcribe</h3>
 
       {state === "idle" && !showLibPicker && (
         <>
@@ -256,7 +256,7 @@ export default function Transcribe({
               className={`source-card${canUseLibrary ? "" : " disabled"}`}
               onClick={() => canUseLibrary && setShowLibPicker(true)}
             >
-              <span className="sc-icon">📁</span>
+              <span className="sc-icon">▤</span>
               <span className="sc-label">From library</span>
               <span className="sc-hint">
                 {!signedIn ? "Sign in" : libFiles.length === 0 ? "No saved tracks" : "Pick a track"}
@@ -318,19 +318,19 @@ export default function Transcribe({
                 <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
               )}
               {onGoToAnalyze && onAnalyze && (result?.wav_base64 || result?.midi_base64) && (
-                <button
-                  className="btn btn-primary"
-                  onClick={async () => {
-                    try {
-                      await onAnalyze(result.wav_base64, result.midi_base64, audioName);
-                    } catch {
-                      /* analysisError surfaces on the Analyze tab */
-                    }
-                    onGoToAnalyze();
-                  }}
-                >
-                  📊 Analyze
-                </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      try {
+                        await onAnalyze(result.wav_base64, result.midi_base64, audioName);
+                      } catch {
+                        /* analysisError surfaces on the Analyze tab */
+                      }
+                      onGoToAnalyze();
+                    }}
+                  >
+                    Analyze
+                  </button>
               )}
               <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
             </div>

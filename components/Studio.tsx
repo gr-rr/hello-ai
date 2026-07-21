@@ -10,9 +10,9 @@ import { analyzeAudio, listLibrary, listTranscriptions, blobToBase64, type Trans
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
-  { id: "library", label: "Library", icon: "📁" },
-  { id: "transcribe", label: "Transcribe", icon: "🎼" },
-  { id: "analyze", label: "Analyze", icon: "📊" },
+  { id: "library", label: "Library" },
+  { id: "transcribe", label: "Transcribe" },
+  { id: "analyze", label: "Analyze" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -131,7 +131,7 @@ export default function Studio({
               className={`nav-item${tab === t.id ? " active" : ""}`}
               onClick={() => goToTab(t.id)}
             >
-              {t.icon} {t.label}
+              {t.label}
             </button>
           ))}
         </nav>
@@ -172,7 +172,7 @@ export default function Studio({
 
         {tab === "analyze" && (
           <div className="card">
-            <h3 className="card-title"><span className="glyph">📊</span> Analyze</h3>
+            <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
             {analyzeStatus && <p className="status" style={{ marginBottom: "var(--s-3)" }}>{analyzeStatus}</p>}
 
             {analysisError && !analysis && !analyzeStatus && (
@@ -187,7 +187,7 @@ export default function Studio({
                   className={`source-card${analyzeLibFiles.length > 0 ? "" : " disabled"}`}
                   onClick={() => analyzeLibFiles.length > 0 && setShowAnalyzeLibPicker(true)}
                 >
-                  <span className="sc-icon">📁</span>
+                  <span className="sc-icon">▤</span>
                   <span className="sc-label">From library</span>
                   <span className="sc-hint">
                     {analyzeLibFiles.length === 0 ? "No transcribed songs" : "Pick a track"}
