@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
       - '.github/workflows/deploy-backend.yml'
       - 'scripts/deploy.sh'
 
