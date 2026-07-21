@@ -6,8 +6,11 @@ node_modules/
 next-env.d.ts
 out/
 build
+
+# Env files — keep .env.example committed
 .env.local
 .env
+!.env.example
 
 # Python backend
 backend/.venv/
@@ -16,7 +19,6 @@ __pycache__/
 backend/__pycache__/
 
 *.tsbuildinfo
-.env*
 
 # Argos / Playwright visual tests
 screenshots/
@@ -24,15 +26,27 @@ playwright-report/
 .playwright/
 .preview/
 test-results/
+*.argos.json
 
 # Playwright MCP
 .playwright-mcp/
 
-# Agent of Empires worktrees (config.toml is tracked)
+# Supabase local temp
+supabase/.temp/
+
+# Agent of Empires worktrees
 .worktrees/
-../hello-ai-worktrees/
+.agent-of-empires/
+
+# Committed docs audits (kept locally, not in git)
+docs/audits/
+
 .mock-deploy/
 design/mockups/workbench-functional.html
 
 .credentials
 .infra-guide.md
+
+# python virtualenv (never commit)
+.venv/
+scripts/vm-ssh-key

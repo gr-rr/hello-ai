@@ -1,122 +1,148 @@
-# Architecture & Build/Iterate Loop
+# Architecture
 
-How hello-ai is put together, and how to ship changes safely without manual QA.
+How Music AI Studio is put together: the frontend, the backend, the proxy path,
+and the delivery/CI loop. This describes the ACTUAL system today, including its
+known gaps — not an aspirational design (that lives in `docs/REDESIGN.md`).
 
-## 1. System at a glance
+## 1. Product
+
+**Music AI Studio** does three things:
+
+- **Transcribe** — audio → MIDI via `basic-pitch`.
+- **Analyze** — key / tempo / chords via `librosa`.
+- **Fine-tune** — LoRA training of models.
+
+## 2. System at a glance
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Browser (Next.js app on Vercel)                                       │
-│   - app/page.tsx → <Studio> layout (single-page 2‑column grid)        │
-│   - Left column: Transcribe (→ MIDI + sheet music)                     │
-│   - Right column: Library (Supabase Storage)                           │
+┌───────────────────────────────────────────────────────────────────────┐
+│  Browser (Next.js 15 / React 19 / Tailwind v4, hosted on Vercel)       │
+│    app/page.tsx → app/HomeClient.tsx → <Studio>                        │
+│    Studio is a TAB shell: Library | Transcribe | Analyze              │
 │                                                                        │
-│   Talks to:                                                            │
-│     (a) Supabase  — directly from the browser (anon key) for storage  │
-│     (b) /api/*    — Next.js route handlers that proxy to the backend  │
+│    Talks to:                                                           │
+│      (a) Supabase  — directly from the browser (anon key) for storage │
+│      (b) /api/*    — Next.js route handlers that proxy to the backend │
 └───────────────┬───────────────────────────┬──────────────────────────┘
                 │ (a) anon key              │ (b) server-side fetch
                 ▼                            ▼
         ┌───────────────┐          ┌─────────────────────────────────────┐
-        │  Supabase     │          │  Oracle Cloud VM (always-free ARM)   │
-        │  (storage +   │          │  gricci-testing.duckdns.org (Caddy→  │
-        │   db, free)   │          │  FastAPI :8000)                      │
-        │               │          │  - basic-pitch transcription         │
-        │  buckets:     │          │  - FluidSynth MIDI→WAV               │
-        │   library/midi│          │  - ffmpeg enhance                    │
-        │   audio/tracks│          │                                     │
-        │   datasets/   │          │  Uses Supabase SERVICE-ROLE key for  │
-        │   adapters    │          │  server-side storage.               │
+        │  Supabase     │          │  Oracle Cloud VM (single host)       │
+        │  storage +    │          │  gricci-testing.duckdns.org          │
+        │  DB + auth    │          │    host reverse proxy (Caddy/nginx)  │
+        │               │          │    ~1MB body limit ── HTTP 413 on    │
+        │  buckets:     │          │    large uploads to /api/music/*     │
+        │   library     │          │      │                              │
+        │   midi        │          │      ▼                              │
+        │   transcriptions         │    uvicorn (FastAPI :8000)          │
+        │   soundfonts  │          │      basic-pitch / librosa / LoRA    │
+        │  RLS: owner   │          │    Uses Supabase SERVICE-ROLE key    │
         └───────────────┘          └─────────────────────────────────────┘
 ```
 
-Key rule: **the browser never talks to the Oracle backend directly.** All backend
-calls go through `app/api/*` → `lib/backend.ts` (`proxyToBackend`), which forwards
-to `MUSIC_BACKEND_URL` (default `https://gricci-testing.duckdns.org`). This keeps
-the VM URL/key off the client and lets Vercel be the only public edge.
+**Key rule: the browser never talks to the VM directly.** Every backend call goes
+`app/api/**/route.ts` → `lib/backend.ts` (`proxyToBackend`) → `MUSIC_BACKEND_URL`
+(default `https://gricci-testing.duckdns.org`) → a host-level reverse proxy
+(Caddy/nginx) → uvicorn. This keeps the VM URL and service-role key off the client
+and makes Vercel the only public web edge.
 
-## 2. The autonomous loop (design → build → test → ship)
+> The reverse proxy currently enforces a **~1MB request body limit**. This is why
+> large audio uploads to `/api/music/analyze` come back as **HTTP 413**. There is
+> no proxy config in the repo — it lives on the VM. See `docs/REDESIGN.md`.
 
-This is the workflow that lets a high-level prompt become a merged, verified change
-with no manual clicking:
+## 3. Frontend
 
-```
-   Prompt / issue
-        │
-        ▼
- ┌──────────────────┐
- │ 1. Design (SOT)  │  design/tokens.json + design/mockups/*.html = source of truth
- └────────┬─────────┘  (edit these, not ad-hoc CSS, when the look must change)
-          ▼
- ┌──────────────────┐
- │ 2. Implement     │  Components read design tokens (app/globals.css :root)
- │                  │  + primitive classes (.btn .chip .panel .drop-zone …).
- │                  │  New feature = new component in components/<feature>/.
- └────────┬─────────┘
-          ▼
- ┌──────────────────────────────────────────────────────────────────┐
- │ 3. PR opened → CI runs TWO checks                                  │
- │                                                                    │
- │   • build  (REQUIRED, blocks merge)                                │
- │       - npm run build                                              │
- │       - starts the app, runs Playwright E2E journeys               │
- │         (tests/e2e/journey.spec.ts):                               │
- │           - Transcribe upload → sheet music renders + MIDI download│
- │           - Library upload via drop zone → "Saved ✓"               │
- │       → if a core user flow breaks, the PR CANNOT merge.          │
- │                                                                    │
- │   • argos  (NON-blocking, informational)                           │
- │       - screenshots the mockup + built app, diffs vs main          │
- │       - posts visual drift on the PR for human review             │
- └────────┬─────────────────────────────────────────────────────────┘
-          ▼
-   Merge to main → Vercel auto-deploys → working app link ready.
-```
+- Next.js 15 App Router, React 19, Tailwind v4, `abcjs` for score rendering.
+- Entry: `app/page.tsx` → `app/HomeClient.tsx` → `Studio`.
+- `Studio` is a **tabbed shell** with three tabs: **Library**, **Transcribe**,
+  **Analyze**. It is NOT a two-column grid and NOT a stepper. The old
+  `.stepper` / `.app-grid` CSS is dead and should not be reintroduced.
+- Storage access from the browser uses the Supabase **anon** key via `lib/storage.ts`.
+- Dev mocks: MSW (`mocks/handlers.ts`) fakes `/api/*` so the frontend can run with
+  no backend. See `docs/TESTING.md`.
 
-### Why this is "autonomous enough"
-- **Functional regressions are caught by `build`** (the E2E journeys exercise the
-  real Transcribe + Library paths). A broken flow can't reach `main`.
-- **Visual drift is caught by `argos`** (non-blocking so it never stalls a merge,
-  but always visible for review).
-- The human only opens the deployed link to give high-level direction; the agent
-  designs, implements, and verifies.
+## 4. Backend
 
-### Required vs optional checks
-| Check   | Required to merge? | What it guards |
-|---------|-------------------|----------------|
-| `build` | ✅ yes            | App compiles + core journeys pass |
-| `argos` | ❌ no             | Visual diff vs baseline (review signal) |
+- FastAPI (Python) served by **uvicorn** on a **single Oracle VM**.
+- Run via `docker-compose.yml` service `backend`:
+  `uvicorn backend.main:app --port 8000 --reload`.
+- Uses the Supabase **service-role** key for server-side storage/DB access.
+- `backend/main.py` has structured JSON logging + an `x-request-id` middleware
+  (echoed on every response so a user-facing error maps to an exact log line).
 
-> Branch protection on `main` requires the `build` status check + `enforce_admins`.
-> Argos is intentionally NOT in the required list.
+### Deploy
 
-## 3. Where things live
+`scripts/deploy.sh` (run on the VM):
 
-| Concern            | Path |
-|--------------------|------|
-| Page shell         | `components/Studio.tsx` (topbar + stepper grid) |
-| Transcribe         | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
-| Library            | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
-| Backend proxy      | `lib/backend.ts`, `app/api/**/route.ts` |
-| Supabase client    | `lib/supabase.ts` (browser, anon; graceful fallback) |
-| Design SOT         | `design/tokens.json`, `design/mockups/*` |
-| E2E journeys       | `tests/e2e/journey.spec.ts` |
-| Visual QA          | `tests/visual/preview.spec.ts`, `.github/workflows/argos.yml` |
-| CI gate            | `.github/workflows/ci.yml` |
-| Backend (VM code)  | `backend/` (FastAPI) — separate deploy, not on Vercel |
+1. `git pull`
+2. `docker compose up --build backend`
+3. polls `GET /health/ready`
+4. **auto-rolls back** to the previous commit if the backend is not healthy in time.
 
-## 4. Adding a feature
+There is also a `deploy-backend.yml` GitHub Actions workflow that runs on push to
+`main` for `backend/**` changes. See `docs/OPS.md` for the runbook.
 
-1. Create `components/<feature>/index.tsx` exporting a default component.
-2. Add it to the grid in `components/Studio.tsx` (or add a new column).
-3. If it needs backend work, add an `app/api/<feature>/route.ts` proxy + backend
-   endpoint. If it needs storage, add a bucket + RLS policy in Supabase.
-4. Add an E2E journey in `tests/e2e/journey.spec.ts` if it's a core flow.
-5. Open PR → `build` must pass.
+## 5. Storage / DB / auth (Supabase)
 
-## 5. Data model (Supabase)
+- Buckets: `library`, `midi`, `transcriptions`, `soundfonts`.
+- RLS is **owner-scoped**.
+- Browser: anon key (`lib/storage.ts`). Backend: service-role key.
+- Migrations live in `supabase/migrations/`. DB tables (backend-written):
+  `jobs`, `models`.
 
-Storage buckets (RLS allows anon insert/select so the app works without login):
-`library`, `midi`, `audio`, `tracks`, `datasets`, `adapters`.
-DB tables (backend-written, service-role): `jobs`, `models`.
-Migrations live in `supabase/migrations/`.
+## 6. Error tracking (Sentry)
+
+- **Frontend** — `@sentry/nextjs`: `instrumentation.ts`, `sentry.server.config.ts`,
+  `sentry.edge.config.ts`, `app/global-error.tsx`. DSN from `NEXT_PUBLIC_SENTRY_DSN`.
+- **Backend** — `sentry-sdk`, env-gated on `SENTRY_DSN_BACKEND` (falls back to
+  `SENTRY_DSN`). Silent if the DSN is empty.
+
+## 7. Observability
+
+- Structured JSON logs to stdout + `x-request-id` middleware in `backend/main.py`.
+- Opt-in Loki / Promtail / Grafana stack via `docker-compose.observability.yml`.
+- Runbook: `docs/OPS.md`.
+
+## 8. CI / delivery
+
+GitHub Actions in `.github/workflows/`:
+
+| Workflow | What it does | Blocks merge? |
+|---|---|---|
+| `build.yml` | `npm run build` + Vitest | ✅ |
+| `ci.yml` | lint + typecheck + ruff + backend pytest | ✅ |
+| `e2e.yml` | Playwright vs MSW mocks | ✅ |
+| `argos.yml` | visual diff | ❌ (informational) |
+| `codeql.yml` | SAST (js + python) | ✅ |
+| `gitleaks.yml` | secret scan | ✅ |
+| `dependency-review.yml` | dependency CVE review | ✅ |
+| `deploy-backend.yml` | deploy on push to `main` for `backend/**` | n/a (push) |
+
+Review automation: **CodeRabbit** + **Semgrep** on PRs. The agent uses the
+**Sentry MCP** to self-diagnose failures.
+
+## 9. Where things live
+
+| Concern | Path |
+|---|---|
+| Page shell | `app/page.tsx`, `app/HomeClient.tsx`, `components/Studio.tsx` |
+| Transcribe | `components/transcribe/`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
+| Analyze | `components/analyze/` |
+| Library | `components/library/`, `lib/storage.ts` |
+| Backend proxy | `lib/backend.ts`, `app/api/**/route.ts` |
+| Supabase client | `lib/supabase.ts` (browser, anon) |
+| Backend (VM) | `backend/` (FastAPI) |
+| Dev mocks | `mocks/handlers.ts`, `components/MSWInit.tsx` |
+| E2E / visual | `tests/e2e/`, `tests/visual/` |
+| Ops | `docker-compose.yml`, `docker-compose.observability.yml`, `scripts/deploy.sh` |
+
+## 10. Known gaps (documented honestly)
+
+- **Single VM = SPOF.** No redundancy; one host down = backend down.
+- **Prod runs uvicorn `--reload`** — a dev flag. Should be `--workers 2`.
+- **No metrics / tracing / alerting yet** — only logs + Sentry.
+- **E2E runs against MSW mocks**, so real-API regressions (the 413 / 422 class
+  of bugs) are NOT caught by the E2E suite. See `docs/TESTING.md`.
+- **`next lint` is deprecated** (removed in Next 16) but still used.
+
+Target architecture and the phased plan to close these gaps: `docs/REDESIGN.md`.

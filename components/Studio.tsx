@@ -6,13 +6,13 @@ import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
-import { analyzeAudio, listLibrary, blobToBase64, type TranscribeResult, type LibFile } from "@/lib/music";
+import { analyzeAudio, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
-  { id: "library", label: "Library", icon: "📁" },
-  { id: "transcribe", label: "Transcribe", icon: "🎼" },
-  { id: "analyze", label: "Analyze", icon: "📊" },
+  { id: "library", label: "Library" },
+  { id: "transcribe", label: "Transcribe" },
+  { id: "analyze", label: "Analyze" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -35,12 +35,16 @@ export default function Studio({
   const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
   const [showAnalyzeLibPicker, setShowAnalyzeLibPicker] = useState(false);
   const [pendingLibFile, setPendingLibFile] = useState<LibFile | null>(null);
+  const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
 
   useEffect(() => {
     if (tab === "analyze") {
       listLibrary().then(setAnalyzeLibFiles).catch(() => {});
     }
-  }, [tab]);
+    if (tab === "library" && signedIn) {
+      listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
+    }
+  }, [tab, signedIn]);
 
   function onTranscribed(result: TranscribeResult, name: string) {
     setLastResult(result);
@@ -49,12 +53,17 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(audioBase64?: string, midiBase64?: string, name?: string) {
+  async function handleAnalyze(audioBase64?: string, midiBase64?: string, name?: string, libraryPath?: string) {
     if (name) setAudioName(name);
+    if (!audioBase64 && !midiBase64 && !libraryPath) {
+      setAnalysisError("Load a track or pick one from your library first");
+      goToTab("analyze");
+      return;
+    }
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(audioBase64, midiBase64);
+      const result = await analyzeAudio(audioBase64, midiBase64, "wav", libraryPath);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -72,17 +81,7 @@ export default function Studio({
   async function handleAnalyzeLibrary(item: LibFile) {
     setShowAnalyzeLibPicker(false);
     setAudioName(item.name);
-    setAnalyzeStatus("Downloading audio…");
-    try {
-      const res = await fetch(item.url);
-      if (!res.ok) throw new Error(`download failed: ${res.status}`);
-      const blob = await res.blob();
-      const b64 = await blobToBase64(blob);
-      await handleAnalyze(b64, undefined, item.name);
-    } catch (err) {
-      setAnalysisError(err instanceof Error ? err.message : "download failed");
-      setAnalyzeStatus("");
-    }
+    await handleAnalyze(undefined, undefined, item.name, item.id);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
@@ -122,7 +121,7 @@ export default function Studio({
               className={`nav-item${tab === t.id ? " active" : ""}`}
               onClick={() => goToTab(t.id)}
             >
-              {t.icon} {t.label}
+              {t.label}
             </button>
           ))}
         </nav>
@@ -146,6 +145,7 @@ export default function Studio({
             onSignIn={signIn}
             onTranscribe={handleLibraryTranscribe}
             onAnalyze={handleLibraryAnalyze}
+            transcriptions={transcriptions}
           />
         )}
 
@@ -162,22 +162,22 @@ export default function Studio({
 
         {tab === "analyze" && (
           <div className="card">
-            <h3 className="card-title"><span className="glyph">📊</span> Analyze</h3>
-            {analyzeStatus && <p className="status" style={{ marginBottom: 12 }}>{analyzeStatus}</p>}
+            <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
+            {analyzeStatus && <p className="status" style={{ marginBottom: "var(--s-3)" }}>{analyzeStatus}</p>}
 
             {analysisError && !analysis && !analyzeStatus && (
-              <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginBottom: 12 }}>
+              <div className="alert-danger" style={{ marginBottom: "var(--s-3)" }}>
                 <p className="status" style={{ color: "var(--danger)", margin: 0 }}>⚠️ {analysisError}</p>
               </div>
             )}
 
             {!analysis && !analyzeStatus && !showAnalyzeLibPicker && (
-              <div className="source-grid" style={{ marginBottom: 16 }}>
+              <div className="source-grid" style={{ marginBottom: "var(--s-4)" }}>
                 <div
                   className={`source-card${analyzeLibFiles.length > 0 ? "" : " disabled"}`}
                   onClick={() => analyzeLibFiles.length > 0 && setShowAnalyzeLibPicker(true)}
                 >
-                  <span className="sc-icon">📁</span>
+                  <span className="sc-icon">▤</span>
                   <span className="sc-label">From library</span>
                   <span className="sc-hint">
                     {analyzeLibFiles.length === 0 ? "No transcribed songs" : "Pick a track"}
@@ -216,8 +216,6 @@ export default function Studio({
           </div>
         )}
       </div>
-
-      <div className="footer">basic-pitch · FluidSynth · abcjs · Supabase</div>
 
       <div className="toast" id="toast" />
     </div>

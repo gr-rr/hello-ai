@@ -229,7 +229,7 @@ export default function Transcribe({
 
   return (
     <div className="card">
-      <h3 className="card-title"><span className="glyph">🎼</span> Transcribe</h3>
+      <h3 className="card-title"><span className="glyph">♪</span> Transcribe</h3>
 
       {state === "idle" && !showLibPicker && (
         <>
@@ -256,7 +256,7 @@ export default function Transcribe({
               className={`source-card${canUseLibrary ? "" : " disabled"}`}
               onClick={() => canUseLibrary && setShowLibPicker(true)}
             >
-              <span className="sc-icon">📁</span>
+              <span className="sc-icon">▤</span>
               <span className="sc-label">From library</span>
               <span className="sc-hint">
                 {!signedIn ? "Sign in" : libFiles.length === 0 ? "No saved tracks" : "Pick a track"}
@@ -265,7 +265,7 @@ export default function Transcribe({
           </div>
 
           {!signedIn && (
-            <p className="muted" style={{ fontSize: 13, textAlign: "center" }}>
+            <p className="muted" style={{ fontSize: "var(--fs-sm)", textAlign: "center" }}>
               Transcribe freely — sign in to save results to your library.
             </p>
           )}
@@ -293,44 +293,44 @@ export default function Transcribe({
 
       {(state === "enhancing" || state === "transcribing") && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "12px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", margin: "var(--s-3) 0" }}>
             <span className="chip-q major" style={{ borderRadius: "var(--r-md)" }}>{audioName || "audio"}</span>
-            <span className="status" style={{ fontSize: 13 }}>{status}</span>
+            <span className="status" style={{ fontSize: "var(--fs-sm)" }}>{status}</span>
           </div>
-          <div className="pulse" style={{ height: 8, width: "60%", background: "var(--panel-3)", borderRadius: "var(--r-full)", marginBottom: 16 }} />
+          <div className="pulse" style={{ height: 8, width: "60%", background: "var(--panel-3)", borderRadius: "var(--r-full)", marginBottom: "var(--s-4)" }} />
         </>
       )}
 
       {state === "populated" && result && (
         <>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "var(--fs-base)" }}>{audioName}</h3>
-              <p className="muted" style={{ margin: "4px 0 0" }}>{result.num_notes} notes</p>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {!saved && signedIn && (
-                <button className="btn" onClick={saveToLibrary}>
-                  💾 Save to library
-                </button>
-              )}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "var(--s-2)" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "var(--fs-base)" }}>{audioName}</h3>
+                <p className="muted" style={{ margin: "var(--s-1) 0 0" }}>{result.num_notes} notes</p>
+              </div>
+              <div style={{ display: "flex", gap: "var(--s-2)" }}>
+                {!saved && signedIn && (
+                  <button className="btn" onClick={saveToLibrary}>
+                    Save to library
+                  </button>
+                )}
               {saved && (
                 <span className="chip" style={{ cursor: "default" }}>✓ Saved</span>
               )}
               {onGoToAnalyze && onAnalyze && (result?.wav_base64 || result?.midi_base64) && (
-                <button
-                  className="btn btn-primary"
-                  onClick={async () => {
-                    try {
-                      await onAnalyze(result.wav_base64, result.midi_base64, audioName);
-                    } catch {
-                      /* analysisError surfaces on the Analyze tab */
-                    }
-                    onGoToAnalyze();
-                  }}
-                >
-                  📊 Analyze
-                </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      try {
+                        await onAnalyze(result.wav_base64, result.midi_base64, audioName);
+                      } catch {
+                        /* analysisError surfaces on the Analyze tab */
+                      }
+                      onGoToAnalyze();
+                    }}
+                  >
+                    Analyze
+                  </button>
               )}
               <button className="btn btn-ghost" onClick={reset}>✕ Clear</button>
             </div>
@@ -342,7 +342,7 @@ export default function Transcribe({
               ref={audioRef}
               controls
               src={result.wav_url}
-              style={{ width: "100%", marginBottom: 8 }}
+              style={{ width: "100%", marginBottom: "var(--s-2)" }}
               onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
               onPlay={() => setPlayhead(audioRef.current?.currentTime ?? 0)}
             />
@@ -360,16 +360,12 @@ export default function Transcribe({
           )}
 
           {result.wav_url && <Spectrogram url={result.wav_url} />}
-
-          <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "6px 0 0" }}>
-            basic-pitch · FluidSynth · abcjs · Supabase — prototype, flows simulated.
-          </p>
         </>
       )}
 
       {state === "error" && (
-        <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", marginTop: 12 }}>
-          <p className="status" style={{ color: "var(--danger)" }}>{status}</p>
+        <div className="alert-danger" style={{ marginTop: "var(--s-3)" }}>
+          <p className="status" style={{ color: "var(--danger)", margin: 0 }}>{status}</p>
           <button className="btn" onClick={reset}>Try again</button>
         </div>
       )}

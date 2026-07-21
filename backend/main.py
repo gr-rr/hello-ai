@@ -76,23 +76,41 @@ security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
 _LIBRARY_KEY_RE = re.compile(r"^library/[0-9a-f]{32}-[\w.\-]+$")
+_MIDI_KEY_RE = re.compile(r"^midi/[\w.\-]+/[\w.\-]+$")
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _valid_library_key(library_path: str) -> str | None:
-    """Return a sanitized storage key inside the `library/` prefix, or None.
+_ANALYZE_EXTS = {
+    "wav": "wav",
+    "wave": "wav",
+    "mp3": "mp3",
+    "flac": "flac",
+    "ogg": "ogg",
+    "m4a": "m4a",
+    "aac": "aac",
+}
 
-    Only accepts keys shaped like `library/<uuid>-<name>` and rejects any path
-    traversal or attempt to escape the bucket prefix.
+
+def _analyze_ext(fmt: str) -> str:
+    return _ANALYZE_EXTS.get(fmt.lower(), "wav")
+
+
+def _valid_library_key(storage_path: str) -> str | None:
+    """Return a sanitized storage key inside the `library/` or `midi/` prefix, or None.
+
+    Accepts `library/<uuid>-<name>` (audio) and `midi/<uid>/<name>` (MIDI) and
+    rejects any path traversal or attempt to escape the bucket prefix.
     """
-    if not library_path:
+    if not storage_path or ".." in storage_path:
         return None
-    key = library_path[len("library/") :] if library_path.startswith("library/") else library_path
-    candidate = f"library/{key}"
-    return candidate if _LIBRARY_KEY_RE.match(candidate) else None
+    if _LIBRARY_KEY_RE.match(storage_path):
+        return storage_path
+    if _MIDI_KEY_RE.match(storage_path):
+        return storage_path
+    return None
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -662,6 +680,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 class AnalyzeRequest(BaseModel):
     audio_base64: str | None = None
     midi_base64: str | None = None
+    library_path: str | None = None
     fmt: str = "wav"
 
 
@@ -676,8 +695,12 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
     Public: anonymous requests are allowed (auth is optional)."""
     has_audio = bool(req.audio_base64)
     has_midi = bool(req.midi_base64)
-    if not has_audio and not has_midi:
-        raise HTTPException(status_code=422, detail="audio_base64 or midi_base64 required")
+    has_library = bool(req.library_path)
+    if not (has_audio or has_midi or has_library):
+        raise HTTPException(
+            status_code=422,
+            detail="audio_base64, midi_base64, or library_path required",
+        )
 
     with tempfile.TemporaryDirectory() as td:
         audio_path = None
@@ -688,7 +711,12 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                 audio_bytes = base64.b64decode(req.audio_base64, validate=True)
             except Exception:
                 raise HTTPException(status_code=400, detail="invalid audio base64") from None
-            ext = "wav" if req.fmt.lower() in ("wav", "wave") else req.fmt.lower()
+            if len(audio_bytes) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+                )
+            ext = _analyze_ext(req.fmt)
             audio_path = os.path.join(td, f"input.{ext}")
             with open(audio_path, "wb") as f:
                 f.write(audio_bytes)
@@ -698,9 +726,34 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                 midi_bytes = base64.b64decode(req.midi_base64, validate=True)
             except Exception:
                 raise HTTPException(status_code=400, detail="invalid midi base64") from None
+            if len(midi_bytes) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+                )
             midi_path = os.path.join(td, "input.mid")
             with open(midi_path, "wb") as f:
                 f.write(midi_bytes)
+
+        if has_library:
+            sb = _sb()
+            if not sb:
+                raise HTTPException(status_code=500, detail="Supabase not configured")
+            key = _valid_library_key(req.library_path)
+            if not key:
+                raise HTTPException(status_code=400, detail="invalid library_path")
+            bucket = "midi" if req.library_path.startswith("midi/") else "library"
+            data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
+            raw = data if isinstance(data, bytes | bytearray) else data.read()
+            if req.library_path.endswith(".mid") or bucket == "midi":
+                midi_path = os.path.join(td, "input.mid")
+                with open(midi_path, "wb") as f:
+                    f.write(raw)
+            else:
+                ext = _analyze_ext(req.fmt)
+                audio_path = os.path.join(td, f"input.{ext}")
+                with open(audio_path, "wb") as f:
+                    f.write(raw)
 
         try:
             if audio_path:
