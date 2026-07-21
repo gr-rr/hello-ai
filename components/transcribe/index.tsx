@@ -123,8 +123,8 @@ export default function Transcribe({
           }
           setSaved(true);
           onTranscriptionSaved?.();
-        } catch {
-          /* auto-save failure is non-critical */
+        } catch (e) {
+          console.error("auto-save failed", e);
         }
       }
     } catch (err) {
@@ -191,6 +191,11 @@ export default function Transcribe({
 
   async function saveToLibrary() {
     if (!result || !result.wav_url) return;
+    if (wasLibraryFile) {
+      setSaved(true);
+      setStatus("✓ Already in library");
+      return;
+    }
     try {
       setStatus("Saving to library…");
       const blob = await (await fetch(result.wav_url)).blob();
@@ -238,8 +243,8 @@ export default function Transcribe({
           await saveTranscription(file.id, res.notes);
           setSaved(true);
           onTranscriptionSaved?.();
-        } catch {
-          /* auto-save failure is non-critical */
+        } catch (e) {
+          console.error("auto-save transcription failed", e);
         }
       }
     } catch (err) {
