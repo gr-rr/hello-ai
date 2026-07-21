@@ -30,6 +30,16 @@ export type TranscribeResult = {
     tempo?: { bpm: number; confidence: number };
     time_signature?: { numerator: number; denominator: number; confidence: number };
     chords?: { root: string; quality: string; start: number; end: number }[];
+    roman_numerals?: { figure: string; root: string; quality: string; start: number; end: number }[];
+    cadences?: { type: string; chords: string[]; position: number }[];
+    modulations?: { from_key: string; to_key: string; position: number }[];
+    voice_leading?: {
+      parallel: number;
+      contrary: number;
+      oblique: number;
+      similar: number;
+      motion_summary: string;
+    };
   };
 };
 

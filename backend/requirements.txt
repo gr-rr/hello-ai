@@ -17,3 +17,4 @@ pytest==9.1.1
 pytest-asyncio==1.4.0
 ruff==0.5.7
 librosa>=0.10.0
+music21>=10.0.0

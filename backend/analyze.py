@@ -30,11 +30,43 @@ class ChordResult(TypedDict):
     end: float
 
 
+class RomanNumeralResult(TypedDict):
+    figure: str
+    root: str
+    quality: str
+    start: float
+    end: float
+
+
+class CadenceResult(TypedDict):
+    type: str
+    chords: list[str]
+    position: float
+
+
+class ModulationResult(TypedDict):
+    from_key: str
+    to_key: str
+    position: float
+
+
+class VoiceLeadingResult(TypedDict):
+    parallel: float
+    contrary: float
+    oblique: float
+    similar: float
+    motion_summary: str
+
+
 class AnalysisResult(TypedDict):
     key: KeyResult
     tempo: TempoResult
     time_signature: TimeSigResult
     chords: list[ChordResult]
+    roman_numerals: list[RomanNumeralResult]
+    cadences: list[CadenceResult]
+    modulations: list[ModulationResult]
+    voice_leading: VoiceLeadingResult | None
 
 
 _NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -295,9 +327,293 @@ def _midi_tempo(pm) -> float | None:
     return float(np.median(tempos))
 
 
+# ---------------------------------------------------------------------------
+# Deep music-theoretic analysis via music21
+# ---------------------------------------------------------------------------
+
+_QUALITY_MAP = {
+    "major": "M",
+    "minor": "m",
+    "diminished": "dim",
+    "augmented": "aug",
+    "dominant seventh": "7",
+    "major seventh": "maj7",
+    "minor seventh": "min7",
+    "half-diminished": "m7b5",
+    "diminished seventh": "dim7",
+    "suspended fourth": "sus4",
+    "major sixth": "6",
+    "minor sixth": "m6",
+    "dominant ninth": "9",
+}
+
+
+def _m21_roman_numerals(midi_path: str) -> list[RomanNumeralResult]:
+    """Roman numeral analysis from MIDI using music21."""
+    try:
+        from music21 import converter, roman
+    except ImportError:
+        return []
+
+    try:
+        score = converter.parse(midi_path, quantizePost=False)
+    except Exception:
+        return []
+
+    detected_key = score.analyze("key")
+    results: list[RomanNumeralResult] = []
+
+    for part in score.parts:
+        for measure in part.getElementsByClass("Measure"):
+            chords_in_measure = measure.getElementsByClass("Chord")
+            if not chords_in_measure:
+                continue
+            for ch in chords_in_measure:
+                try:
+                    rn = roman.romanNumeralFromChord(ch, detected_key)
+                    figure = rn.figure
+                    root_p = ch.root()
+                    root_name = root_p.name if root_p else "?"
+                    implied = str(rn.impliedQuality) if hasattr(rn, "impliedQuality") else "unknown"
+                    quality = _QUALITY_MAP.get(implied, implied)
+                    start = float(ch.offset) if ch.offset is not None else 0.0
+                    dur = float(ch.quarterLength) if hasattr(ch, "quarterLength") else 0.0
+                    results.append(
+                        RomanNumeralResult(
+                            figure=figure,
+                            root=root_name,
+                            quality=quality,
+                            start=round(start, 3),
+                            end=round(start + dur, 3),
+                        )
+                    )
+                except Exception:
+                    continue
+            if len(results) > 500:
+                break
+        if len(results) > 500:
+            break
+
+    return results
+
+
+def _m21_cadences(midi_path: str) -> list[CadenceResult]:
+    """Detect cadences from chord progressions using music21."""
+    try:
+        from music21 import converter, roman
+    except ImportError:
+        return []
+
+    try:
+        score = converter.parse(midi_path, quantizePost=False)
+    except Exception:
+        return []
+
+    detected_key = score.analyze("key")
+    cadences: list[CadenceResult] = []
+
+    _CADENCE_PATTERNS: list[tuple[str, list[str]]] = [
+        ("authentic", ["V", "I"]),
+        ("plagal", ["IV", "I"]),
+        ("half", ["I", "V"]),
+        ("deceptive", ["V", "vi"]),
+        ("authentic", ["V7", "I"]),
+        ("authentic", ["V", "i"]),
+        ("half", ["i", "V"]),
+        ("deceptive", ["V", "VI"]),
+    ]
+
+    chord_seq: list[tuple[float, str]] = []
+    for part in score.parts:
+        for measure in part.getElementsByClass("Measure"):
+            for ch in measure.getElementsByClass("Chord"):
+                try:
+                    rn = roman.romanNumeralFromChord(ch, detected_key)
+                    offset = float(ch.offset) if ch.offset is not None else 0.0
+                    chord_seq.append((offset, rn.figure))
+                except Exception:
+                    continue
+
+    for i in range(len(chord_seq) - 1):
+        pair = [chord_seq[i][1], chord_seq[i + 1][1]]
+        for cad_type, pattern in _CADENCE_PATTERNS:
+            if pair == pattern:
+                cadences.append(
+                    CadenceResult(
+                        type=cad_type,
+                        chords=pair,
+                        position=round(chord_seq[i][0], 3),
+                    )
+                )
+                break
+
+    return cadences
+
+
+def _m21_modulations(midi_path: str, window_size: int = 8) -> list[ModulationResult]:
+    """Detect key modulations via windowed key analysis."""
+    try:
+        from music21 import converter
+    except ImportError:
+        return []
+
+    try:
+        score = converter.parse(midi_path, quantizePost=False)
+    except Exception:
+        return []
+
+    all_notes = []
+    for part in score.parts:
+        for note in part.recurse().getElementsByClass("GeneralNote"):
+            offset = float(note.offset) if note.offset is not None else 0.0
+            if hasattr(note, "pitch") and note.pitch is not None:
+                all_notes.append((offset, note.pitch.midi))
+
+    if len(all_notes) < window_size * 4:
+        return []
+
+    all_notes.sort(key=lambda x: x[0])
+    max_offset = all_notes[-1][0] if all_notes else 1.0
+
+    window_sec = max_offset / max(window_size, 1)
+    key_history: list[tuple[float, str]] = []
+
+    for w in range(window_size):
+        t_start = w * window_sec
+        t_end = (w + 1) * window_sec
+        pitches_in_window = [p for t, p in all_notes if t_start <= t < t_end]
+        if len(pitches_in_window) < 4:
+            continue
+        from collections import Counter
+
+        pc_counts = Counter(p % 12 for p in pitches_in_window)
+        pc_dist = np.zeros(12)
+        for pc, cnt in pc_counts.items():
+            pc_dist[pc] = cnt
+        kr = _key_from_pc_vector(pc_dist)
+        key_str = f"{kr['tonic']} {kr['mode']}"
+        key_history.append((t_start, key_str))
+
+    modulations: list[ModulationResult] = []
+    for i in range(1, len(key_history)):
+        prev_key = key_history[i - 1][1]
+        curr_key = key_history[i][1]
+        if prev_key != curr_key:
+            modulations.append(
+                ModulationResult(
+                    from_key=prev_key,
+                    to_key=curr_key,
+                    position=round(key_history[i][0], 3),
+                )
+            )
+
+    return modulations
+
+
+def _m21_voice_leading(midi_path: str) -> VoiceLeadingResult | None:
+    """Analyze voice leading between parts."""
+    try:
+        from music21 import converter, voiceLeading
+    except ImportError:
+        return None
+
+    try:
+        score = converter.parse(midi_path, quantizePost=False)
+    except Exception:
+        return None
+
+    parts = list(score.parts)
+    if len(parts) < 2:
+        return None
+
+    parallel = 0
+    contrary = 0
+    oblique = 0
+    similar = 0
+    total = 0
+
+    for i in range(min(len(parts), 4)):
+        for j in range(i + 1, min(len(parts), 4)):
+            try:
+                vlqs = voiceLeading.iterateAllVoiceLeadingQuartets(parts[i], parts[j])
+                for vlq in vlqs:
+                    motion = vlq.motionType()
+                    if "Parallel" in str(motion):
+                        parallel += 1
+                    elif "Contrary" in str(motion):
+                        contrary += 1
+                    elif "Oblique" in str(motion):
+                        oblique += 1
+                    elif "Similar" in str(motion):
+                        similar += 1
+                    total += 1
+                    if total > 2000:
+                        break
+            except Exception:
+                continue
+            if total > 2000:
+                break
+        if total > 2000:
+            break
+
+    if total == 0:
+        return None
+
+    def _ratio(n: int) -> float:
+        return round(n / total, 3) if total > 0 else 0.0
+
+    p_pct = _ratio(parallel)
+    c_pct = _ratio(contrary)
+    o_pct = _ratio(oblique)
+    s_pct = _ratio(similar)
+    dominant = max(
+        ("parallel", p_pct),
+        ("contrary", c_pct),
+        ("oblique", o_pct),
+        ("similar", s_pct),
+        key=lambda x: x[1],
+    )
+
+    return VoiceLeadingResult(
+        parallel=p_pct,
+        contrary=c_pct,
+        oblique=o_pct,
+        similar=s_pct,
+        motion_summary=f"{dominant[0]} motion dominates ({dominant[1] * 100:.0f}%)",
+    )
+
+
+def deep_midi_analysis(midi_path: str) -> dict[str, object]:
+    """Run music21-based deep analysis on a MIDI file.
+
+    Returns Roman numerals, cadences, modulations, and voice leading.
+    Failures in any sub-analysis are caught and silently skipped.
+    """
+    result: dict[str, object] = {}
+
+    roman_numerals = _m21_roman_numerals(midi_path)
+    if roman_numerals:
+        result["roman_numerals"] = roman_numerals
+
+    cadences = _m21_cadences(midi_path)
+    if cadences:
+        result["cadences"] = cadences
+
+    modulations = _m21_modulations(midi_path)
+    if modulations:
+        result["modulations"] = modulations
+
+    vl = _m21_voice_leading(midi_path)
+    if vl:
+        result["voice_leading"] = vl
+
+    return result
+
+
 def analyze_from_midi(midi_path: str) -> dict[str, object]:
     """Symbolic analysis from a MIDI file. Returns key + chords derived from the
-    note events, plus tempo/time_signature when the MIDI carries that metadata."""
+    note events, plus tempo/time_signature when the MIDI carries that metadata.
+    Also runs deep music-theoretic analysis (Roman numerals, cadences, voice leading)."""
     import pretty_midi
 
     pm = pretty_midi.PrettyMIDI(midi_path)
@@ -320,6 +636,12 @@ def analyze_from_midi(midi_path: str) -> dict[str, object]:
     except Exception:
         pass
 
+    try:
+        deep = deep_midi_analysis(midi_path)
+        result.update(deep)
+    except Exception:
+        logger.exception("deep midi analysis failed; skipping")
+
     return result
 
 
@@ -330,6 +652,10 @@ def analyze_audio(file_path: str, midi_path: str | None = None) -> AnalysisResul
         tempo=detect_tempo(y, sr),
         time_signature=detect_time_signature(y, sr),
         chords=detect_chords(y, sr),
+        roman_numerals=[],
+        cadences=[],
+        modulations=[],
+        voice_leading=None,
     )
 
     if midi_path:
@@ -341,6 +667,14 @@ def analyze_audio(file_path: str, midi_path: str | None = None) -> AnalysisResul
                 result["tempo"] = symbolic["tempo"]  # type: ignore[index]
             if "time_signature" in symbolic:
                 result["time_signature"] = symbolic["time_signature"]  # type: ignore[index]
+            if "roman_numerals" in symbolic:
+                result["roman_numerals"] = symbolic["roman_numerals"]  # type: ignore[index]
+            if "cadences" in symbolic:
+                result["cadences"] = symbolic["cadences"]  # type: ignore[index]
+            if "modulations" in symbolic:
+                result["modulations"] = symbolic["modulations"]  # type: ignore[index]
+            if "voice_leading" in symbolic:
+                result["voice_leading"] = symbolic["voice_leading"]  # type: ignore[index]
         except Exception:
             logger.exception("symbolic analysis failed; falling back to audio")
 
