@@ -170,12 +170,16 @@ export async function listTranscriptions(): Promise<Transcription[]> {
 }
 
 export async function transcribeAudio(
-  dataBase64: string,
+  dataBase64?: string,
   fmt = "wav",
+  libraryPath?: string,
 ): Promise<TranscribeResult> {
+  const body: Record<string, unknown> = { fmt, upload: true };
+  if (libraryPath) body.library_path = libraryPath;
+  else body.audio_base64 = dataBase64;
   return apiFetch("/api/music/transcribe", {
     method: "POST",
-    body: JSON.stringify({ audio_base64: dataBase64, fmt, upload: true }),
+    body: JSON.stringify(body),
   }) as Promise<TranscribeResult>;
 }
 

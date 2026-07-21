@@ -57,8 +57,8 @@ ensure_repo() {
   local behind
   behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
   if [ "$behind" -gt 0 ]; then
-    echo "[deploy] behind by $behind commit(s) — pulling"
-    git pull --ff-only
+    echo "[deploy] behind by $behind commit(s) — hard reset to origin/main"
+    git reset --hard origin/main
   else
     echo "[deploy] up to date"
   fi
