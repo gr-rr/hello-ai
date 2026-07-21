@@ -3,20 +3,72 @@ set -euo pipefail
 
 # Health-gated backend deploy for the Oracle VM.
 #
-# Flow: pull -> rebuild backend -> wait for /health/ready -> rollback on failure.
-# Requires: docker compose, curl, and .env.local with SENTRY_DSN_BACKEND present.
+# Self-healing: handles any repo state (missing, partial, wrong branch, stale).
+# Flow: ensure repo -> pull -> rebuild backend -> wait for /health/ready -> rollback on failure.
 
-cd "$(dirname "$0")/.."
-
+REPO_DIR="${DEPLOY_DIR:-$HOME/hello-ai}"
+REPO_URL="https://github.com/gr-rr/hello-ai.git"
 COMPOSE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 HEALTH_URL="${BACKEND_URL}/health/ready"
 MAX_WAIT="${HEALTH_TIMEOUT:-60}"
 
-echo "[deploy] pulling latest changes"
-git fetch -q
-PREV_HEAD="$(git rev-parse HEAD)"
-git pull --ff-only
+# --- ensure repo exists and is usable ---
+ensure_repo() {
+  if [ ! -d "$REPO_DIR/.git" ]; then
+    echo "[deploy] no .git found — cloning fresh"
+    rm -rf "$REPO_DIR" 2>/dev/null || true
+    git clone "$REPO_URL" "$REPO_DIR"
+    cd "$REPO_DIR"
+    return
+  fi
+
+  cd "$REPO_DIR"
+
+  # ensure remote exists and points to the right URL
+  if ! git remote get-url origin >/dev/null 2>&1; then
+    git remote add origin "$REPO_URL"
+  else
+    git remote set-url origin "$REPO_URL"
+  fi
+
+  # rename master -> main if needed
+  local current_branch
+  current_branch=$(git branch --show-current 2>/dev/null || echo "")
+  if [ "$current_branch" = "master" ]; then
+    echo "[deploy] renaming master -> main"
+    git branch -m master main
+  fi
+
+  # ensure we're on main
+  if [ "$(git branch --show-current 2>/dev/null)" != "main" ]; then
+    echo "[deploy] switching to main"
+    git checkout main 2>/dev/null || git checkout -b main origin/main
+  fi
+
+  # ensure upstream tracking exists
+  if ! git rev-parse --abbrev-ref @{upstream} >/dev/null 2>&1; then
+    echo "[deploy] setting upstream to origin/main"
+    git branch --set-upstream-to=origin/main main
+  fi
+
+  # fetch and fast-forward
+  git fetch -q origin
+  local behind
+  behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "0")
+  if [ "$behind" -gt 0 ]; then
+    echo "[deploy] behind by $behind commit(s) — pulling"
+    git pull --ff-only
+  else
+    echo "[deploy] up to date"
+  fi
+}
+
+# --- main ---
+echo "[deploy] starting deploy at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ensure_repo
+
+PREV_HEAD="$(git rev-parse --short HEAD)"
 
 echo "[deploy] rebuilding backend"
 docker compose -f "$COMPOSE" up -d --build backend

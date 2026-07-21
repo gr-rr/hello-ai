@@ -7,6 +7,7 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend.yml'
+      - 'scripts/deploy.sh'
 
 concurrency:
   group: deploy-backend-${{ github.ref }}
@@ -27,15 +28,12 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           script: |
             set -euo pipefail
-            cd ~/hello-ai
-            if [ ! -d .git ]; then
-              echo "[deploy] re-initializing git"
-              git init -b main
-              git remote add origin https://github.com/gr-rr/hello-ai.git || git remote set-url origin https://github.com/gr-rr/hello-ai.git
-              git fetch origin main
-              git reset --hard origin/main
+            if [ -f ~/hello-ai/scripts/deploy.sh ]; then
+              chmod +x ~/hello-ai/scripts/deploy.sh
+              ~/hello-ai/scripts/deploy.sh
+            else
+              echo "[deploy] first boot — cloning repo"
+              git clone https://github.com/gr-rr/hello-ai.git ~/hello-ai
+              chmod +x ~/hello-ai/scripts/deploy.sh
+              ~/hello-ai/scripts/deploy.sh
             fi
-            git branch -m master main 2>/dev/null || true
-            git branch --set-upstream-to=origin/main main 2>/dev/null || true
-            chmod +x scripts/deploy.sh
-            scripts/deploy.sh
