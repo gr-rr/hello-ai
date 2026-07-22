@@ -8,6 +8,7 @@ on:
       - 'backend/**'
       - 'backend/Dockerfile'
       - 'docker-compose.yml'
+      - 'backend/docker-compose.yml'
       - '.github/workflows/deploy-backend.yml'
       - 'scripts/deploy.sh'
 
@@ -28,7 +29,7 @@ jobs:
           host: ${{ secrets.ORACLE_VM_HOST }}
           username: ${{ secrets.ORACLE_VM_USER }}
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
-          envs: SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,SUPABASE_ANON_KEY
+          envs: SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,SUPABASE_ANON_KEY,SENTRY_DSN_BACKEND
           script: |
             set -euo pipefail
             if [ -f ~/hello-ai/scripts/deploy.sh ]; then
@@ -44,3 +45,4 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SENTRY_DSN_BACKEND: ${{ secrets.SENTRY_DSN_BACKEND }}

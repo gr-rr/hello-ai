@@ -46,7 +46,7 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string) => void;
+  onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string, libraryPath?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
@@ -67,6 +67,7 @@ export default function Transcribe({
   const chunksRef = useRef<Blob[]>([]);
   const [saved, setSaved] = useState(false);
   const [wasLibraryFile, setWasLibraryFile] = useState(false);
+  const [libraryFileId, setLibraryFileId] = useState<string | null>(null);
 
   useEffect(() => {
     listLibrary()
@@ -186,6 +187,7 @@ export default function Transcribe({
     setPlayhead(0);
     setSaved(false);
     setWasLibraryFile(false);
+    setLibraryFileId(null);
   }
 
   async function saveToLibrary() {
@@ -214,6 +216,7 @@ export default function Transcribe({
     setAudioName(file.name);
     setShowLibPicker(false);
     setWasLibraryFile(true);
+    setLibraryFileId(file.id);
 
     if (file.notes && file.notes.length > 0) {
       setResult({
@@ -351,7 +354,7 @@ export default function Transcribe({
                     className="btn btn-primary"
                     onClick={async () => {
                       try {
-                        await onAnalyze(result.wav_base64, result.midi_base64, audioName);
+                        await onAnalyze(result.wav_base64, result.midi_base64, audioName, libraryFileId ?? undefined);
                       } catch {
                         /* analysisError surfaces on the Analyze tab */
                       }

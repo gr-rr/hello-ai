@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO_DIR="${DEPLOY_DIR:-$HOME/hello-ai}"
 REPO_URL="https://github.com/gr-rr/hello-ai.git"
-COMPOSE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE="${DOCKER_COMPOSE_FILE:-backend/docker-compose.yml}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 HEALTH_URL="${BACKEND_URL}/health/ready"
 MAX_WAIT="${HEALTH_TIMEOUT:-120}"
@@ -83,6 +83,16 @@ fi
 echo "[deploy] stopping old containers"
 docker compose -f "$COMPOSE" down --remove-orphans 2>/dev/null || true
 docker rm -f music-ai-backend 2>/dev/null || true
+
+echo "[deploy] running backend tests before deploy"
+cd "$REPO_DIR/backend"
+if python -m pytest tests/ -q --tb=short 2>&1; then
+  echo "[deploy] tests passed"
+else
+  echo "[deploy] tests failed — aborting deploy" >&2
+  exit 1
+fi
+cd "$REPO_DIR"
 
 echo "[deploy] rebuilding backend"
 docker compose -f "$COMPOSE" up -d --build backend
