@@ -43,7 +43,7 @@ export function pitchToName(pitch: number): string {
 const BLACK_KEYPCS = new Set([1, 3, 6, 8, 10]);
 
 export function isBlackKey(pc: number): boolean {
-  return BLACK_KEYPCS.has(pc % 12);
+  return BLACK_KEYPCS.has(((pc % 12) + 12) % 12);
 }
 
 export type NoteInput = { pitch: number; start: number; end: number };

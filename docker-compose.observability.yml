@@ -26,6 +26,8 @@ services:
     ports:
       - "3001:3000"
     environment:
+      # SECURITY: Set GRAFANA_PASSWORD in your shell or .env before starting.
+      # Falls back to 'admin' only for local dev — do NOT use in production.
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
     volumes:
       - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro

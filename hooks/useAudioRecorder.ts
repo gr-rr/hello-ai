@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 
 type RecorderState = "idle" | "recording";
 
@@ -6,6 +6,15 @@ export function useAudioRecorder() {
   const [state, setState] = useState<RecorderState>("idle");
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  // Stop recording on unmount to prevent mic staying active
+  useEffect(() => {
+    return () => {
+      if (mediaRef.current?.state === "recording") {
+        mediaRef.current.stop();
+      }
+    };
+  }, []);
 
   const start = useCallback(
     async (onStop: (blob: Blob, ext: string) => void) => {
