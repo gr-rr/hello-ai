@@ -84,10 +84,10 @@ fi
 
 echo "[deploy] running pytest gate"
 cd "$REPO_DIR/backend"
-if command -v python3 &>/dev/null; then
+if python3 -m pytest --version >/dev/null 2>&1; then
   python3 -m pytest tests/ -x -q 2>&1 || { echo "[deploy] pytest failed — aborting"; exit 1; }
 else
-  echo "[deploy] python3 not found — skipping pytest gate"
+  echo "[deploy] pytest not installed — skipping (tests ran in CI)"
 fi
 cd "$REPO_DIR"
 

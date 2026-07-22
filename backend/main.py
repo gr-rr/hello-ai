@@ -91,13 +91,14 @@ def _analyze_ext(fmt: str) -> str:
 def _split_storage_path(path: str) -> tuple[str, str]:
     """Split 'library/...' or 'midi/...' into (bucket, key).
 
+    The frontend uploads library files with keys like
+    ``library/<uid>/<ts>-<name>.m4a`` inside the ``library`` bucket, so the
+    full path (including the ``library/`` prefix) is the actual storage key.
+
     Raises HTTPException if the path doesn't match a known prefix or key is empty.
     """
     if path.startswith("library/"):
-        key = path[len("library/"):]
-        if not key:
-            raise HTTPException(status_code=400, detail="empty library key")
-        return "library", key
+        return "library", path
     if path.startswith("midi/"):
         key = path[len("midi/"):]
         if not key:
@@ -477,6 +478,5 @@ def delete_library_file(path: str, request: Request, auth=Depends(verify_token))
     sb = _sb()
     if not sb:
         raise HTTPException(status_code=500, detail="Supabase not configured")
-    key = path.replace("library/", "", 1)
-    sb.storage.from_("library").remove([key])
+    sb.storage.from_("library").remove([path])
     return {"status": "deleted"}
