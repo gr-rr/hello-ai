@@ -63,17 +63,15 @@ export default function Spectrogram({
   }, [url, height]);
 
   return (
-    <div>
+    <div className="viz-panel">
       <div className="section-label">Spectrogram</div>
       <div
         ref={waveformRef}
         className="spectrogram"
-        style={{ borderRadius: "var(--r-md) var(--r-md) 0 0", overflow: "hidden", background: "var(--panel-2)" }}
       />
       <div
         ref={specRef}
         className="spectrogram"
-        style={{ borderRadius: "0 0 var(--r-md) var(--r-md)", overflow: "hidden", background: "var(--panel-2)" }}
       />
       {loadStatus === "loading" && <p className="muted" style={{ fontSize: "var(--fs-xs)", marginTop: 4 }}>Rendering spectrogram…</p>}
       {loadStatus === "error" && <p className="muted" style={{ fontSize: "var(--fs-xs)", marginTop: 4 }}>Spectrogram unavailable.</p>}

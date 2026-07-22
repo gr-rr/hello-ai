@@ -60,9 +60,9 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(midiBase64?: string, name?: string, libraryPath?: string) {
+  async function handleAnalyze(midiBase64?: string, name?: string, libraryPath?: string, notes?: { pitch: number; start: number; end: number; velocity: number }[]) {
     if (name) setAudioName(name);
-    if (!midiBase64 && !libraryPath) {
+    if (!midiBase64 && !libraryPath && !notes) {
       setAnalysisError("Load a track or pick one from your library first");
       goToTab("analyze");
       return;
@@ -74,7 +74,7 @@ export default function Studio({
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(midiBase64, libraryPath);
+      const result = await analyzeAudio(midiBase64, libraryPath, notes);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -89,9 +89,9 @@ export default function Studio({
     router.replace(`/?tab=${id}`, { scroll: false });
   }
 
-  async function handleAnalyzeLibrary(item: LibFile) {
+async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
-    await handleAnalyze(undefined, item.name, item.id);
+    await handleAnalyze(undefined, item.name, item.id, item.notes);
   }
 
   function handleLibraryTranscribe(file: LibFile) {

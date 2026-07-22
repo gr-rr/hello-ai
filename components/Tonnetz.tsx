@@ -57,7 +57,7 @@ export default function Tonnetz({ notes }: { notes: Note[] }) {
   }
 
   return (
-    <div>
+    <div className="viz-panel">
       <div className="section-label">Tonnetz (harmonic relationships)</div>
       <div style={{ overflowX: "auto" }}>
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: "block" }}>

@@ -359,6 +359,7 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 class AnalyzeRequest(BaseModel):
     midi_base64: str | None = None
     library_path: str | None = None
+    notes: list[dict] | None = None
 
 
 @app.post("/music/analyze")
@@ -368,13 +369,16 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
 
     Requires MIDI input — either ``midi_base64`` or a ``library_path`` pointing
     to a .mid file.  Audio analysis is not supported; transcribe first.
+
+    Alternatively, pass ``notes`` (note events from transcription) directly.
     """
     has_midi = bool(req.midi_base64)
     has_library = bool(req.library_path)
-    if not (has_midi or has_library):
+    has_notes = bool(req.notes)
+    if not (has_midi or has_library or has_notes):
         raise HTTPException(
             status_code=422,
-            detail="midi_base64 or library_path (to a .mid file) required — transcribe first",
+            detail="midi_base64, library_path (to a .mid file), or notes required — transcribe first",
         )
 
     with tempfile.TemporaryDirectory() as td:
@@ -411,6 +415,14 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
             midi_path = os.path.join(td, "input.mid")
             with open(midi_path, "wb") as f:
                 f.write(raw)
+
+        if has_notes and not midi_path:
+            from analyze import analyze_from_notes
+            try:
+                return analyze_from_notes(req.notes)
+            except Exception:
+                logger.exception("analysis from notes failed")
+                raise HTTPException(status_code=500, detail="analysis failed") from None
 
         if not midi_path:
             raise HTTPException(status_code=422, detail="no MIDI data provided")
