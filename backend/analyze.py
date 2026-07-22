@@ -11,11 +11,15 @@ Pipeline:
           →  chord smoothing  (remove impossible transitions, merge short chords)
 """
 
+import contextlib
 import logging
+import os
+import tempfile
 from collections import Counter
 from typing import TypedDict
 
 import numpy as np
+import pretty_midi
 
 logger = logging.getLogger("analyze")
 
@@ -787,11 +791,6 @@ def analyze_from_notes(notes: list[dict]) -> AnalysisResult:
 
     Creates a temporary MIDI file and reuses the existing analyze_midi pipeline.
     """
-    import tempfile
-    import os
-    import pretty_midi
-    import numpy as np
-
     # Create a temporary MIDI file from notes
     pm = pretty_midi.PrettyMIDI()
     inst = pretty_midi.Instrument(program=0, is_drum=False, name="Piano")
@@ -816,9 +815,7 @@ def analyze_from_notes(notes: list[dict]) -> AnalysisResult:
         result = analyze_midi(midi_path)
     finally:
         # Clean up temp file
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(midi_path)
-        except OSError:
-            pass
 
     return result

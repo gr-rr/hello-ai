@@ -378,7 +378,10 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
     if not (has_midi or has_library or has_notes):
         raise HTTPException(
             status_code=422,
-            detail="midi_base64, library_path (to a .mid file), or notes required — transcribe first",
+            detail=(
+                "midi_base64, library_path (to a .mid file), "
+                "or notes required — transcribe first"
+            ),
         )
 
     with tempfile.TemporaryDirectory() as td:
