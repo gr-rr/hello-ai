@@ -46,7 +46,7 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (audioBase64?: string, midiBase64?: string, name?: string, libraryPath?: string) => void;
+  onAnalyze?: (midiBase64?: string, name?: string, libraryPath?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
@@ -362,9 +362,9 @@ export default function Transcribe({
                     onClick={async () => {
                       try {
                         if (libraryFileId) {
-                          await onAnalyze(undefined, undefined, audioName, libraryFileId);
+                          await onAnalyze(undefined, audioName, libraryFileId);
                         } else {
-                          await onAnalyze(result.wav_base64, result.midi_base64, audioName, undefined);
+                          await onAnalyze(result.midi_base64, audioName, undefined);
                         }
                       } catch {
                         /* analysisError surfaces on the Analyze tab */

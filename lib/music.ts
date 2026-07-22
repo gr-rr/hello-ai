@@ -195,17 +195,13 @@ export async function enhanceAudio(
 }
 
 export async function analyzeAudio(
-  audioBase64?: string,
   midiBase64?: string,
-  fmt = "wav",
   libraryPath?: string,
 ): Promise<TranscribeResult["analysis"]> {
   return apiFetch("/api/music/analyze", {
     method: "POST",
     body: JSON.stringify({
-      audio_base64: audioBase64,
       midi_base64: midiBase64,
-      fmt,
       library_path: libraryPath,
     }),
   }) as Promise<TranscribeResult["analysis"]>;
