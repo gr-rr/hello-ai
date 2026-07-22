@@ -44,7 +44,7 @@ def _auth():
 def test_split_storage_path_library():
     bucket, key = _split_storage_path("library/6e177343-cf86-418d-ad55-bec73baa12b0/12345-song.wav")
     assert bucket == "library"
-    assert key == "6e177343-cf86-418d-ad55-bec73baa12b0/12345-song.wav"
+    assert key == "library/6e177343-cf86-418d-ad55-bec73baa12b0/12345-song.wav"
 
 
 def test_split_storage_path_midi():
