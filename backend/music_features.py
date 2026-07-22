@@ -22,9 +22,22 @@ import soundfile as sf
 
 logger = logging.getLogger("music_features")
 
-# Location of the bundled GM SoundFont used for synthesis. A real-instrument
-# SoundFont (FluidR3_GM) is downloaded at image build time (see Dockerfile).
+# Location of the bundled GM SoundFont used for synthesis.
 SOUNDFONT_PATH = os.environ.get("SOUNDFONT_PATH", "/app/soundfonts/FluidR3_GM.sf2")
+
+# Subprocess timeout (seconds)
+_FFMPEG_TIMEOUT = 120
+
+# Normalization
+_MAX_NORMALIZE_GAIN = 10.0
+
+# Numpy synth constants
+_SYNTH_EXTRA_DURATION = 0.5
+_SYNTH_MIN_NOTE_DURATION = 0.2
+_SYNTH_ATTACK_TIME = 0.01
+_SYNTH_RELEASE_TIME = 0.15
+_SYNTH_HARMONICS = [(1, 1.0), (2, 0.3), (3, 0.12), (4, 0.06)]
+_SYNTH_AMPLITUDE = 0.22
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +85,7 @@ def _normalize_wav(wav_bytes: bytes, peak: float = 0.95) -> bytes:
     data, sr = sf.read(io.BytesIO(wav_bytes))
     max_abs = float(np.max(np.abs(data))) if data.size else 0.0
     if max_abs > 0.0:
-        gain = min(peak / max_abs, 10.0)
+        gain = min(peak / max_abs, _MAX_NORMALIZE_GAIN)
         data = np.clip(data * gain, -1.0, 1.0)
     buf = io.BytesIO()
     sf.write(buf, data, sr, format="WAV", subtype="PCM_16")
@@ -89,7 +102,7 @@ def _midi_to_wav_numpy(midi_bytes: bytes, sr: int = 22050) -> bytes:
 
     midi = pretty_midi.PrettyMIDI(io.BytesIO(midi_bytes))
     duration = max(midi.get_end_time(), 0.1)
-    n = int((duration + 0.5) * sr)
+    n = int((duration + _SYNTH_EXTRA_DURATION) * sr)
     out = np.zeros(n, dtype=np.float64)
 
     for instrument in midi.instruments:
@@ -98,19 +111,19 @@ def _midi_to_wav_numpy(midi_bytes: bytes, sr: int = 22050) -> bytes:
             start = int(note.start * sr)
             end = int(note.end * sr)
             if end <= start:
-                end = start + int(0.2 * sr)
+                end = start + int(_SYNTH_MIN_NOTE_DURATION * sr)
             seg = np.arange(end - start) / sr
             env = np.ones_like(seg)
-            attack = int(0.01 * sr)
-            release = int(0.15 * sr)
+            attack = int(_SYNTH_ATTACK_TIME * sr)
+            release = int(_SYNTH_RELEASE_TIME * sr)
             if len(env) > attack:
                 env[:attack] = np.linspace(0, 1, attack)
             if len(env) > release:
                 env[-release:] = np.linspace(1, 0, release)
             sig = np.zeros_like(seg)
-            for mult, amp in [(1, 1.0), (2, 0.3), (3, 0.12), (4, 0.06)]:
+            for mult, amp in _SYNTH_HARMONICS:
                 sig += amp * np.sin(2 * np.pi * f * mult * seg)
-            sig *= env * 0.22
+            sig *= env * _SYNTH_AMPLITUDE
             out[start:end] += sig
 
     out = np.clip(out, -1.0, 1.0)
@@ -169,7 +182,7 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
                     os.path.join(td, "input_conv.wav"),
                 ],
                 capture_output=True,
-                timeout=120,
+                timeout=_FFMPEG_TIMEOUT,
             )
             if conv.returncode != 0 or not os.path.exists(os.path.join(td, "input_conv.wav")):
                 logger.warning("enhance: pre-convert failed, using raw input")

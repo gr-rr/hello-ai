@@ -9,7 +9,6 @@ import {
   type LibFile,
   type Transcription,
 } from "@/lib/music";
-import { fetchWorks, searchWorks, fetchFirstRecording, type MusopenWork } from "@/lib/musopen";
 import Visualizer from "@/components/Visualizer";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
@@ -46,12 +45,6 @@ export default function Library({
   const [duration, setDuration] = useState(0);
   const [recording, setRecording] = useState(false);
   const [recordTimer, setRecordTimer] = useState(0);
-
-  const [musopenWorks, setMusopenWorks] = useState<MusopenWork[]>([]);
-  const [musopenOpen, setMusopenOpen] = useState(false);
-  const [musopenLoading, setMusopenLoading] = useState(false);
-  const [archiveQuery, setArchiveQuery] = useState("");
-  const [importingTrack, setImportingTrack] = useState<string | null>(null);
 
   const dropRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -237,63 +230,6 @@ export default function Library({
     setRecordTimer(0);
   }
 
-  async function openArchive() {
-    if (musopenOpen) { setMusopenOpen(false); return; }
-    setMusopenLoading(true);
-    setMusopenWorks([]);
-    setStatus("Loading Internet Archive…");
-    try {
-      const { works, error } = await fetchWorks();
-      setMusopenWorks(works);
-      setMusopenOpen(true);
-      setStatus(error ? "⚠️ " + error : `${works.length} tracks loaded`);
-    } catch (err) {
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "Internet Archive failed"));
-    } finally {
-      setMusopenLoading(false);
-    }
-  }
-
-  async function doArchiveSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!archiveQuery.trim()) return;
-    setMusopenLoading(true);
-    setMusopenWorks([]);
-    setStatus("Searching…");
-    try {
-      const { works, error } = await searchWorks(archiveQuery);
-      setMusopenWorks(works);
-      setStatus(error ? "⚠️ " + error : `${works.length} tracks found`);
-    } catch (err) {
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "Search failed"));
-    } finally {
-      setMusopenLoading(false);
-    }
-  }
-
-  async function importFromArchive(work: MusopenWork) {
-    const recording = fetchFirstRecording(work);
-    if (!recording) {
-      setStatus("⚠️ No audio for " + work.title);
-      return;
-    }
-    setImportingTrack(work.title);
-    setStatus(`Importing ${work.title}…`);
-    try {
-      const res = await fetch(recording.url);
-      if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-      const blob = await res.blob();
-      const name = `${work.composer} - ${work.title}.${recording.format}`.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
-      await uploadToLibrary(name, blob);
-      setStatus(`✓ Imported ${work.title}`);
-      await refresh();
-    } catch (err) {
-      setStatus("⚠️ " + (err instanceof Error ? err.message : "import failed"));
-    } finally {
-      setImportingTrack(null);
-    }
-  }
-
   function formatTime(sec: number): string {
     const m = Math.floor(sec / 60);
     const s = Math.floor(sec % 60);
@@ -332,13 +268,6 @@ export default function Library({
         <button className="icon-btn" onClick={recording ? stopRecording : startRecording} disabled={busy || !signedIn}>
           {recording ? "■ Stop" : "● Record"}
         </button>
-        <button
-          className="icon-btn ghost"
-          onClick={openArchive}
-          disabled={busy || !!importingTrack}
-        >
-          {musopenLoading ? "Loading…" : musopenOpen ? "✕ Close" : "Internet Archive"}
-        </button>
       </div>
 
       {recording && (
@@ -347,61 +276,6 @@ export default function Library({
           <span className="muted" style={{ fontFamily: "monospace" }}>
             {formatTime(recordTimer)}
           </span>
-        </div>
-      )}
-
-      {musopenOpen && (
-        <div className="card" style={{ maxHeight: 320, overflowY: "auto" }}>
-          <form onSubmit={doArchiveSearch} style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <input
-              className="input"
-              placeholder="Search music (e.g. Beethoven, piano, jazz)"
-              value={archiveQuery}
-              onChange={(e) => setArchiveQuery(e.target.value)}
-              style={{ flex: 1, fontSize: "var(--fs-sm)" }}
-            />
-            <button className="chip" type="submit" disabled={musopenLoading || !archiveQuery.trim()}>
-              {musopenLoading ? "…" : "Search"}
-            </button>
-          </form>
-          {musopenWorks.length === 0 ? (
-            <p className="muted" style={{ fontSize: "var(--fs-sm)", margin: 0 }}>
-              No results. Try{" "}
-              <a href="https://archive.org/audio" target="_blank" rel="noreferrer">archive.org/audio</a>.
-            </p>
-          ) : (
-            <>
-              <div className="section-label">Select a track to import:</div>
-              {musopenWorks.map((w) => {
-                const hasRecording = fetchFirstRecording(w) !== null;
-                return (
-                  <div
-                    key={w.id}
-                    style={{
-                      display: "flex", justifyContent: "space-between",
-                      alignItems: "center", padding: "6px 0",
-                      borderBottom: "1px solid var(--border)",
-                      opacity: !hasRecording || importingTrack !== null ? 0.5 : 1,
-                    }}
-                  >
-                     <div style={{ fontSize: "var(--fs-sm)", lineHeight: 1.4 }}>
-                      <span style={{ fontWeight: 500 }}>{w.composer}</span>
-                      <span className="muted"> — </span>
-                      <span>{w.title}</span>
-                      <span className="muted" style={{ marginLeft: 6 }}>{w.epoch}</span>
-                    </div>
-                    <button
-                      className="chip"
-                      disabled={!hasRecording || !!importingTrack}
-                      onClick={() => importFromArchive(w)}
-                    >
-                      {importingTrack === w.title ? "Importing…" : hasRecording ? "Import" : "No audio"}
-                    </button>
-                  </div>
-                );
-              })}
-            </>
-          )}
         </div>
       )}
 
@@ -446,6 +320,7 @@ export default function Library({
       )}
 
       <span className="status">{status}</span>
+
 
       {signedIn ? (
         <>
@@ -495,14 +370,6 @@ export default function Library({
         </div>
       )}
 
-      <style>{`
-        .pb-track { cursor: pointer; position: relative; }
-        .record-dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--danger); animation:pulse-record 1s ease-in-out infinite; }
-        .toolbar { display:flex; gap:var(--s-2); flex-wrap:wrap; margin-top:var(--s-3); }
-        .empty { text-align:center; color:var(--muted); font-size:var(--fs-sm); padding:var(--s-5) var(--s-4); border:1px dashed var(--border); border-radius:var(--r-md); }
-        .drop-zone.disabled { opacity:0.4; cursor:not-allowed; }
-        .drop-zone.disabled:hover { border-color:var(--border); background:transparent; }
-      `}</style>
     </div>
   );
 }

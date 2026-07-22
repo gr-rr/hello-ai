@@ -24,11 +24,8 @@ COPY . .
 
 RUN addgroup --system --gid 1001 appuser \
     && adduser --disabled-password --gecos "" --uid 1001 --gid 1001 appuser \
-    && mkdir -p /data/adapters /app/soundfonts /app/.cache \
-    && chown -R appuser:appuser /app /data
-
-ENV HF_HOME=/app/.cache \
-    TORCH_HOME=/app/.cache
+    && mkdir -p /app/soundfonts \
+    && chown -R appuser:appuser /app
 
 USER appuser
 

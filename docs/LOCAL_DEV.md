@@ -45,30 +45,4 @@ npx playwright test tests/visual/preview.spec.ts
 The Transcribe E2E test mocks the backend, so it runs without the Oracle VM.
 The Library test needs real Supabase credentials.
 
-## Project structure
-
-```
-app/
-  layout.tsx          — root layout (fonts, CSS imports, metadata)
-  page.tsx            — entry point → <Studio>
-  globals.css         — all styles (design tokens + components)
-  api/                — Next.js route handlers (proxy to backend)
-components/
-  Studio.tsx          — page shell (topbar + hero + grid)
-  transcribe/         — audio → MIDI → sheet music
-  library/            — file upload / manage / play
-  Score.tsx           — abcjs score rendering + synth
-lib/
-  music.ts            — core API: transcribe, enhance, upload, list, delete
-  supabase.ts         — Supabase client (graceful fallback)
-  storage.ts          — generic storage helpers
-  backend.ts          — reverse proxy to Oracle VM
-  abc.ts              — MIDI notes → ABC notation
-design/
-  tokens.json         — design tokens (colors, spacing, typography)
-  mockups/            — HTML mockups (design SOT)
-backend/              — FastAPI (Oracle VM, separate deploy)
-tests/
-  e2e/                — Playwright user journeys
-  visual/             — Playwright visual regression
-```
+For the canonical project structure, see `docs/ARCHITECTURE.md` §9.

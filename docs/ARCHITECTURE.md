@@ -10,7 +10,6 @@ known gaps — not an aspirational design (that lives in `docs/REDESIGN.md`).
 
 - **Transcribe** — audio → MIDI via `basic-pitch`.
 - **Analyze** — key / tempo / chords via `librosa`.
-- **Fine-tune** — LoRA training of models.
 
 ## 2. System at a glance
 
@@ -35,7 +34,7 @@ known gaps — not an aspirational design (that lives in `docs/REDESIGN.md`).
         │   library     │          │      │                              │
         │   midi        │          │      ▼                              │
         │   transcriptions         │    uvicorn (FastAPI :8000)          │
-        │   soundfonts  │          │      basic-pitch / librosa / LoRA    │
+        │   soundfonts  │          │      basic-pitch / librosa                                        │
         │  RLS: owner   │          │    Uses Supabase SERVICE-ROLE key    │
         └───────────────┘          └─────────────────────────────────────┘
 ```
@@ -87,8 +86,7 @@ There is also a `deploy-backend.yml` GitHub Actions workflow that runs on push t
 - Buckets: `library`, `midi`, `transcriptions`, `soundfonts`.
 - RLS is **owner-scoped**.
 - Browser: anon key (`lib/storage.ts`). Backend: service-role key.
-- Migrations live in `supabase/migrations/`. DB tables (backend-written):
-  `jobs`, `models`.
+- Migrations live in `supabase/migrations/`.
 
 ## 6. Error tracking (Sentry)
 

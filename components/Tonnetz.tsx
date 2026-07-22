@@ -2,22 +2,9 @@
 
 import { useMemo } from "react";
 import type { TranscribeResult } from "@/lib/music";
-import { SHARP_NOTE_NAMES, pitchClass } from "@/lib/notes";
+import { SHARP_NOTE_NAMES, computeChroma } from "@/lib/notes";
 
 type Note = TranscribeResult["notes"][number];
-
-// Tonnetz adjacency: each pitch class connects to +7 (fifth), +4 (major 3rd), +3 (minor 3rd)
-const ADJACENCIES = [7, 4, 3];
-
-function computeChroma(notes: Note[]): number[] {
-  const bins = new Array(12).fill(0);
-  for (const n of notes) {
-    const dur = Math.max(n.end - n.start, 0);
-    bins[pitchClass(n.pitch)] += dur;
-  }
-  const max = Math.max(...bins, 1);
-  return bins.map((v) => v / max);
-}
 
 // Hexagonal grid positions for 12 pitch classes arranged in a Tonnetz.
 // Laid out so fifths go horizontal, major thirds diagonal-up, minor thirds diagonal-down.

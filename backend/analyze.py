@@ -1,4 +1,5 @@
 import logging
+from collections import Counter
 from typing import TypedDict
 
 import numpy as np
@@ -71,12 +72,19 @@ class AnalysisResult(TypedDict):
 
 _NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
-# Krumhansl-Schmuckler key profiles (Kessler et al., 2001). Correlation of a
-# pitch-class distribution against these gives musically meaningful major/minor
-# key estimates, including relative-major/minor ambiguity — far more robust than
-# the binary [1,0,1,...] templates used previously.
+# Krumhansl-Schmuckler key profiles (Kessler et al., 2001).
 _KS_MAJOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
 _KS_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+# Analysis thresholds
+_PEAK_THRESHOLD_RATIO = 0.3
+_MIN_CHORD_FRAME_SUM = 0.1
+_MIN_CHORD_DURATION = 0.1
+_MIDI_FRAME_WINDOW = 0.25
+_MAX_ROMAN_NUMERALS = 500
+_MAX_VOICE_LEADING_PAIRS = 2000
+_MIN_MODULATION_NOTES_MULTIPLIER = 4
+_MIN_PITCHES_PER_WINDOW = 4
 
 # Chord vocabulary as pitch-class intervals from the root. Binary masks are
 # matched against the active pitch-class set per frame; root + third are weighted
@@ -188,7 +196,7 @@ def detect_time_signature(y: np.ndarray, sr: int) -> TimeSigResult:
 
     peaks = []
     for i in range(2, min(len(ac) - 1, 128)):
-        if ac[i] > ac[i - 1] and ac[i] > ac[i + 1] and ac[i] > 0.3 * ac.max():
+        if ac[i] > ac[i - 1] and ac[i] > ac[i + 1] and ac[i] > _PEAK_THRESHOLD_RATIO * ac.max():
             peaks.append(i)
 
     if len(peaks) < 2:
@@ -223,7 +231,7 @@ def _chords_from_frames(frames: list[tuple[float, np.ndarray]]) -> list[ChordRes
     for t, vec in frames:
         frame = vec / vec.max() if vec.max() > 0 else vec
 
-        if frame.sum() < 0.1:
+        if frame.sum() < _MIN_CHORD_FRAME_SUM:
             if current_label:
                 chords.append(
                     ChordResult(
@@ -247,7 +255,7 @@ def _chords_from_frames(frames: list[tuple[float, np.ndarray]]) -> list[ChordRes
         root, quality = best_label.split(":")
 
         if best_label != current_label:
-            if current_label and t - current_start > 0.1:
+            if current_label and t - current_start > _MIN_CHORD_DURATION:
                 chords.append(
                     ChordResult(
                         root=current_root,
@@ -290,12 +298,7 @@ def detect_chords(y: np.ndarray, sr: int) -> list[ChordResult]:
 
 
 def _midi_frames(midi_path: str) -> tuple[np.ndarray, list[tuple[float, np.ndarray]]]:
-    """Return (pitch-class histogram, per-window chord frames) from a MIDI file.
-
-    The histogram weights each pitch class by the total sounding duration of its
-    notes; chord frames bucket notes into 0.25s windows and sum their pitch
-    classes. This is the symbolic input to key/chord detection — more accurate
-    than re-deriving harmony from the audio signal."""
+    """Return (pitch-class histogram, per-window chord frames) from a MIDI file."""
     import pretty_midi
 
     pm = pretty_midi.PrettyMIDI(midi_path)
@@ -308,12 +311,12 @@ def _midi_frames(midi_path: str) -> tuple[np.ndarray, list[tuple[float, np.ndarr
             pclass = note.pitch % 12
             dur = max(note.end - note.start, 0.0)
             pc_hist[pclass] += dur
-            wid = int(note.start / 0.25)
+            wid = int(note.start / _MIDI_FRAME_WINDOW)
             if wid not in windows:
                 windows[wid] = np.zeros(12, dtype=np.float64)
             windows[wid][pclass] += dur
 
-    frames = [(wid * 0.25, vec) for wid, vec in sorted(windows.items()) if vec.sum() > 0]
+    frames = [(wid * _MIDI_FRAME_WINDOW, vec) for wid, vec in sorted(windows.items()) if vec.sum() > 0]
     return pc_hist, frames
 
 
@@ -348,16 +351,11 @@ _QUALITY_MAP = {
 }
 
 
-def _m21_roman_numerals(midi_path: str) -> list[RomanNumeralResult]:
-    """Roman numeral analysis from MIDI using music21."""
+def _m21_roman_numerals(score) -> list[RomanNumeralResult]:
+    """Roman numeral analysis from a pre-parsed music21 Score."""
     try:
-        from music21 import converter, roman
+        from music21 import roman
     except ImportError:
-        return []
-
-    try:
-        score = converter.parse(midi_path, quantizePost=False)
-    except Exception:
         return []
 
     detected_key = score.analyze("key")
@@ -389,24 +387,19 @@ def _m21_roman_numerals(midi_path: str) -> list[RomanNumeralResult]:
                     )
                 except Exception:
                     continue
-            if len(results) > 500:
+            if len(results) > _MAX_ROMAN_NUMERALS:
                 break
-        if len(results) > 500:
+        if len(results) > _MAX_ROMAN_NUMERALS:
             break
 
     return results
 
 
-def _m21_cadences(midi_path: str) -> list[CadenceResult]:
-    """Detect cadences from chord progressions using music21."""
+def _m21_cadences(score) -> list[CadenceResult]:
+    """Detect cadences from chord progressions using a pre-parsed music21 Score."""
     try:
-        from music21 import converter, roman
+        from music21 import roman
     except ImportError:
-        return []
-
-    try:
-        score = converter.parse(midi_path, quantizePost=False)
-    except Exception:
         return []
 
     detected_key = score.analyze("key")
@@ -450,18 +443,8 @@ def _m21_cadences(midi_path: str) -> list[CadenceResult]:
     return cadences
 
 
-def _m21_modulations(midi_path: str, window_size: int = 8) -> list[ModulationResult]:
-    """Detect key modulations via windowed key analysis."""
-    try:
-        from music21 import converter
-    except ImportError:
-        return []
-
-    try:
-        score = converter.parse(midi_path, quantizePost=False)
-    except Exception:
-        return []
-
+def _m21_modulations(score, window_size: int = 8) -> list[ModulationResult]:
+    """Detect key modulations via windowed key analysis on a pre-parsed Score."""
     all_notes = []
     for part in score.parts:
         for note in part.recurse().getElementsByClass("GeneralNote"):
@@ -469,7 +452,7 @@ def _m21_modulations(midi_path: str, window_size: int = 8) -> list[ModulationRes
             if hasattr(note, "pitch") and note.pitch is not None:
                 all_notes.append((offset, note.pitch.midi))
 
-    if len(all_notes) < window_size * 4:
+    if len(all_notes) < window_size * _MIN_MODULATION_NOTES_MULTIPLIER:
         return []
 
     all_notes.sort(key=lambda x: x[0])
@@ -482,9 +465,8 @@ def _m21_modulations(midi_path: str, window_size: int = 8) -> list[ModulationRes
         t_start = w * window_sec
         t_end = (w + 1) * window_sec
         pitches_in_window = [p for t, p in all_notes if t_start <= t < t_end]
-        if len(pitches_in_window) < 4:
+        if len(pitches_in_window) < _MIN_PITCHES_PER_WINDOW:
             continue
-        from collections import Counter
 
         pc_counts = Counter(p % 12 for p in pitches_in_window)
         pc_dist = np.zeros(12)
@@ -510,16 +492,11 @@ def _m21_modulations(midi_path: str, window_size: int = 8) -> list[ModulationRes
     return modulations
 
 
-def _m21_voice_leading(midi_path: str) -> VoiceLeadingResult | None:
-    """Analyze voice leading between parts."""
+def _m21_voice_leading(score) -> VoiceLeadingResult | None:
+    """Analyze voice leading between parts using a pre-parsed Score."""
     try:
-        from music21 import converter, voiceLeading
+        from music21 import voiceLeading
     except ImportError:
-        return None
-
-    try:
-        score = converter.parse(midi_path, quantizePost=False)
-    except Exception:
         return None
 
     parts = list(score.parts)
@@ -547,13 +524,13 @@ def _m21_voice_leading(midi_path: str) -> VoiceLeadingResult | None:
                     elif "Similar" in str(motion):
                         similar += 1
                     total += 1
-                    if total > 2000:
+                    if total > _MAX_VOICE_LEADING_PAIRS:
                         break
             except Exception:
                 continue
-            if total > 2000:
+            if total > _MAX_VOICE_LEADING_PAIRS:
                 break
-        if total > 2000:
+        if total > _MAX_VOICE_LEADING_PAIRS:
             break
 
     if total == 0:
@@ -586,24 +563,35 @@ def _m21_voice_leading(midi_path: str) -> VoiceLeadingResult | None:
 def deep_midi_analysis(midi_path: str) -> dict[str, object]:
     """Run music21-based deep analysis on a MIDI file.
 
+    Parses the score once and passes it to all sub-analyses.
     Returns Roman numerals, cadences, modulations, and voice leading.
     Failures in any sub-analysis are caught and silently skipped.
     """
+    try:
+        from music21 import converter
+    except ImportError:
+        return {}
+
+    try:
+        score = converter.parse(midi_path, quantizePost=False)
+    except Exception:
+        return {}
+
     result: dict[str, object] = {}
 
-    roman_numerals = _m21_roman_numerals(midi_path)
+    roman_numerals = _m21_roman_numerals(score)
     if roman_numerals:
         result["roman_numerals"] = roman_numerals
 
-    cadences = _m21_cadences(midi_path)
+    cadences = _m21_cadences(score)
     if cadences:
         result["cadences"] = cadences
 
-    modulations = _m21_modulations(midi_path)
+    modulations = _m21_modulations(score)
     if modulations:
         result["modulations"] = modulations
 
-    vl = _m21_voice_leading(midi_path)
+    vl = _m21_voice_leading(score)
     if vl:
         result["voice_leading"] = vl
 

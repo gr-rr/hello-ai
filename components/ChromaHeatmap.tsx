@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { TranscribeResult } from "@/lib/music";
-import { SHARP_NOTE_NAMES, pitchClass } from "@/lib/notes";
+import { SHARP_NOTE_NAMES, computeChroma } from "@/lib/notes";
 
 type Note = TranscribeResult["notes"][number];
 
@@ -11,16 +11,6 @@ const BAR_W = 36;
 const GAP = 4;
 const MAX_H = 120;
 const LABEL_H = 20;
-
-function computeChroma(notes: Note[]): number[] {
-  const bins = new Array(12).fill(0);
-  for (const n of notes) {
-    const dur = Math.max(n.end - n.start, 0);
-    bins[pitchClass(n.pitch)] += dur;
-  }
-  const max = Math.max(...bins, 1);
-  return bins.map((v) => v / max);
-}
 
 export default function ChromaHeatmap({ notes }: { notes: Note[] }) {
   const chroma = useMemo(() => computeChroma(notes), [notes]);

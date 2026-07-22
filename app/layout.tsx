@@ -8,9 +8,9 @@ import AuthProvider from "@/components/AuthProvider";
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
-  title: "hello-ai — Music Studio, Finetune & Compare",
+  title: "hello-ai — Music Studio",
   description:
-    "Generate music, fine-tune small LLMs, and compare model outputs — with a server backend on Oracle and Supabase.",
+    "Transcribe audio to MIDI and sheet music, analyze key and tempo, and manage your music library — with a server backend on Oracle and Supabase.",
   icons: {
     icon: "/icon.svg",
     apple: "/icon.svg",
