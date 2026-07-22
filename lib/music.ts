@@ -101,10 +101,12 @@ export async function listLibrary(): Promise<LibFile[]> {
       .map(async (f: FileMeta) => {
         const path = `${prefix}/${f.name}`;
         const displayName = f.name.replace(/^\d+-/, "").replace(/_/g, " ");
+        // Strip extension to get the base name (e.g., "hello" from "hello.wav")
+        const baseName = f.name.replace(/\.[^.]+$/, "");
         let notes;
-        if (notesNames.has(`${f.name}.json`)) {
+        if (notesNames.has(`${baseName}.json`)) {
           try {
-            const raw = await downloadText(TRANSCRIPTIONS_BUCKET, `${uid}/${f.name}.json`);
+            const raw = await downloadText(TRANSCRIPTIONS_BUCKET, `${uid}/${baseName}.json`);
             if (raw) notes = JSON.parse(raw);
           } catch {
             notes = undefined;
@@ -151,7 +153,7 @@ export async function deleteFromLibrary(id: string): Promise<void> {
 export async function listTranscriptions(): Promise<Transcription[]> {
   const uid = await userId();
   if (!uid) return [];
-  const prefix = `transcriptions/${uid}`;
+  const prefix = uid;
   const files = await listFiles(TRANSCRIPTIONS_BUCKET, prefix);
   return files
     .filter((f) => !f.name.endsWith("/"))

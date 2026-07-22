@@ -35,6 +35,7 @@ export default function Studio({
   const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
   const [pendingLibFile, setPendingLibFile] = useState<LibFile | null>(null);
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (tab === "analyze") {
@@ -48,6 +49,7 @@ export default function Studio({
   function refreshTranscriptions() {
     if (signedIn) {
       listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
+      setRefreshKey((k) => k + 1);
     }
   }
 
@@ -150,6 +152,7 @@ export default function Studio({
             onTranscribe={handleLibraryTranscribe}
             onAnalyze={handleLibraryAnalyze}
             transcriptions={transcriptions}
+            refreshKey={refreshKey}
           />
         )}
 
@@ -215,7 +218,7 @@ export default function Studio({
                   numNotes={lastResult?.num_notes ?? 0}
                 />
                 <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
-                  <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); }}>
+                  <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
                     ← Analyze another track
                   </button>
                 </div>
