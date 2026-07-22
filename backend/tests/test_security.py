@@ -17,6 +17,9 @@ class _FakeStorage:
         self.store[key] = data if isinstance(data, bytes) else data.read()
         return {"path": key}
 
+    def get_public_url(self, key):
+        return f"https://example.com/{key}"
+
     def from_(self, bucket):
         self._bucket = bucket
         return self
