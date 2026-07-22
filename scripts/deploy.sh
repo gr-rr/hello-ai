@@ -73,10 +73,12 @@ PREV_HEAD="$(git rev-parse --short HEAD)"
 # --- write .env from environment (deploy workflow passes these) ---
 if [ -n "${SUPABASE_URL:-}" ] || [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
   echo "[deploy] writing .env from environment"
-  cat > "$REPO_DIR/.env" <<ENVEOF
+  cat > "$REPO_DIR/backend/.env" <<ENVEOF
 SUPABASE_URL=${SUPABASE_URL:-}
 SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
 SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+SENTRY_DSN_BACKEND=${SENTRY_DSN_BACKEND:-}
+SENTRY_ENV=${SENTRY_ENV:-production}
 ENVEOF
 fi
 
