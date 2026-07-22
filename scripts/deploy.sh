@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO_DIR="${DEPLOY_DIR:-$HOME/hello-ai}"
 REPO_URL="https://github.com/gr-rr/hello-ai.git"
-COMPOSE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
+COMPOSE="${DOCKER_COMPOSE_FILE:-backend/docker-compose.yml}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 HEALTH_URL="${BACKEND_URL}/health/ready"
 MAX_WAIT="${HEALTH_TIMEOUT:-120}"
@@ -79,6 +79,15 @@ SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
 SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
 ENVEOF
 fi
+
+echo "[deploy] running pytest gate"
+cd "$REPO_DIR/backend"
+if command -v python3 &>/dev/null; then
+  python3 -m pytest tests/ -x -q 2>&1 || { echo "[deploy] pytest failed — aborting"; exit 1; }
+else
+  echo "[deploy] python3 not found — skipping pytest gate"
+fi
+cd "$REPO_DIR"
 
 echo "[deploy] stopping old containers"
 docker compose -f "$COMPOSE" down --remove-orphans 2>/dev/null || true
