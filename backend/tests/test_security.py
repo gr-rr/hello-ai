@@ -135,8 +135,6 @@ def test_analyze_rejects_oversize_midi(client):
 
 
 def test_analyze_accepts_library_path(client, monkeypatch):
-    from analyze import analyze_midi
-
     monkeypatch.setattr(main, "analyze_midi", lambda *a, **k: {"key": {}, "tempo": {}})
     sb = _FakeSB()
     sb.storage.store["owner-1/x.mid"] = b"MThd\x00\x00\x00\x06\x00\x00"
