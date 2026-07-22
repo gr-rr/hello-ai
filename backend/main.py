@@ -100,7 +100,7 @@ def _split_storage_path(path: str) -> tuple[str, str]:
     if path.startswith("library/"):
         return "library", path
     if path.startswith("midi/"):
-        key = path[len("midi/"):]
+        key = path[len("midi/") :]
         if not key:
             raise HTTPException(status_code=400, detail="empty midi key")
         return "midi", key

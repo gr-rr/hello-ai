@@ -22,6 +22,7 @@ logger = logging.getLogger("analyze")
 
 # ── TypedDicts ──────────────────────────────────────────────────────────────
 
+
 class KeyResult(TypedDict):
     tonic: str
     mode: str
@@ -108,13 +109,13 @@ _KS_MINOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69
 
 # Analysis thresholds
 _MIN_CHORD_FRAME_SUM = 0.1
-_MIN_CHORD_DURATION = 0.3          # merge chords shorter than this
+_MIN_CHORD_DURATION = 0.3  # merge chords shorter than this
 _MIDI_FRAME_WINDOW = 0.25
 _MAX_ROMAN_NUMERALS = 500
 _MAX_VOICE_LEADING_PAIRS = 2000
 _MIN_MODULATION_NOTES_MULTIPLIER = 4
 _MIN_PITCHES_PER_WINDOW = 4
-_CHORD_SMOOTHING_WINDOW = 3        # majority-vote window for chord smoothing
+_CHORD_SMOOTHING_WINDOW = 3  # majority-vote window for chord smoothing
 
 # Chord vocabulary as pitch-class intervals from the root.
 _CHORD_INTERVALS: dict[str, list[int]] = {
@@ -187,6 +188,7 @@ _CHORD_TEMPLATES = _build_chord_templates()
 
 # ── Key estimation ──────────────────────────────────────────────────────────
 
+
 def _key_from_pc_vector(pc: np.ndarray) -> KeyResult:
     """Estimate key from a 12-dim pitch-class distribution using Krumhansl-
     Schmuckler profile correlation."""
@@ -222,6 +224,7 @@ def _estimate_key_partitura(midi_path: str) -> KeyResult | None:
     """Use partitura for key estimation (Krumhansl method on note array)."""
     try:
         import partitura as pt
+
         score = pt.load_score(midi_path)
         note_array = pt.musicanalysis.compute_note_array(
             score, include_key_signature=True, include_time_signature=True
@@ -239,6 +242,7 @@ def _estimate_key_partitura(midi_path: str) -> KeyResult | None:
 
 
 # ── Chord detection from MIDI ───────────────────────────────────────────────
+
 
 def _midi_frames(midi_path: str) -> tuple[np.ndarray, list[tuple[float, np.ndarray]]]:
     """Return (pitch-class histogram, per-window chord frames) from a MIDI file."""
@@ -282,10 +286,14 @@ def _chords_from_frames(frames: list[tuple[float, np.ndarray]]) -> list[ChordRes
 
         if frame.sum() < _MIN_CHORD_FRAME_SUM:
             if current_label:
-                chords.append(ChordResult(
-                    root=current_root, quality=current_quality,
-                    start=round(current_start, 3), end=round(t, 3),
-                ))
+                chords.append(
+                    ChordResult(
+                        root=current_root,
+                        quality=current_quality,
+                        start=round(current_start, 3),
+                        end=round(t, 3),
+                    )
+                )
                 current_label = ""
             continue
 
@@ -301,10 +309,14 @@ def _chords_from_frames(frames: list[tuple[float, np.ndarray]]) -> list[ChordRes
 
         if best_label != current_label:
             if current_label and t - current_start > _MIN_CHORD_DURATION:
-                chords.append(ChordResult(
-                    root=current_root, quality=current_quality,
-                    start=round(current_start, 3), end=round(t, 3),
-                ))
+                chords.append(
+                    ChordResult(
+                        root=current_root,
+                        quality=current_quality,
+                        start=round(current_start, 3),
+                        end=round(t, 3),
+                    )
+                )
             current_label = best_label
             current_start = t
             current_root = root
@@ -312,10 +324,14 @@ def _chords_from_frames(frames: list[tuple[float, np.ndarray]]) -> list[ChordRes
 
     if current_label:
         total_duration = frames[-1][0]
-        chords.append(ChordResult(
-            root=current_root, quality=current_quality,
-            start=round(current_start, 3), end=round(total_duration, 3),
-        ))
+        chords.append(
+            ChordResult(
+                root=current_root,
+                quality=current_quality,
+                start=round(current_start, 3),
+                end=round(total_duration, 3),
+            )
+        )
 
     return chords
 
@@ -358,6 +374,7 @@ def _smooth_chords(chords: list[ChordResult]) -> list[ChordResult]:
 
 # ── MIDI tempo / time signature ────────────────────────────────────────────
 
+
 def _midi_tempo(pm) -> float | None:
     try:
         _, tempos = pm.get_tempo_changes()
@@ -369,6 +386,7 @@ def _midi_tempo(pm) -> float | None:
 
 
 # ── music21 deep analysis ──────────────────────────────────────────────────
+
 
 def _m21_roman_numerals(score, detected_key) -> list[RomanNumeralResult]:
     """Roman numeral analysis from a pre-parsed music21 Score."""
@@ -394,10 +412,15 @@ def _m21_roman_numerals(score, detected_key) -> list[RomanNumeralResult]:
                     quality = _QUALITY_MAP.get(implied, implied)
                     start = float(ch.offset) if ch.offset is not None else 0.0
                     dur = float(ch.quarterLength) if hasattr(ch, "quarterLength") else 0.0
-                    results.append(RomanNumeralResult(
-                        figure=figure, root=root_name, quality=quality,
-                        start=round(start, 3), end=round(start + dur, 3),
-                    ))
+                    results.append(
+                        RomanNumeralResult(
+                            figure=figure,
+                            root=root_name,
+                            quality=quality,
+                            start=round(start, 3),
+                            end=round(start + dur, 3),
+                        )
+                    )
                 except Exception:
                     continue
             if len(results) > _MAX_ROMAN_NUMERALS:
@@ -443,10 +466,13 @@ def _m21_cadences(score, detected_key) -> list[CadenceResult]:
         pair = [chord_seq[i][1], chord_seq[i + 1][1]]
         for cad_type, pattern in _CADENCE_PATTERNS:
             if pair == pattern:
-                cadences.append(CadenceResult(
-                    type=cad_type, chords=pair,
-                    position=round(chord_seq[i][0], 3),
-                ))
+                cadences.append(
+                    CadenceResult(
+                        type=cad_type,
+                        chords=pair,
+                        position=round(chord_seq[i][0], 3),
+                    )
+                )
                 break
 
     return cadences
@@ -490,10 +516,13 @@ def _m21_modulations(score, window_size: int = 8) -> list[ModulationResult]:
         prev_key = key_history[i - 1][1]
         curr_key = key_history[i][1]
         if prev_key != curr_key:
-            modulations.append(ModulationResult(
-                from_key=prev_key, to_key=curr_key,
-                position=round(key_history[i][0], 3),
-            ))
+            modulations.append(
+                ModulationResult(
+                    from_key=prev_key,
+                    to_key=curr_key,
+                    position=round(key_history[i][0], 3),
+                )
+            )
 
     return modulations
 
@@ -550,13 +579,18 @@ def _m21_voice_leading(score) -> VoiceLeadingResult | None:
     o_pct = _ratio(oblique)
     s_pct = _ratio(similar)
     dominant = max(
-        ("parallel", p_pct), ("contrary", c_pct),
-        ("oblique", o_pct), ("similar", s_pct),
+        ("parallel", p_pct),
+        ("contrary", c_pct),
+        ("oblique", o_pct),
+        ("similar", s_pct),
         key=lambda x: x[1],
     )
 
     return VoiceLeadingResult(
-        parallel=p_pct, contrary=c_pct, oblique=o_pct, similar=s_pct,
+        parallel=p_pct,
+        contrary=c_pct,
+        oblique=o_pct,
+        similar=s_pct,
         motion_summary=f"{dominant[0]} motion dominates ({dominant[1] * 100:.0f}%)",
     )
 
@@ -576,9 +610,13 @@ def _m21_phrases(score) -> list[PhraseResult]:
                     if hasattr(end_note, "quarterLength"):
                         end += float(end_note.quarterLength)
                     if end > start:
-                        phrases.append(PhraseResult(
-                            start=round(start, 3), end=round(end, 3), kind="slur",
-                        ))
+                        phrases.append(
+                            PhraseResult(
+                                start=round(start, 3),
+                                end=round(end, 3),
+                                kind="slur",
+                            )
+                        )
             except Exception:
                 continue
 
@@ -588,7 +626,7 @@ def _m21_phrases(score) -> list[PhraseResult]:
             measures = part.getElementsByClass("Measure")
             if len(measures) >= 4:
                 for i in range(0, len(measures), 4):
-                    group = measures[i:i + 4]
+                    group = measures[i : i + 4]
                     if len(group) >= 2:
                         start = float(group[0].offset) if group[0].offset is not None else 0.0
                         last = group[-1]
@@ -596,9 +634,13 @@ def _m21_phrases(score) -> list[PhraseResult]:
                         if hasattr(last, "quarterLength"):
                             end += float(last.quarterLength)
                         if end > start:
-                            phrases.append(PhraseResult(
-                                start=round(start, 3), end=round(end, 3), kind="measure_group",
-                            ))
+                            phrases.append(
+                                PhraseResult(
+                                    start=round(start, 3),
+                                    end=round(end, 3),
+                                    kind="measure_group",
+                                )
+                            )
                 break  # only use first part for measure-based phrases
 
     return phrases
@@ -606,14 +648,14 @@ def _m21_phrases(score) -> list[PhraseResult]:
 
 # ── Partitura tonal tension ────────────────────────────────────────────────
 
+
 def _partitura_tension(midi_path: str) -> TonalTensionResult | None:
     """Compute tonal tension curve using partitura."""
     try:
         import partitura as pt
+
         score = pt.load_score(midi_path)
-        note_array = pt.musicanalysis.compute_note_array(
-            score, include_key_signature=True
-        )
+        note_array = pt.musicanalysis.compute_note_array(score, include_key_signature=True)
         tension_data = pt.musicanalysis.estimate_tonaltension(note_array)
         if tension_data is not None and len(tension_data) > 0:
             tension_list = [float(x) for x in tension_data.flatten()[:200]]
@@ -629,6 +671,7 @@ def _partitura_tension(midi_path: str) -> TonalTensionResult | None:
 
 
 # ── Main entry point ────────────────────────────────────────────────────────
+
 
 def deep_midi_analysis(midi_path: str) -> dict[str, object]:
     """Run music21-based deep analysis on a MIDI file.
