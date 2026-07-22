@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import SpectrogramPlugin from "wavesurfer.js/dist/plugins/spectrogram.esm.js";
+import { withAlpha } from "@/lib/color";
 
 export default function Spectrogram({
   url,
@@ -28,12 +29,6 @@ export default function Spectrogram({
     const styles = getComputedStyle(document.documentElement);
     const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
     const accentStrong = styles.getPropertyValue("--accent-strong").trim() || "#a855f7";
-    const withAlpha = (hex: string, alpha: number) => {
-      const m = /^#([0-9a-f]{6})$/i.exec(hex);
-      if (!m) return hex;
-      const n = parseInt(m[1], 16);
-      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-    };
 
     const spectrogramEl = specRef.current!;
     const ws = WaveSurfer.create({

@@ -84,10 +84,8 @@ Covered:
 
 - `test_security.py` — upload-size, path-traversal, format-sanitization, error-leak.
 - `test_contract.py` — every `app/api/*` proxy has a matching FastAPI route.
-- `test_smoke.py` — real audio pipeline (ffmpeg/librosa; self-skips if ffmpeg absent).
 - `test_observability.py` — structured logs + `x-request-id`.
 - `test_health.py` — `/health/live` and `/health/ready`.
-- `test_backend_reliability.py` — resilience/retry behavior.
 - `test_transcribe_e2e.py` — end-to-end transcription path.
 
 Frontend unit tests: `npm test` (Vitest).

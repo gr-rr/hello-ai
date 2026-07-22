@@ -1,3 +1,5 @@
+# Opt-in observability stack. Not used in CI or deploy.
+# Run manually: docker compose -f docker-compose.observability.yml up -d
 services:
   loki:
     image: grafana/loki:3.1.0

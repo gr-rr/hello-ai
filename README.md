@@ -17,7 +17,6 @@ Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a
   - [PRODUCT_VISION.md](docs/PRODUCT_VISION.md) – North star & priorities
 - **🔧 Developer Docs**
   - [LOCAL_DEV.md](docs/LOCAL_DEV.md) – Local setup (Vercel + Oracle + Supabase)
-  - [TOOLING.md](docs/TOOLING.md) – Tools, services, config files
   - [E2E.md](docs/E2E.md) – User journey tests that block merges
 - **🎨 Design**
   - [design/tokens.json](design/tokens.json) – Token definitions
@@ -54,7 +53,7 @@ scripts/               — CI/CD + auto-merge helpers
 | Concern | Location |
 |---------|----------|
 | Page shell | `components/Studio.tsx` (tabbed shell) |
-| Transcribe | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
+| Transcribe | `components/transcribe/index.tsx`, `components/PianoRoll.tsx` |
 | Library | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
 | Backend proxy | `lib/backend.ts`, `app/api/**/route.ts` |
 | Design SOT | `design/tokens.json`, `design/mockups/*` |

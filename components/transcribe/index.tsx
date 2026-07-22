@@ -65,6 +65,8 @@ export default function Transcribe({
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [wasLibraryFile, setWasLibraryFile] = useState(false);
 
   useEffect(() => {
     listLibrary()
@@ -174,9 +176,6 @@ export default function Transcribe({
     setRecording(false);
   }
 
-  const [saved, setSaved] = useState(false);
-  const [wasLibraryFile, setWasLibraryFile] = useState(false);
-
   function reset() {
     setState("idle");
     setResult(null);
@@ -263,7 +262,7 @@ export default function Transcribe({
         <>
           <div className="section-label">Choose an audio source</div>
           <div className="source-grid">
-            <div className="source-card" onClick={() => inputRef.current?.click()}>
+            <button className="source-card" onClick={() => inputRef.current?.click()} type="button">
               <span className="sc-icon">⬆</span>
               <span className="sc-label">Upload file</span>
               <span className="sc-hint">WAV · MP3 · M4A</span>
@@ -274,22 +273,24 @@ export default function Transcribe({
                 onChange={onUploadNew}
                 style={{ display: "none" }}
               />
-            </div>
-            <div className="source-card" onClick={recording ? stopRecording : startRecording}>
+            </button>
+            <button className="source-card" onClick={recording ? stopRecording : startRecording} type="button">
               <span className="sc-icon">{recording ? "■" : "●"}</span>
               <span className="sc-label">{recording ? "Stop" : "Record"}</span>
               <span className="sc-hint">Use your mic</span>
-            </div>
-            <div
+            </button>
+            <button
               className={`source-card${canUseLibrary ? "" : " disabled"}`}
               onClick={() => canUseLibrary && setShowLibPicker(true)}
+              disabled={!canUseLibrary}
+              type="button"
             >
               <span className="sc-icon">▤</span>
               <span className="sc-label">From library</span>
               <span className="sc-hint">
                 {!signedIn ? "Sign in" : libFiles.length === 0 ? "No saved tracks" : "Pick a track"}
               </span>
-            </div>
+            </button>
           </div>
 
           {!signedIn && (
