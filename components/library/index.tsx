@@ -341,7 +341,7 @@ export default function Library({
                     </button>
                     {onTranscribe && (
                       <button className="icon-btn" onClick={() => onTranscribe(f)}>
-                        Transcribe
+                        {f.notes && f.notes.length > 0 ? "View" : "Transcribe"}
                       </button>
                     )}
                     {onAnalyze && f.notes && f.notes.length > 0 && (

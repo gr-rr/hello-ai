@@ -67,6 +67,10 @@ export default function Studio({
       goToTab("analyze");
       return;
     }
+    if (analysis && audioName === name) {
+      goToTab("analyze");
+      return;
+    }
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
