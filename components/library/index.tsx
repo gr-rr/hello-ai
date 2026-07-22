@@ -26,12 +26,14 @@ export default function Library({
   onTranscribe,
   onAnalyze,
   transcriptions,
+  refreshKey,
 }: {
   signedIn?: boolean;
   onSignIn?: () => void;
   onTranscribe?: (file: LibFile) => void;
   onAnalyze?: (file: LibFile) => void;
   transcriptions?: Transcription[];
+  refreshKey?: number;
 }) {
   const transcribedIds = new Set(
     (transcriptions ?? []).map((t) => (t.id.split("/").pop() ?? "").replace(/\.[^.]+$/, "")),
@@ -65,7 +67,7 @@ export default function Library({
 
   useEffect(() => {
     if (signedIn) refresh();
-  }, [signedIn]);
+  }, [signedIn, refreshKey]);
 
   useEffect(() => {
     return () => {
