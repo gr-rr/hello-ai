@@ -60,7 +60,6 @@ export type Transcription = {
 };
 
 const LIBRARY_BUCKET = "library";
-const MIDI_BUCKET = "midi";
 const TRANSCRIPTIONS_BUCKET = "transcriptions";
 
 async function userPrefix(): Promise<string> {
@@ -207,35 +206,4 @@ export async function analyzeAudio(
       library_path: libraryPath,
     }),
   }) as Promise<TranscribeResult["analysis"]>;
-}
-
-export async function listMidiFiles(): Promise<LibFile[]> {
-  const uid = await userId();
-  if (!uid) return [];
-  const prefix = `midi/${uid}`;
-  const files = await listFiles("midi", prefix);
-  return files
-    .filter((f) => !f.name.endsWith("/"))
-    .map((f: FileMeta) => {
-      const path = `${prefix}/${f.name}`;
-      const displayName = f.name
-        .replace(/^\d+-/, "")
-        .replace(/_/g, " ")
-        .replace(/\.mid$/i, "");
-      return {
-        name: displayName,
-        url: getPublicUrl("midi", path),
-        id: path,
-        size: f.metadata?.size,
-        created_at: f.created_at,
-      };
-    });
-}
-
-export function midiToDataUrl(base64: string): string {
-  return `data:audio/midi;base64,${base64}`;
-}
-
-export function wavToDataUrl(base64: string): string {
-  return `data:audio/wav;base64,${base64}`;
 }

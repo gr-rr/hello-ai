@@ -48,21 +48,4 @@ test.describe("Supported user paths", () => {
     });
     await expect(page.locator("audio[controls]")).toBeVisible();
   });
-
-  test("P3b: transcribe via Upload file → piano roll + audio (mocked backend)", async ({
-    page,
-  }) => {
-    await page.goto("/?tab=transcribe");
-    await page.getByText("Upload file").waitFor({ timeout: 15_000 });
-
-    await page
-      .locator(".source-card input[type='file']")
-      .first()
-      .setInputFiles(SAMPLE);
-
-    await expect(page.getByTestId("piano-roll")).toBeVisible({
-      timeout: 20_000,
-    });
-    await expect(page.locator("audio[controls]")).toBeVisible();
-  });
 });

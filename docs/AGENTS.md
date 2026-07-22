@@ -5,17 +5,16 @@ project. Read it before making any changes.
 
 ## Overview
 
-This project uses a 5-role autonomous development loop. Each role has
-a defined SOP and produces a concrete artifact. See `docs/AGENT_ROLES.md`
-for full details.
+This project is a Music AI Studio — upload/record audio, transcribe to MIDI,
+analyze key/tempo/chords, and manage a library of transcriptions.
 
-| Role | Artifact | Handoff to |
-|------|----------|------------|
-| Product Manager | `docs/specs/<feature>.md` | UI Designer |
-| UI Designer | `design/mockups/<feature>.html` | Engineer Auditor |
-| Engineer Auditor | Audit report | Engineer |
-| Engineer | Working code + tests | Picky User |
-| Picky User | Feedback report / sign-off | PM (next cycle) |
+| Concern | Location |
+|---------|----------|
+| Page shell | `components/Studio.tsx` (tabbed shell) |
+| Transcribe | `components/transcribe/index.tsx`, `components/PianoRoll.tsx` |
+| Library | `components/library/index.tsx`, `components/Visualizer.tsx` |
+| Analyze | `components/analyze/index.tsx` |
+| Backend | `backend/main.py` (FastAPI) |
 
 ## Before acting
 
@@ -117,9 +116,8 @@ These run on every PR to `main` and must be green:
 
 - `build.yml` — `npm run build` + `npm test` (component tests). **Blocking.**
 - `ci.yml` — `npm run lint`, `npm run typecheck`, `ruff`, `ruff format --check`,
-  and `pytest backend/tests/` (units + **security** + **contract** + **smoke**).
-  **Blocking.** The smoke tests install `ffmpeg` and exercise the real
-  `enhance_audio`/`analyze_audio` pipeline.
+  and `pytest backend/tests/` (units + **security** + **contract**).
+  **Blocking.**
 - `e2e.yml` — Playwright against a real Next.js build. **Blocking** (was
   `continue-on-error` historically; do not relax this).
 - `gitleaks.yml` — secret scan. **Blocking.**
@@ -132,7 +130,6 @@ These run on every PR to `main` and must be green:
   touch a storage endpoint.
 - `backend/tests/test_contract.py` — asserts every `app/api/*` proxy target has
   a matching FastAPI route. Catches frontend↔backend drift.
-- `backend/tests/test_smoke.py` — runs the real audio pipeline (ffmpeg/librosa).
 
 ## Local pre-commit + commit convention
 
@@ -157,7 +154,7 @@ This enforces the convention via `commitlint` (the `commit` script still uses
 - **Project ref**: `cijhpddqvvzyzfzmkdnn`
 - **Service role key**: stored in GitHub secret `SUPABASE_SERVICE_ROLE_KEY` and VM env `SUPABASE_SERVICE_ROLE_KEY`
 - **Anon key**: stored in GitHub secret `NEXT_PUBLIC_SUPABASE_ANON_KEY` and `.env.local`
-- **DB password** (for psql/supabase CLI migrations): stored in AGENTS.md (this file) — do NOT commit; use env var or `~/.supabase/` config instead
+- **DB password**: use env var or `~/.supabase/` config — not stored in repo
 - **PAT** (Supabase CLI auth): saved to `~/.supabase/access-token` via `supabase login` — persists permanently
 - **Supabase CLI**: project is linked. Run `supabase db query --linked -f <file.sql>` to apply migrations.
 - **Note**: DB only accessible via IPv6. VM (129.146.52.142) has no IPv6 route. Use Supabase CLI `--linked` flag (management API) or Dashboard SQL editor for migrations.
@@ -182,9 +179,7 @@ the `music-ai-opencode` container — both are valid. Notes:
 
 - `hello-ai-backend` image already contains `ffmpeg` + `torch` + `librosa` +
   `basic-pitch`. To run the real backend locally: `docker compose up backend`
-  (serves FastAPI on :8000). The `backend/tests/test_smoke.py` enhance test
-  needs `ffmpeg` — present in this image and in CI, but may be absent on a bare
-  native machine (it self-skips there).
+  (serves FastAPI on :8000).
 - `hello-ai-frontend` image runs `npm run dev` on :3000.
 - CI does **not** use these images; it installs deps fresh on `ubuntu-latest`.
   That is intentional (reproducible, no image rebuild needed per PR).

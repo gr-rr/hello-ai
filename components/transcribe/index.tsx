@@ -65,6 +65,8 @@ export default function Transcribe({
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const [saved, setSaved] = useState(false);
+  const [wasLibraryFile, setWasLibraryFile] = useState(false);
 
   useEffect(() => {
     listLibrary()
@@ -173,9 +175,6 @@ export default function Transcribe({
     mediaRef.current?.stop();
     setRecording(false);
   }
-
-  const [saved, setSaved] = useState(false);
-  const [wasLibraryFile, setWasLibraryFile] = useState(false);
 
   function reset() {
     setState("idle");

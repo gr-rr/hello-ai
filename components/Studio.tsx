@@ -182,7 +182,7 @@ export default function Studio({
             {!analysis && !analyzeStatus && analyzeLibFiles.filter(f => f.notes?.length).length > 0 && (
               <div style={{ display: "flex", gap: "var(--s-2)", marginBottom: "var(--s-4)" }}>
                 <select
-                  className="select"
+                  className="sel"
                   value=""
                   onChange={(e) => {
                     const file = analyzeLibFiles.find(f => f.id === e.target.value);

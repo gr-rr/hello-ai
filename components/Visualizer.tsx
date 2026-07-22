@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { withAlpha } from "@/lib/color";
 
 type Props = {
-  audioRef: React.MutableRefObject<HTMLAudioElement | null>;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
 };
 
 type AudioGraph = { ctx: AudioContext; source: MediaElementAudioSourceNode };
@@ -27,12 +28,6 @@ export default function Visualizer({ audioRef }: Props) {
     const styles = getComputedStyle(document.documentElement);
     const accent = styles.getPropertyValue("--accent").trim() || "#c084fc";
     const bg = styles.getPropertyValue("--bg").trim() || "#080515";
-    const withAlpha = (hex: string, alpha: number) => {
-      const m = /^#([0-9a-f]{6})$/i.exec(hex);
-      if (!m) return hex;
-      const n = parseInt(m[1], 16);
-      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-    };
 
     // Browsers create the AudioContext suspended until a user gesture.
     // If it stays suspended, cross-origin audio routed through Web Audio is
