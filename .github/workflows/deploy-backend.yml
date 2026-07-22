@@ -32,12 +32,12 @@ jobs:
           script: |
             set -euo pipefail
             if [ -f ~/hello-ai/scripts/deploy.sh ]; then
-              chmod +x ~/hello-ai/scripts/deploy.sh
+              sudo chmod +x ~/hello-ai/scripts/deploy.sh
               ~/hello-ai/scripts/deploy.sh
             else
               echo "[deploy] first boot — cloning repo"
               git clone https://github.com/gr-rr/hello-ai.git ~/hello-ai
-              chmod +x ~/hello-ai/scripts/deploy.sh
+              sudo chmod +x ~/hello-ai/scripts/deploy.sh
               ~/hello-ai/scripts/deploy.sh
             fi
         env:
