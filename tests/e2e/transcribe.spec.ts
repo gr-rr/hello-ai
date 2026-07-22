@@ -9,6 +9,9 @@ test.describe("P3: transcribe an uploaded audio file", () => {
     // The file input is visually hidden; wait for the visible "Upload file" card.
     await page.getByText("Upload file").waitFor({ timeout: 15_000 });
 
+    // Wait for MSW service worker to be ready
+    await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, { timeout: 10_000 });
+
     await page.locator(".source-card input[type='file']").first().setInputFiles({
       name: "direct.wav",
       mimeType: "audio/wav",
