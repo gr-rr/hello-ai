@@ -344,7 +344,7 @@ export default function Library({
                         Transcribe
                       </button>
                     )}
-                    {onAnalyze && (
+                    {onAnalyze && f.notes && f.notes.length > 0 && (
                       <button className="icon-btn" onClick={() => onAnalyze(f)}>
                         Analyze
                       </button>

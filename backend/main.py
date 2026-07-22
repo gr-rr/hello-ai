@@ -66,7 +66,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
-_LIBRARY_KEY_RE = re.compile(r"^library/[a-fA-F0-9]{32,}-[\w.\-]+$")
+_LIBRARY_KEY_RE = re.compile(r"^library/[a-fA-F0-9]{32,}(-[\w.\-]+|/(?:[\w.\-]+/)*[\w.\-]+)$")
 _MIDI_KEY_RE = re.compile(r"^midi/[\w.\-]+/[\w.\-]+$")
 
 

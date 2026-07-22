@@ -42,8 +42,12 @@ def _auth():
 
 
 def test_valid_library_key_accepts_well_formed():
-    key = _valid_library_key(f"library/{'0' * 32}-song.wav")
+    # Frontend format: library/<uid>/<ts>-<name>.ext
+    key = _valid_library_key(f"library/{'0' * 32}/12345-song.wav")
     assert key is not None and not key.startswith("library/")
+    # Also accept flat format: library/<hex>-<name>
+    key2 = _valid_library_key(f"library/{'0' * 32}-song.wav")
+    assert key2 is not None and not key2.startswith("library/")
 
 
 def test_valid_library_key_rejects_traversal():
@@ -54,6 +58,7 @@ def test_valid_library_key_rejects_traversal():
 
 def test_valid_library_key_rejects_non_uuid():
     assert _valid_library_key("library/notauuid-song.wav") is None
+    assert _valid_library_key("library/notauuid/song.wav") is None
 
 
 def test_sanitize_fmt_strips_traversal():

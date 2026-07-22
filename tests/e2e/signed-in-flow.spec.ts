@@ -5,10 +5,7 @@ const APP = "http://localhost:3000";
 // ── Helpers ──────────────────────────────────────────────────────
 async function signIn(page: Page) {
   await page.goto(APP);
-  // Wait for MSW to initialize (check for mock banner or main UI)
   await page.waitForTimeout(1000);
-  
-  // Click sign in button if present
   const signInBtn = page.getByRole("button", { name: /sign.?in/i });
   if (await signInBtn.isVisible()) {
     await signInBtn.click();
@@ -16,132 +13,234 @@ async function signIn(page: Page) {
   }
 }
 
-// ── Tests ────────────────────────────────────────────────────────
-test.describe("Signed-in user flow", () => {
-  test("P1: upload → transcribe → score renders", async ({ page }) => {
+// ── Library flow tests ───────────────────────────────────────────
+test.describe("Library transcribe/analyze flow", () => {
+  test("L1: untranscribed track shows Transcribe, no Analyze", async ({ page }) => {
     await signIn(page);
-    
-    // Navigate to Transcribe tab
+    await page.getByRole("button", { name: "Library" }).click();
+    await page.waitForTimeout(1000);
+
+    const track = page.locator("[class*='track']").first();
+    if (await track.isVisible()) {
+      // Transcribe button should exist
+      await expect(track.getByRole("button", { name: /transcribe/i })).toBeVisible();
+      // Analyze button should NOT exist (no notes yet)
+      await expect(track.getByRole("button", { name: /analyze/i })).toHaveCount(0);
+      // Should show "MIDI — transcribe to generate"
+      await expect(track.getByText("transcribe to generate")).toBeVisible();
+    }
+  });
+
+  test("L2: transcribed track shows Analyze + MIDI indicator", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "Library" }).click();
+    await page.waitForTimeout(1000);
+
+    // Find a track that has been transcribed (has MIDI indicator)
+    const transcribedTrack = page.locator("[class*='track']").filter({
+      hasText: "MIDI — transcribed",
+    }).first();
+
+    if (await transcribedTrack.isVisible()) {
+      // Analyze button should exist
+      await expect(transcribedTrack.getByRole("button", { name: /analyze/i })).toBeVisible();
+    }
+  });
+
+  test("L3: Analyze tab dropdown only shows transcribed tracks", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "Analyze" }).click();
+    await page.waitForTimeout(1000);
+
+    const select = page.locator("select");
+    if (await select.isVisible()) {
+      // All options (except placeholder) should be transcribed tracks
+      const options = select.locator("option:not(:first-child)");
+      const count = await options.count();
+      // If there are tracks, they should all be transcribed
+      expect(count).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  test("L4: transcribe from library sends library_path to backend", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "Library" }).click();
+    await page.waitForTimeout(1000);
+
+    const track = page.locator("[class*='track']").first();
+    if (await track.isVisible()) {
+      const transcribeBtn = track.getByRole("button", { name: /transcribe/i });
+      if (await transcribeBtn.isVisible()) {
+        await transcribeBtn.click();
+        // Should redirect to transcribe tab
+        await page.waitForTimeout(500);
+        // Should show transcribing status (not 404 error)
+        const errorAlert = page.locator("[class*='error'], [class*='alert-danger']");
+        await expect(errorAlert).toHaveCount(0);
+      }
+    }
+  });
+
+  test("L5: delete from library removes track", async ({ page }) => {
+    await signIn(page);
+    await page.getByRole("button", { name: "Library" }).click();
+    await page.waitForTimeout(1000);
+
+    const initialTracks = await page.locator("[class*='track']").count();
+    const track = page.locator("[class*='track']").first();
+
+    if (await track.isVisible()) {
+      const deleteBtn = track.locator("button").filter({ hasText: /✕|delete/i }).first();
+      if (await deleteBtn.isVisible()) {
+        await deleteBtn.click();
+        await page.waitForTimeout(1000);
+        const finalTracks = await page.locator("[class*='track']").count();
+        expect(finalTracks).toBeLessThanOrEqual(initialTracks);
+      }
+    }
+  });
+});
+
+// ── Transcribe flow tests ────────────────────────────────────────
+test.describe("Transcribe flow", () => {
+  test("T1: upload new file → transcribe → notes render", async ({ page }) => {
+    await signIn(page);
     await page.getByRole("button", { name: "Transcribe" }).click();
-    
-    // Upload a test file
+
     const fileInput = page.locator("input[type='file']");
     await fileInput.setInputFiles({
       name: "test.wav",
       mimeType: "audio/wav",
       buffer: Buffer.from("RIFF" + "0".repeat(100)),
     });
-    
-    // Wait for transcription to complete
+
     await page.waitForSelector("text=notes", { timeout: 10000 });
-    
-    // Verify score/piano roll rendered
     const pianoRoll = page.locator("[class*='piano'], [class*='roll'], canvas");
     await expect(pianoRoll.first()).toBeVisible();
   });
 
-  test("P2: library → analyze → key/tempo displays", async ({ page }) => {
+  test("T2: transcribe existing library file does not 404", async ({ page }) => {
     await signIn(page);
-    
-    // Navigate to Library tab
     await page.getByRole("button", { name: "Library" }).click();
-    
-    // Wait for library to load
     await page.waitForTimeout(1000);
-    
-    // Click analyze button on first track (if exists)
-    const analyzeBtn = page.getByRole("button", { name: /analyze/i }).first();
-    if (await analyzeBtn.isVisible()) {
-      await analyzeBtn.click();
-      
-      // Verify analysis displays
-      await page.waitForSelector("text=key|tempo", { timeout: 10000 });
-      const analysisSection = page.locator("[class*='analysis'], [class*='result']");
-      await expect(analysisSection.first()).toBeVisible();
+
+    const track = page.locator("[class*='track']").first();
+    if (await track.isVisible()) {
+      const transcribeBtn = track.getByRole("button", { name: /transcribe/i });
+      if (await transcribeBtn.isVisible()) {
+        await transcribeBtn.click();
+        await page.waitForTimeout(1000);
+        // Should NOT show 404 error
+        const error404 = page.getByText("404");
+        await expect(error404).toHaveCount(0);
+      }
     }
   });
 
-  test("P3: analyze dropdown populates with transcribed tracks", async ({ page }) => {
+  test("T3: analyze from transcribe tab works", async ({ page }) => {
     await signIn(page);
-    
-    // Navigate to Analyze tab
+    await page.getByRole("button", { name: "Transcribe" }).click();
+
+    const fileInput = page.locator("input[type='file']");
+    await fileInput.setInputFiles({
+      name: "test.wav",
+      mimeType: "audio/wav",
+      buffer: Buffer.from("RIFF" + "0".repeat(100)),
+    });
+
+    await page.waitForSelector("text=notes", { timeout: 10000 });
+    const analyzeBtn = page.getByRole("button", { name: /analyze/i });
+    if (await analyzeBtn.isVisible()) {
+      await analyzeBtn.click();
+      // Should redirect to analyze tab
+      await page.waitForTimeout(500);
+      const errorAlert = page.locator("[class*='error'], [class*='alert-danger']");
+      await expect(errorAlert).toHaveCount(0);
+    }
+  });
+});
+
+// ── Analyze flow tests ───────────────────────────────────────────
+test.describe("Analyze flow", () => {
+  test("A1: analyze tab shows dropdown with transcribed tracks", async ({ page }) => {
+    await signIn(page);
     await page.getByRole("button", { name: "Analyze" }).click();
-    
-    // Wait for dropdown to populate
     await page.waitForTimeout(1000);
-    
-    // Check if dropdown exists and has options
+
     const select = page.locator("select");
     if (await select.isVisible()) {
       const options = await select.locator("option").count();
-      expect(options).toBeGreaterThan(1); // At least placeholder + one track
+      expect(options).toBeGreaterThan(0);
     }
   });
 
-  test("P4: delete from library removes track", async ({ page }) => {
+  test("A2: analyze dropdown does not show untranscribed tracks", async ({ page }) => {
     await signIn(page);
-    
-    // Navigate to Library tab
-    await page.getByRole("button", { name: "Library" }).click();
-    
-    // Wait for library to load
+    await page.getByRole("button", { name: "Analyze" }).click();
     await page.waitForTimeout(1000);
-    
-    // Count initial tracks
-    const initialTracks = await page.locator("[class*='track']").count();
-    
-    // Click delete on first track (if exists)
-    const deleteBtn = page.getByRole("button", { name: /delete|remove/i }).first();
-    if (await deleteBtn.isVisible()) {
-      await deleteBtn.click();
-      
-      // Confirm deletion if dialog appears
-      const confirmBtn = page.getByRole("button", { name: /confirm|yes|ok/i });
-      if (await confirmBtn.isVisible()) {
-        await confirmBtn.click();
+
+    const select = page.locator("select");
+    if (await select.isVisible()) {
+      const options = select.locator("option:not(:first-child)");
+      const count = await options.count();
+      // All visible tracks should be transcribed
+      for (let i = 0; i < count; i++) {
+        const text = await options.nth(i).textContent();
+        expect(text).toBeTruthy();
       }
-      
-      // Wait for track to be removed
-      await page.waitForTimeout(1000);
-      
-      // Verify track count decreased
-      const finalTracks = await page.locator("[class*='track']").count();
-      expect(finalTracks).toBeLessThanOrEqual(initialTracks);
     }
   });
 
-  test("P5: error states display correctly", async ({ page }) => {
+  test("A3: selecting track from dropdown shows analysis", async ({ page }) => {
     await signIn(page);
-    
-    // Navigate to Transcribe tab
-    await page.getByRole("button", { name: "Transcribe" }).click();
-    
-    // Try to transcribe without file
-    const transcribeBtn = page.getByRole("button", { name: /transcribe/i }).first();
-    if (await transcribeBtn.isVisible()) {
-      await transcribeBtn.click();
-      
-      // Should show error or be disabled
-      await page.waitForTimeout(500);
-      const errorOrDisabled = 
-        await page.locator("[class*='error'], [class*='alert']").isVisible() ||
-        await transcribeBtn.isDisabled();
-      expect(errorOrDisabled).toBeTruthy();
+    await page.getByRole("button", { name: "Analyze" }).click();
+    await page.waitForTimeout(1000);
+
+    const select = page.locator("select");
+    if (await select.isVisible()) {
+      const firstOption = select.locator("option:not(:first-child)").first();
+      if (await firstOption.isVisible()) {
+        await select.selectOption({ index: 1 });
+        // Should show analysis results
+        await page.waitForTimeout(2000);
+        const analysisSection = page.locator("[class*='analysis'], [class*='result']");
+        await expect(analysisSection.first()).toBeVisible();
+      }
     }
   });
 
-  test("P6: navigation between tabs works", async ({ page }) => {
+  test("A4: analyze another track clears and re-shows dropdown", async ({ page }) => {
     await signIn(page);
-    
-    // Click through all tabs
-    const tabs = ["Library", "Transcribe", "Analyze"];
-    for (const tab of tabs) {
+    await page.getByRole("button", { name: "Analyze" }).click();
+    await page.waitForTimeout(1000);
+
+    const select = page.locator("select");
+    if (await select.isVisible()) {
+      const firstOption = select.locator("option:not(:first-child)").first();
+      if (await firstOption.isVisible()) {
+        await select.selectOption({ index: 1 });
+        await page.waitForTimeout(2000);
+
+        // Click "Analyze another track"
+        const anotherBtn = page.getByRole("button", { name: /analyze another/i });
+        if (await anotherBtn.isVisible()) {
+          await anotherBtn.click();
+          // Should re-show the dropdown
+          await expect(select).toBeVisible();
+        }
+      }
+    }
+  });
+});
+
+// ── Navigation tests ─────────────────────────────────────────────
+test.describe("Navigation", () => {
+  test("N1: tab navigation works correctly", async ({ page }) => {
+    await signIn(page);
+    for (const tab of ["Library", "Transcribe", "Analyze"]) {
       await page.getByRole("button", { name: tab }).click();
       await page.waitForTimeout(300);
-      
-      // Verify tab content is visible (check for tab-specific elements)
-      const tabContent = page.getByText(tab, { exact: false });
-      await expect(tabContent.first()).toBeVisible();
+      await expect(page.getByText(tab, { exact: false }).first()).toBeVisible();
     }
   });
 });

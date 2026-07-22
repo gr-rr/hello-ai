@@ -132,7 +132,8 @@ export async function saveTranscription(
   if (!supabase) return;
   const uid = await userId();
   if (!uid) return;
-  const baseName = id.split("/").pop() ?? id;
+  // Strip audio extension so JSON is saved as <uid>/name.json (not name.wav.json)
+  const baseName = (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "");
   const path = `${uid}/${baseName}.json`;
   await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(notes), "application/json", true);
 }
@@ -143,7 +144,7 @@ export async function deleteFromLibrary(id: string): Promise<void> {
   // also delete companion transcription file if present
   const uid = await userId();
   if (uid) {
-    const baseName = id.split("/").pop() ?? id;
+    const baseName = (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "");
     try {
       await deleteFile(TRANSCRIPTIONS_BUCKET, `${uid}/${baseName}.json`);
     } catch { /* ok if none */ }
