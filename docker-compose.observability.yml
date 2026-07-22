@@ -1,3 +1,5 @@
+# Opt-in observability stack. Not used in CI or deploy.
+# Run manually: docker compose -f docker-compose.observability.yml up -d
 services:
   loki:
     image: grafana/loki:3.1.0
@@ -24,6 +26,8 @@ services:
     ports:
       - "3001:3000"
     environment:
+      # SECURITY: Set GRAFANA_PASSWORD in your shell or .env before starting.
+      # Falls back to 'admin' only for local dev — do NOT use in production.
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
     volumes:
       - ./observability/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro

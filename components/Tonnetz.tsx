@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { TranscribeResult } from "@/lib/music";
-import { SHARP_NOTE_NAMES, computeChroma } from "@/lib/notes";
+import { SHARP_NOTE_NAMES, computeChroma, isBlackKey } from "@/lib/notes";
 
 type Note = TranscribeResult["notes"][number];
 
@@ -84,7 +84,6 @@ export default function Tonnetz({ notes }: { notes: Note[] }) {
             const cx = PAD_X + node.x * SCALE;
             const cy = PAD_Y + (2 - node.y) * SCALE;
             const intensity = chroma[node.pc];
-            const isBlack = [1, 3, 6, 8, 10].includes(node.pc);
             return (
               <g key={node.pc}>
                 <path

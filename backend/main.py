@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import tempfile
+import threading
 import time
 import uuid
 from datetime import UTC, datetime
@@ -65,7 +66,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
-_LIBRARY_KEY_RE = re.compile(r"^library/[a-fA-F0-9\-]{32,}/[\w.\-]+$")
+_LIBRARY_KEY_RE = re.compile(r"^library/[a-fA-F0-9]{32,}-[\w.\-]+$")
 _MIDI_KEY_RE = re.compile(r"^midi/[\w.\-]+/[\w.\-]+$")
 
 
@@ -104,20 +105,24 @@ def _valid_library_key(storage_path: str) -> str | None:
 
 
 _sb_client = None
+_sb_lock = threading.Lock()
 
 
 def _sb():
     global _sb_client
     if _sb_client is not None:
         return _sb_client
-    from supabase import create_client
+    with _sb_lock:
+        if _sb_client is not None:
+            return _sb_client
+        from supabase import create_client
 
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        return None
-    _sb_client = create_client(url, key)
-    return _sb_client
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            return None
+        _sb_client = create_client(url, key)
+        return _sb_client
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -262,20 +267,23 @@ def _load_audio_from_request(
     raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
 
 
+class UploadLibraryRequest(BaseModel):
+    name: str = ""
+    data_base64: str
+    fmt: str = "wav"
+
+
 @app.post("/music/library")
 @limiter.limit("10/minute")
-async def upload_library(req: dict, request: Request, _auth=Depends(verify_token)):
+async def upload_library(req: UploadLibraryRequest, request: Request, _auth=Depends(verify_token)):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
     """
-    name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
-    fmt = _sanitize_fmt(req.get("fmt") or "wav")
-    data_b64 = req.get("data_base64")
-    if not data_b64:
-        raise HTTPException(status_code=400, detail="data_base64 required")
+    name = (req.name or f"{uuid.uuid4().hex}").replace("/", "_")
+    fmt = _sanitize_fmt(req.fmt)
     try:
-        raw = base64.b64decode(data_b64)
+        raw = base64.b64decode(req.data_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid base64") from e
     if len(raw) > MAX_UPLOAD_BYTES:
