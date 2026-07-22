@@ -66,7 +66,6 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
-_LIBRARY_KEY_RE = re.compile(r"^library/[a-fA-F0-9]{32,}(-[\w.\-]+|/(?:[\w.\-]+/)*[\w.\-]+)$")
 _MIDI_KEY_RE = re.compile(r"^midi/[\w.\-]+/[\w.\-]+$")
 
 
@@ -89,19 +88,22 @@ def _analyze_ext(fmt: str) -> str:
     return _ANALYZE_EXTS.get(fmt.lower(), "wav")
 
 
-def _valid_library_key(storage_path: str) -> str | None:
-    """Return a sanitized storage key inside the `library/` or `midi/` prefix, or None.
+def _split_storage_path(path: str) -> tuple[str, str]:
+    """Split 'library/...' or 'midi/...' into (bucket, key).
 
-    Accepts `library/<uuid>-<name>` (audio) and `midi/<uid>/<name>` (MIDI) and
-    rejects any path traversal or attempt to escape the bucket prefix.
+    Raises HTTPException if the path doesn't match a known prefix or key is empty.
     """
-    if not storage_path or ".." in storage_path:
-        return None
-    if _LIBRARY_KEY_RE.match(storage_path):
-        return storage_path[len("library/") :]
-    if _MIDI_KEY_RE.match(storage_path):
-        return storage_path[len("midi/") :]
-    return None
+    if path.startswith("library/"):
+        key = path[len("library/"):]
+        if not key:
+            raise HTTPException(status_code=400, detail="empty library key")
+        return "library", key
+    if path.startswith("midi/"):
+        key = path[len("midi/"):]
+        if not key:
+            raise HTTPException(status_code=400, detail="empty midi key")
+        return "midi", key
+    raise HTTPException(status_code=400, detail="path must start with library/ or midi/")
 
 
 _sb_client = None
@@ -251,10 +253,7 @@ def _load_audio_from_request(
         sb = _sb()
         if not sb:
             raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = _valid_library_key(library_path)
-        if not key:
-            raise HTTPException(status_code=400, detail="invalid library_path")
-        bucket = "midi" if library_path.startswith("midi/") else "library"
+        bucket, key = _split_storage_path(library_path)
         try:
             data = sb.storage.from_(bucket).download(key)
         except Exception as e:
@@ -413,10 +412,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
             sb = _sb()
             if not sb:
                 raise HTTPException(status_code=500, detail="Supabase not configured")
-            key = _valid_library_key(req.library_path)
-            if not key:
-                raise HTTPException(status_code=400, detail="invalid library_path")
-            bucket = "midi" if req.library_path.startswith("midi/") else "library"
+            bucket, key = _split_storage_path(req.library_path)
             try:
                 data = sb.storage.from_(bucket).download(key)
             except Exception as e:

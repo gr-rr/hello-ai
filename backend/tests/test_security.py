@@ -3,7 +3,7 @@ import base64
 import pytest
 
 import main
-from main import MAX_UPLOAD_BYTES, _now, _sanitize_fmt, _valid_library_key
+from main import MAX_UPLOAD_BYTES, _now, _sanitize_fmt, _split_storage_path
 
 
 class _FakeStorage:
@@ -41,24 +41,23 @@ def _auth():
 # --- pure guard units (no network) -----------------------------------------
 
 
-def test_valid_library_key_accepts_well_formed():
-    # Frontend format: library/<uid>/<ts>-<name>.ext
-    key = _valid_library_key(f"library/{'0' * 32}/12345-song.wav")
-    assert key is not None and not key.startswith("library/")
-    # Also accept flat format: library/<hex>-<name>
-    key2 = _valid_library_key(f"library/{'0' * 32}-song.wav")
-    assert key2 is not None and not key2.startswith("library/")
+def test_split_storage_path_library():
+    bucket, key = _split_storage_path("library/6e177343-cf86-418d-ad55-bec73baa12b0/12345-song.wav")
+    assert bucket == "library"
+    assert key == "6e177343-cf86-418d-ad55-bec73baa12b0/12345-song.wav"
 
 
-def test_valid_library_key_rejects_traversal():
-    assert _valid_library_key("library/../../etc/passwd") is None
-    assert _valid_library_key("../library/x.wav") is None
-    assert _valid_library_key("library/x/../../y") is None
+def test_split_storage_path_midi():
+    bucket, key = _split_storage_path("midi/user123/track.mid")
+    assert bucket == "midi"
+    assert key == "user123/track.mid"
 
 
-def test_valid_library_key_rejects_non_uuid():
-    assert _valid_library_key("library/notauuid-song.wav") is None
-    assert _valid_library_key("library/notauuid/song.wav") is None
+def test_split_storage_path_rejects_bad_prefix():
+    with pytest.raises(main.HTTPException):
+        _split_storage_path("bucket/file.wav")
+    with pytest.raises(main.HTTPException):
+        _split_storage_path("library")  # no key after prefix
 
 
 def test_sanitize_fmt_strips_traversal():
