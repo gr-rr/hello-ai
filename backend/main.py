@@ -379,8 +379,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
         raise HTTPException(
             status_code=422,
             detail=(
-                "midi_base64, library_path (to a .mid file), "
-                "or notes required — transcribe first"
+                "midi_base64, library_path (to a .mid file), or notes required — transcribe first"
             ),
         )
 
@@ -421,6 +420,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
 
         if has_notes and not midi_path:
             from analyze import analyze_from_notes
+
             try:
                 return analyze_from_notes(req.notes)
             except Exception:
