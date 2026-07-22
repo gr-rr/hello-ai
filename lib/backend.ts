@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_URL =
-  process.env.MUSIC_BACKEND_URL || "https://gricci-testing.duckdns.org";
+function getBackendUrl(): string {
+  const url = process.env.MUSIC_BACKEND_URL;
+  if (!url) {
+    throw new Error("MUSIC_BACKEND_URL environment variable is not set");
+  }
+  return url;
+}
 
 /**
  * Generic reverse-proxy to the Oracle FastAPI backend.
@@ -21,7 +26,7 @@ export async function proxyToBackend(req: NextRequest, path: string) {
       const body = await req.text();
       if (body) init.body = body;
     }
-    const res = await fetch(`${BACKEND_URL}${path}`, init);
+    const res = await fetch(`${getBackendUrl()}${path}`, init);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const detail = typeof data === "object" && data !== null && "detail" in data

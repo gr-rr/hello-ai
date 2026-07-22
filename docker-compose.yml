@@ -34,7 +34,7 @@ services:
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
       - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
       - NEXT_PUBLIC_MOCK_ENABLED=${NEXT_PUBLIC_MOCK_ENABLED:-false}
-      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - MUSIC_BACKEND_URL=${MUSIC_BACKEND_URL:-http://backend:8000}
 
   frontend:
     build:
@@ -56,7 +56,7 @@ services:
       - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
       - NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN:-}
       - NEXT_PUBLIC_MOCK_ENABLED=${NEXT_PUBLIC_MOCK_ENABLED:-false}
-      - BACKEND_URL=${BACKEND_URL:-http://backend:8000}
+      - MUSIC_BACKEND_URL=${MUSIC_BACKEND_URL:-http://backend:8000}
 
   backend:
     build:
@@ -78,9 +78,8 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
-      - BACKEND_URL=http://backend:8000
+      - MUSIC_BACKEND_URL=http://backend:8000
       - PYTHONPATH=/workspace/backend
-      - ADAPTER_ROOT=/workspace/data/adapters
       - SOUNDFONT_PATH=/workspace/backend/soundfonts/FluidR3_GM.sf2
       - SENTRY_DSN_BACKEND=${SENTRY_DSN_BACKEND:-${SENTRY_DSN:-}}
       - SENTRY_ENV=${SENTRY_ENV:-development}

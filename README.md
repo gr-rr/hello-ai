@@ -20,12 +20,10 @@ Turn audio into MIDI and **playable sheet music**. Upload or record audio, get a
   - [TOOLING.md](docs/TOOLING.md) – Tools, services, config files
   - [E2E.md](docs/E2E.md) – User journey tests that block merges
 - **🎨 Design**
-  - [design/README.md](design/README.md) – Design system & visual QA
   - [design/tokens.json](design/tokens.json) – Token definitions
 - **📁 Project Structure**
 ```
 app/                    — Next.js app (Vercel)
-  components/           — UI components
   lib/                  — Core libraries + backend proxy
 backend/               — FastAPI on Oracle VM
   main.py               — API endpoints
@@ -55,7 +53,7 @@ scripts/               — CI/CD + auto-merge helpers
 
 | Concern | Location |
 |---------|----------|
-| Page shell | `components/Studio.tsx` (topbar + stepper grid) |
+| Page shell | `components/Studio.tsx` (tabbed shell) |
 | Transcribe | `components/transcribe/index.tsx`, `components/Score.tsx`, `components/PianoRoll.tsx`, `lib/abc.ts` |
 | Library | `components/library/index.tsx`, `components/Visualizer.tsx`, `lib/storage.ts` |
 | Backend proxy | `lib/backend.ts`, `app/api/**/route.ts` |
@@ -148,25 +146,9 @@ For **new features**, follow the standard workflow:
    - `npx playwright test --reporter=line`
    - `npm run build`
 
-### Commit Convention
-
-Conventional Commits: `feat:`, `fix:`, `docs:`, `style:`, `refactor:`, `test:`, `build:`, `ci:`
-
-Opt in with:
-
-```bash
-git config core.hooksPath .githooks
-```
-
-The `commit` script still uses `aicommits` for message drafting.
-
 ## Roadmap
 
-- **Phase 1: Foundation** ✅ Current — Core transcription + library management
-- **Phase 2: Analysis** 🔜 Next — Key/tempo detection + chord recognition
-- **Phase 3: Composition** 🎹 — Interactive chord/progression playground
-- **Phase 4: Generation** 🤖 — Style-conditioned music generation
-- **Phase 5: Fine-tuning** 🧬 — Personalized models from user library
+See `docs/ROADMAP.md` for the current phase and full feature sequencing.
 
 ## Documentation
 
@@ -179,7 +161,6 @@ The `commit` script still uses `aicommits` for message drafting.
 | `docs/DEVELOPMENT.md` | Docker + local setup |
 | `docs/E2E.md` | Why E2E tests are blocking |
 | `docs/CHANGELOG.md` | Recent changes + gotchas |
-| `design/README.md` | Design system + visual QA flow |
 
 ## Links
 

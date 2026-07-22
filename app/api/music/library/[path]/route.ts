@@ -6,5 +6,6 @@ export async function DELETE(
   { params }: { params: Promise<{ path: string }> }
 ) {
   const { path } = await params;
-  return proxyToBackend(req, `/music/library/${path}`);
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
+  return proxyToBackend(req, `/music/library/${encoded}`);
 }

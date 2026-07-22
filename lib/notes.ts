@@ -39,3 +39,15 @@ export function pitchOctave(pitch: number): number {
 export function pitchToName(pitch: number): string {
   return `${SHARP_NOTE_NAMES[pitchClass(pitch)]}${pitchOctave(pitch)}`;
 }
+
+export type NoteInput = { pitch: number; start: number; end: number };
+
+export function computeChroma(notes: NoteInput[]): number[] {
+  const bins = new Array(12).fill(0);
+  for (const n of notes) {
+    const dur = Math.max(n.end - n.start, 0);
+    bins[pitchClass(n.pitch)] += dur;
+  }
+  const max = Math.max(...bins, 1);
+  return bins.map((v) => v / max);
+}

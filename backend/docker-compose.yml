@@ -10,13 +10,8 @@ services:
     environment:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      ADAPTER_ROOT: /data/adapters
       SOUNDFONT_PATH: /app/soundfonts/FluidR3_GM.sf2
-      HF_HOME: /app/.cache
-      TORCH_HOME: /app/.cache
     volumes:
-      - adapters:/data/adapters
-      - model_cache:/app/.cache
       - ./soundfonts:/app/soundfonts:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
@@ -24,7 +19,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
-
-volumes:
-  adapters:
-  model_cache:
