@@ -98,11 +98,13 @@ def _split_storage_path(path: str) -> tuple[str, str]:
     Raises HTTPException if the path doesn't match a known prefix or key is empty.
     """
     if path.startswith("library/"):
+        if ".." in path or path == "library/":
+            raise HTTPException(status_code=400, detail="invalid library path")
         return "library", path
     if path.startswith("midi/"):
         key = path[len("midi/") :]
-        if not key:
-            raise HTTPException(status_code=400, detail="empty midi key")
+        if not key or ".." in key:
+            raise HTTPException(status_code=400, detail="invalid midi key")
         return "midi", key
     raise HTTPException(status_code=400, detail="path must start with library/ or midi/")
 
