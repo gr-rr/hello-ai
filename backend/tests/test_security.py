@@ -13,6 +13,10 @@ class _FakeStorage:
     def download(self, key):
         return self.store.get(key, b"")
 
+    def upload(self, key, data, options=None):
+        self.store[key] = data if isinstance(data, bytes) else data.read()
+        return {"path": key}
+
     def from_(self, bucket):
         self._bucket = bucket
         return self
