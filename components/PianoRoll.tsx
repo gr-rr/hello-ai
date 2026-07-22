@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import type { TranscribeResult } from "@/lib/music";
 import { pitchToName } from "@/lib/notes";
 
@@ -42,6 +42,14 @@ export default function PianoRoll({
   const W = labelW + totalPx;
 
   const playheadX = labelW + (playheadTime / 60) * bpm * PPQ;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || playheadTime <= 0) return;
+    const viewW = el.clientWidth;
+    const target = Math.max(0, playheadX - viewW / 2);
+    el.scrollLeft = target;
+  }, [playheadX]);
 
   return (
     <div className="piano-roll-container" data-testid="piano-roll">

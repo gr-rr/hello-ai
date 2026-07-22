@@ -12,6 +12,8 @@ import {
 import Visualizer from "@/components/Visualizer";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
+import ChromaHeatmap from "@/components/ChromaHeatmap";
+import Tonnetz from "@/components/Tonnetz";
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return "";
@@ -307,9 +309,13 @@ export default function Library({
             <div className="pb-fill" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
           </div>
           {nowPlaying.notes && nowPlaying.notes.length > 0 && (
-            <div style={{ marginTop: 8 }}>
-              <PianoRoll notes={nowPlaying.notes} playheadTime={currentTime} bpm={120} />
-            </div>
+            <>
+              <div style={{ marginTop: 8 }}>
+                <PianoRoll notes={nowPlaying.notes} playheadTime={currentTime} bpm={120} />
+              </div>
+              <ChromaHeatmap notes={nowPlaying.notes} />
+              <Tonnetz notes={nowPlaying.notes} />
+            </>
           )}
           {nowPlaying.url && <Spectrogram url={nowPlaying.url} />}
           <Visualizer audioRef={audioRef} />

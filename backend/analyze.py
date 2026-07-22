@@ -11,11 +11,15 @@ Pipeline:
           →  chord smoothing  (remove impossible transitions, merge short chords)
 """
 
+import contextlib
 import logging
+import os
+import tempfile
 from collections import Counter
 from typing import TypedDict
 
 import numpy as np
+import pretty_midi
 
 logger = logging.getLogger("analyze")
 
@@ -778,5 +782,40 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
             result["tonal_tension"] = tension
     except Exception:
         logger.debug("tonal tension failed; skipping")
+
+    return result
+
+
+def analyze_from_notes(notes: list[dict]) -> AnalysisResult:
+    """Analyze directly from note events (no MIDI file needed).
+
+    Creates a temporary MIDI file and reuses the existing analyze_midi pipeline.
+    """
+    # Create a temporary MIDI file from notes
+    pm = pretty_midi.PrettyMIDI()
+    inst = pretty_midi.Instrument(program=0, is_drum=False, name="Piano")
+    for n in notes:
+        inst.notes.append(
+            pretty_midi.Note(
+                velocity=n.get("velocity", 100),
+                pitch=n["pitch"],
+                start=n["start"],
+                end=n["end"],
+            )
+        )
+    pm.instruments.append(inst)
+
+    # Write to temporary file
+    with tempfile.NamedTemporaryFile(suffix=".mid", delete=False) as f:
+        midi_path = f.name
+        pm.write(midi_path)
+
+    try:
+        # Analyze the temporary MIDI file
+        result = analyze_midi(midi_path)
+    finally:
+        # Clean up temp file
+        with contextlib.suppress(OSError):
+            os.unlink(midi_path)
 
     return result

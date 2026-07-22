@@ -19,7 +19,7 @@ export default function ChromaHeatmap({ notes }: { notes: Note[] }) {
   const W = PC_LABELS.length * (BAR_W + GAP);
 
   return (
-    <div>
+    <div className="viz-panel">
       <div className="section-label">Pitch class distribution</div>
       <div style={{ overflowX: "auto" }}>
         <svg viewBox={`0 0 ${W} ${MAX_H + LABEL_H}`} width="100%" height={MAX_H + LABEL_H}>

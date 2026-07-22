@@ -256,32 +256,6 @@ html,body {
 .confidence-fill { height:100%; background:var(--grad-accent-2); border-radius:999px; }
 .confidence-pct { font-size:11px; color:var(--muted); }
 
-.piano-roll {
-  display:flex; flex-direction:column; gap:2px;
-  padding:12px 0; overflow-x:auto;
-  position:relative;
-}
-.piano-row {
-  display:flex; align-items:center; gap:8px; height:20px;
-}
-.piano-label {
-  width:36px; font-size:10px; color:var(--muted);
-  text-align:right; font-family:var(--font-mono); flex-shrink:0;
-}
-.piano-track {
-  flex:1; height:16px;
-  background:rgba(255,255,255,0.02);
-  border-radius:4px; position:relative;
-  min-width:200px;
-}
-.piano-note {
-  position:absolute; height:14px; top:1px;
-  border-radius:3px;
-  background:var(--grad-accent-2);
-  opacity:0.7;
-  min-width:6px;
-}
-
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
 .pulse { animation:pulse 1.5s var(--ease) infinite; }
 .pulse-block { height:14px; width:70%; background:var(--panel-3); border-radius:4px; }
@@ -298,10 +272,19 @@ html,body {
 .score-audio { margin-top:8px; }
 .score-audio .abcjs-inline-midi { background:var(--panel-2); border-radius:10px; padding:8px; }
 .score-audio .abcjs-inline-midi .abcjs-btn { color:var(--muted); font-size:13px; }
+/* ── Piano roll (SVG component) ── */
 .piano-roll-container { width:100%; }
-.piano-roll-scroll { overflow-x:auto; border-radius:8px; max-height:320px; overflow-y:auto; }
+.piano-roll-scroll { overflow-x:auto; }
 .piano-roll-footer { display:flex; justify-content:space-between; margin-top:8px; }
-.spectrogram { width:100%; }
+
+/* ── Visualization panel ── */
+.viz-panel {
+  background:var(--panel-2);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  padding:var(--s-3);
+  margin-top:var(--s-3);
+}
 .footer { margin-top:24px; color:var(--muted); font-size:12px; text-align:center; }
 .muted { color:var(--muted); font-size:13px; }
 .status { font-size:13px; color:var(--muted); min-height:18px; }
@@ -478,9 +461,6 @@ html,body {
 .playbar .pb-track { flex:1; height:6px; background:var(--panel-3); border-radius:var(--r-full); position:relative; cursor:pointer; }
 .playbar .pb-fill { position:absolute; left:0; top:0; height:100%; background:var(--grad-accent-2); border-radius:var(--r-full); width:0%; }
 .playbar .pb-time { font-family:var(--font-mono); font-size:var(--fs-xs); color:var(--muted); flex:none; min-width:74px; text-align:right; }
-
-/* ── Piano roll active note ── */
-.piano-note.active { background:var(--accent); box-shadow:0 0 8px rgba(192,132,252,0.8); opacity:1; }
 
 /* ── Chord quality chips ── */
 .chip-q { display:inline-flex; align-items:center; gap:4px; padding:4px 10px; font-size:var(--fs-xs); font-weight:var(--fw-medium); border-radius:var(--r-full); }
