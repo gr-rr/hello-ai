@@ -68,6 +68,7 @@ export default function Transcribe({
   const [saved, setSaved] = useState(false);
   const [wasLibraryFile, setWasLibraryFile] = useState(false);
   const [libraryFileId, setLibraryFileId] = useState<string | null>(null);
+  const originalBlobRef = useRef<Blob | null>(null);
 
   useEffect(() => {
     listLibrary()
@@ -87,11 +88,12 @@ export default function Transcribe({
     }
   }, [libraryFileToLoad]);
 
-  async function processBlob(blob: Blob, fmtOverride?: string, sourceLibId?: string | null) {
+  async function processBlob(blob: Blob, fileName: string, fmtOverride?: string, sourceLibId?: string | null) {
     setResult(null);
     setShowLibPicker(false);
     setPlayhead(0);
     setWasLibraryFile(false);
+    originalBlobRef.current = blob;
     try {
       const b64 = await blobToBase64(blob);
       const fmt = fmtOverride ?? audioFmtFromBlob(blob);
@@ -113,17 +115,20 @@ export default function Transcribe({
       setAnalyzeBase64(transcribeBase64);
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
-      onTranscribed?.(res, audioName);
+      onTranscribed?.(res, fileName);
 
-      if (signedIn && res.wav_url && res.notes.length > 0) {
+      if (signedIn && res.notes.length > 0) {
         try {
+          let savedId: string;
           if (sourceLibId) {
+            savedId = sourceLibId;
             await saveTranscription(sourceLibId, res.notes);
           } else {
-            const audioBlob = await (await fetch(res.wav_url)).blob();
-            const { id } = await uploadToLibrary(audioName || "transcription.wav", audioBlob);
+            const { id } = await uploadToLibrary(fileName || "audio", originalBlobRef.current!);
+            savedId = id;
             await saveTranscription(id, res.notes);
           }
+          setLibraryFileId(savedId);
           setSaved(true);
           onTranscriptionSaved?.();
         } catch (e) {
@@ -138,7 +143,7 @@ export default function Transcribe({
 
   async function handleFilePick(file: File) {
     setAudioName(file.name);
-    await processBlob(file);
+    await processBlob(file, file.name);
   }
 
   function onUploadNew(e: React.ChangeEvent<HTMLInputElement>) {
@@ -160,8 +165,9 @@ export default function Transcribe({
         const mimeType = rec.mimeType || "audio/webm";
         const ext = mimeType.includes("ogg") ? "ogg" : "webm";
         const blob = new Blob(chunksRef.current, { type: mimeType });
-        setAudioName(`recording-${Date.now()}.${ext}`);
-        await processBlob(blob);
+        const name = `recording-${Date.now()}.${ext}`;
+        setAudioName(name);
+        await processBlob(blob, name);
       };
       rec.start();
       setRecording(true);
@@ -188,10 +194,11 @@ export default function Transcribe({
     setSaved(false);
     setWasLibraryFile(false);
     setLibraryFileId(null);
+    originalBlobRef.current = null;
   }
 
   async function saveToLibrary() {
-    if (!result || !result.wav_url) return;
+    if (!result) return;
     if (wasLibraryFile) {
       setSaved(true);
       setStatus("✓ Already in library");
@@ -199,11 +206,13 @@ export default function Transcribe({
     }
     try {
       setStatus("Saving to library…");
-      const blob = await (await fetch(result.wav_url)).blob();
-      const { id } = await uploadToLibrary(audioName || "transcription.wav", blob);
+      const blob = originalBlobRef.current;
+      if (!blob) return;
+      const { id } = await uploadToLibrary(audioName || "audio", blob);
       if (result.notes.length) {
         await saveTranscription(id, result.notes);
       }
+      setLibraryFileId(id);
       setSaved(true);
       onTranscriptionSaved?.();
       setStatus("✓ Saved to library");
@@ -238,7 +247,7 @@ export default function Transcribe({
       setAnalyzeBase64(res.wav_base64 ?? "");
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
-      onTranscribed?.(res, audioName);
+      onTranscribed?.(res, file.name);
 
       if (signedIn && res.notes.length > 0) {
         try {
@@ -310,7 +319,7 @@ export default function Transcribe({
                 <div className="track-head">
                   <div className="track-name">{f.name}</div>
                   <div className="track-actions">
-                    <span className="chip">Transcribe</span>
+                    <span className="chip">{f.notes && f.notes.length > 0 ? "View" : "Transcribe"}</span>
                   </div>
                 </div>
               </div>
@@ -345,14 +354,18 @@ export default function Transcribe({
                   </button>
                 )}
               {saved && (
-                <span className="chip" style={{ cursor: "default" }}>{wasLibraryFile ? "✓ Transcribed" : "✓ Saved"}</span>
+                <span className="chip" style={{ cursor: "default" }}>{wasLibraryFile ? "✓ In library" : "✓ Saved"}</span>
               )}
-              {onGoToAnalyze && onAnalyze && (result?.wav_base64 || result?.midi_base64) && (
+              {onGoToAnalyze && onAnalyze && result?.notes.length > 0 && (
                   <button
                     className="btn btn-primary"
                     onClick={async () => {
                       try {
-                        await onAnalyze(result.wav_base64, result.midi_base64, audioName, libraryFileId ?? undefined);
+                        if (libraryFileId) {
+                          await onAnalyze(undefined, undefined, audioName, libraryFileId);
+                        } else {
+                          await onAnalyze(result.wav_base64, result.midi_base64, audioName, undefined);
+                        }
                       } catch {
                         /* analysisError surfaces on the Analyze tab */
                       }
