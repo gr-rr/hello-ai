@@ -38,6 +38,9 @@ test.describe("Supported user paths", () => {
     await page.goto("/?tab=transcribe");
     await page.getByText("Upload file").waitFor({ timeout: 15_000 });
 
+    // Wait for MSW service worker to be ready
+    await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, { timeout: 10_000 });
+
     await page
       .locator(".source-card input[type='file']")
       .first()

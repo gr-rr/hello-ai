@@ -17,7 +17,7 @@ test.describe("User journeys", () => {
     await expect(
       page.getByRole("button", { name: /Record/ }),
     ).toBeVisible();
-    await expect(page.getByText(/Internet Archive/i)).toBeVisible();
+    await expect(page.getByText(/Drop audio to save/i)).toBeVisible();
     await expect(page.getByText(/No tracks yet/i)).toBeVisible();
   });
 
@@ -81,6 +81,9 @@ test.describe("User journeys", () => {
     await page.goto("/?tab=transcribe");
     await page.getByText("Upload file").waitFor({ timeout: 15_000 });
 
+    // Wait for MSW service worker to be ready
+    await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, { timeout: 10_000 });
+
     await page
       .locator(".source-card input[type='file']")
       .first()
@@ -95,6 +98,9 @@ test.describe("User journeys", () => {
   test("Transcribe: Analyze button → analysis view", async ({ page }) => {
     await page.goto("/?tab=transcribe");
     await page.getByText("Upload file").waitFor({ timeout: 15_000 });
+
+    // Wait for MSW service worker to be ready
+    await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, { timeout: 10_000 });
 
     await page
       .locator(".source-card input[type='file']")

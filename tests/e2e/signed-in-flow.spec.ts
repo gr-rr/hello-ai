@@ -149,7 +149,8 @@ test.describe("Transcribe flow", () => {
     });
 
     await page.waitForSelector("text=notes", { timeout: 10000 });
-    const analyzeBtn = page.getByRole("button", { name: /analyze/i });
+    // Use .btn-primary to disambiguate from the nav "Analyze" tab
+    const analyzeBtn = page.locator("button.btn-primary", { hasText: /analyze/i });
     if (await analyzeBtn.isVisible()) {
       await analyzeBtn.click();
       // Should redirect to analyze tab
