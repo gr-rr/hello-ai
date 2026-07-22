@@ -13,6 +13,10 @@ class _FakeStorage:
     def download(self, key):
         return self.store.get(key, b"")
 
+    def upload(self, key, data, options=None):
+        self.store[key] = data if isinstance(data, bytes) else data.read()
+        return {"path": key}
+
     def from_(self, bucket):
         self._bucket = bucket
         return self
@@ -124,20 +128,18 @@ def test_analyze_rejects_invalid_base64(client):
     assert r.status_code == 400
 
 
-def test_analyze_rejects_oversize_audio(client, monkeypatch):
-    monkeypatch.setattr(main, "analyze_audio", lambda *a, **k: {"key": {}})
-    monkeypatch.setattr(main, "analyze_from_midi", lambda *a, **k: {"key": {}})
+def test_analyze_rejects_oversize_midi(client):
     big = base64.b64encode(b"x" * (MAX_UPLOAD_BYTES + 1)).decode()
     r = client.post(
         "/music/analyze",
         headers=_auth(),
-        json={"audio_base64": big, "fmt": "wav"},
+        json={"midi_base64": big},
     )
     assert r.status_code == 413
 
 
 def test_analyze_accepts_library_path(client, monkeypatch):
-    monkeypatch.setattr(main, "analyze_from_midi", lambda *a, **k: {"key": {}, "tempo": {}})
+    monkeypatch.setattr(main, "analyze_midi", lambda *a, **k: {"key": {}, "tempo": {}})
     sb = _FakeSB()
     sb.storage.store["owner-1/x.mid"] = b"MThd\x00\x00\x00\x06\x00\x00"
     monkeypatch.setattr(main, "_sb", lambda: sb)

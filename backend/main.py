@@ -17,7 +17,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from analyze import analyze_audio, analyze_from_midi
+from analyze import analyze_midi
 from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
 
 _request_id_ctx = contextvars.ContextVar("request_id", default="none")
@@ -100,7 +100,7 @@ def _split_storage_path(path: str) -> tuple[str, str]:
     if path.startswith("library/"):
         return "library", path
     if path.startswith("midi/"):
-        key = path[len("midi/"):]
+        key = path[len("midi/") :]
         if not key:
             raise HTTPException(status_code=400, detail="empty midi key")
         return "midi", key
@@ -357,43 +357,28 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 
 
 class AnalyzeRequest(BaseModel):
-    audio_base64: str | None = None
     midi_base64: str | None = None
     library_path: str | None = None
-    fmt: str = "wav"
 
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
 def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Analyze audio (or MIDI) for key, tempo, time signature, and chords."""
-    has_audio = bool(req.audio_base64)
+    """Analyze MIDI for key, tempo, time signature, chords, Roman numerals, etc.
+
+    Requires MIDI input — either ``midi_base64`` or a ``library_path`` pointing
+    to a .mid file.  Audio analysis is not supported; transcribe first.
+    """
     has_midi = bool(req.midi_base64)
     has_library = bool(req.library_path)
-    if not (has_audio or has_midi or has_library):
+    if not (has_midi or has_library):
         raise HTTPException(
             status_code=422,
-            detail="audio_base64, midi_base64, or library_path required",
+            detail="midi_base64 or library_path (to a .mid file) required — transcribe first",
         )
 
     with tempfile.TemporaryDirectory() as td:
-        audio_path = None
         midi_path = None
-
-        if has_audio:
-            try:
-                audio_bytes = base64.b64decode(req.audio_base64, validate=True)
-            except Exception:
-                raise HTTPException(status_code=400, detail="invalid audio base64") from None
-            if len(audio_bytes) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-                )
-            ext = _analyze_ext(req.fmt)
-            audio_path = os.path.join(td, f"input.{ext}")
-            with open(audio_path, "wb") as f:
-                f.write(audio_bytes)
 
         if has_midi:
             try:
@@ -423,21 +408,15 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
                     raise HTTPException(status_code=404, detail="file not found in library") from e
                 raise HTTPException(status_code=500, detail="storage error") from e
             raw = data if isinstance(data, bytes | bytearray) else data.read()
-            if req.library_path.endswith(".mid") or bucket == "midi":
-                midi_path = os.path.join(td, "input.mid")
-                with open(midi_path, "wb") as f:
-                    f.write(raw)
-            else:
-                ext = _analyze_ext(req.fmt)
-                audio_path = os.path.join(td, f"input.{ext}")
-                with open(audio_path, "wb") as f:
-                    f.write(raw)
+            midi_path = os.path.join(td, "input.mid")
+            with open(midi_path, "wb") as f:
+                f.write(raw)
+
+        if not midi_path:
+            raise HTTPException(status_code=422, detail="no MIDI data provided")
 
         try:
-            if audio_path:
-                result = analyze_audio(audio_path, midi_path)
-            else:
-                result = analyze_from_midi(midi_path)
+            result = analyze_midi(midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None

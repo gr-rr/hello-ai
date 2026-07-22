@@ -12,7 +12,7 @@ import { AUTH_CALLBACK_URL } from "@/lib/site";
 const TABS = [
   { id: "library", label: "Library" },
   { id: "transcribe", label: "Transcribe" },
-  { id: "analyze", label: "Analyze" },
+  { id: "analyze", label: "Analyze transcription" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -60,9 +60,9 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(audioBase64?: string, midiBase64?: string, name?: string, libraryPath?: string) {
+  async function handleAnalyze(midiBase64?: string, name?: string, libraryPath?: string) {
     if (name) setAudioName(name);
-    if (!audioBase64 && !midiBase64 && !libraryPath) {
+    if (!midiBase64 && !libraryPath) {
       setAnalysisError("Load a track or pick one from your library first");
       goToTab("analyze");
       return;
@@ -74,7 +74,7 @@ export default function Studio({
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(audioBase64, midiBase64, "wav", libraryPath);
+      const result = await analyzeAudio(midiBase64, libraryPath);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -91,7 +91,7 @@ export default function Studio({
 
   async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
-    await handleAnalyze(undefined, undefined, item.name, item.id);
+    await handleAnalyze(undefined, item.name, item.id);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
@@ -174,7 +174,7 @@ export default function Studio({
 
         {tab === "analyze" && (
           <div className="card">
-            <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
+            <h3 className="card-title"><span className="glyph">◈</span> Analyze transcription</h3>
 
             {!analysis && !analyzeStatus && (
               <div className="section-label">Select a transcribed track</div>
