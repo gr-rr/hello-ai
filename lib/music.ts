@@ -210,11 +210,25 @@ export async function enhanceAudio(
 export async function analyzeAudio(
   midiBase64?: string,
 ): Promise<TranscribeResult["analysis"]> {
+  const backendUrl = process.env.NEXT_PUBLIC_MUSIC_BACKEND_URL;
+  if (backendUrl) {
+    const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`${backendUrl}/music/analyze`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ midi_base64: midiBase64 }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.detail || `Request failed: ${res.status}`);
+    }
+    return res.json();
+  }
   return apiFetch("/api/music/analyze", {
     method: "POST",
-    body: JSON.stringify({
-      midi_base64: midiBase64,
-    }),
+    body: JSON.stringify({ midi_base64: midiBase64 }),
   }) as Promise<TranscribeResult["analysis"]>;
 }
 
