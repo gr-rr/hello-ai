@@ -269,7 +269,7 @@ export default function Library({
                         className={f.notes && f.notes.length > 0 ? "icon-btn" : "btn btn-primary"}
                         style={f.notes && f.notes.length > 0 ? {} : { fontSize: "var(--fs-xs)", padding: "2px 8px" }}
                         onClick={() => onTranscribe(f)}
-                        disabled={isTranscribing || isAnalyzing}
+                        disabled={(!f.notes || f.notes.length === 0) && (isTranscribing || isAnalyzing)}
                       >
                         {f.notes && f.notes.length > 0 ? "Transcription" : "Transcribe"}
                       </button>
@@ -281,12 +281,12 @@ export default function Library({
                     )}
                     {onAnalyze && f.notes && f.notes.length > 0 && (
                       <button
-                        className="btn btn-primary"
-                        style={{ fontSize: "var(--fs-xs)", padding: "2px 8px" }}
+                        className={f.analysis ? "icon-btn" : "btn btn-primary"}
+                        style={f.analysis ? {} : { fontSize: "var(--fs-xs)", padding: "2px 8px" }}
                         onClick={() => onAnalyze(f)}
-                        disabled={isTranscribing || isAnalyzing}
+                        disabled={!f.analysis && (isTranscribing || isAnalyzing)}
                       >
-                        Analyze
+                        {f.analysis ? "Analysis" : "Analyze"}
                       </button>
                     )}
                     <button className="icon-btn ghost danger" onClick={() => onDelete(f.id, f.name)} disabled={busy}>

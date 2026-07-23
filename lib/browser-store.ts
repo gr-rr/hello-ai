@@ -1,6 +1,10 @@
 import type { TranscribeResult } from "./music";
 
 const STORAGE_KEY = "localTranscription";
+const TAB_KEY = "studio:tab";
+const RESULT_KEY = "studio:lastResult";
+const ANALYSIS_KEY = "studio:analysis";
+const AUDIO_NAME_KEY = "studio:audioName";
 
 export type LocalTranscription = {
   name: string;
@@ -56,4 +60,67 @@ export function clearLocalTranscription(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {}
+}
+
+// ── Tab persistence ──────────────────────────────────────────────────────
+
+export function saveTab(tab: string): void {
+  try { sessionStorage.setItem(TAB_KEY, tab); } catch {}
+}
+
+export function loadTab(): string | null {
+  try { return sessionStorage.getItem(TAB_KEY); } catch { return null; }
+}
+
+// ── Last result persistence (survives refresh within session) ────────────
+
+type PersistedResult = {
+  notes: TranscribeResult["notes"];
+  num_notes: number;
+  midi_base64?: string;
+  wav_url?: string;
+};
+
+export function saveLastResult(result: TranscribeResult): void {
+  try {
+    const slim: PersistedResult = {
+      notes: result.notes,
+      num_notes: result.num_notes,
+      midi_base64: result.midi_base64,
+      wav_url: result.wav_url,
+    };
+    sessionStorage.setItem(RESULT_KEY, JSON.stringify(slim));
+  } catch {}
+}
+
+export function loadLastResult(): PersistedResult | null {
+  try {
+    const raw = sessionStorage.getItem(RESULT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+// ── Analysis persistence ────────────────────────────────────────────────
+
+export function saveAnalysis(analysis: TranscribeResult["analysis"]): void {
+  try { sessionStorage.setItem(ANALYSIS_KEY, JSON.stringify(analysis)); } catch {}
+}
+
+export function loadAnalysis(): TranscribeResult["analysis"] | null {
+  try {
+    const raw = sessionStorage.getItem(ANALYSIS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+// ── Audio name persistence ──────────────────────────────────────────────
+
+export function saveAudioName(name: string): void {
+  try { sessionStorage.setItem(AUDIO_NAME_KEY, name); } catch {}
+}
+
+export function loadAudioName(): string {
+  try { return sessionStorage.getItem(AUDIO_NAME_KEY) ?? ""; } catch { return ""; }
 }

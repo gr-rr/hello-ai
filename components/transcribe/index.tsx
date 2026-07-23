@@ -439,10 +439,13 @@ export default function Transcribe({
           <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
             <button className="icon-btn" onClick={() => {
               if (synthRef.current) {
-                synthRef.current.stop();
-                synthRef.current = null;
-                setMidiPlaying(false);
-                setPlayhead(0);
+                if (synthRef.current.isPaused) {
+                  synthRef.current.resume();
+                  setMidiPlaying(true);
+                } else {
+                  synthRef.current.pause();
+                  setMidiPlaying(false);
+                }
               } else if (result.notes.length > 0) {
                 synthRef.current = synthMidi(result.notes, (t) => setPlayhead(t));
                 setMidiPlaying(true);
@@ -454,16 +457,6 @@ export default function Transcribe({
               {Math.floor(playhead)}s — MIDI
             </span>
           </div>
-          {result.wav_url && (
-            <audio
-              ref={audioRef}
-              controls
-              src={result.wav_url}
-              style={{ width: "100%", marginBottom: "var(--s-2)" }}
-              onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
-              onPlay={() => setPlayhead(audioRef.current?.currentTime ?? 0)}
-            />
-          )}
 
           <div className="section-label">Piano roll</div>
           {result.notes.length > 0 && (

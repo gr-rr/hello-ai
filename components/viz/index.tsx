@@ -25,10 +25,12 @@ export default function Viz({
   initialTrackId,
   selectedId: selectedIdProp,
   onTrackSelected,
+  onStopRef,
 }: {
   initialTrackId?: string | null;
   selectedId?: string;
   onTrackSelected?: (id: string) => void;
+  onStopRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [files, setFiles] = useState<LibFile[]>([]);
   const [selectedIdLocal, setSelectedIdLocal] = useState<string>("");
@@ -119,6 +121,13 @@ export default function Viz({
   useEffect(() => {
     return () => { stopMidi(); };
   }, [stopMidi]);
+
+  useEffect(() => {
+    if (onStopRef) {
+      onStopRef.current = handleStop;
+      return () => { onStopRef.current = null; };
+    }
+  }, [onStopRef, handleStop]);
 
   useEffect(() => {
     if (playing !== selectedId) {
