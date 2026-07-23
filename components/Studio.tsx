@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Library from "./library";
-import Transcribe from "./transcribe";
+import Transform from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
+import ExplainPanel from "./ExplainPanel";
 import { analyzeAudio, notesToMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
 import { loadLocalTranscription, type LocalTranscription } from "@/lib/browser-store";
 import { SharedAudioProvider, useSharedAudio } from "@/lib/audio-context";
@@ -14,7 +15,7 @@ import { getAuthCallbackUrl } from "@/lib/site";
 
 const TABS = [
   { id: "library", label: "Library" },
-  { id: "transcribe", label: "Transcribe" },
+  { id: "transcribe", label: "Transform" },
   { id: "viz", label: "Visualize" },
   { id: "analyze", label: "Analyze" },
 ] as const;
@@ -197,7 +198,7 @@ export default function Studio({
         )}
 
         <div style={{ display: tab === "transcribe" ? "block" : "none" }}>
-          <Transcribe
+          <Transform
             signedIn={signedIn}
             onTranscribed={onTranscribed}
             onGoToAnalyze={() => goToTab("analyze")}
@@ -259,6 +260,7 @@ export default function Studio({
                   audioName={audioName}
                   numNotes={lastResult?.num_notes ?? 0}
                 />
+                <ExplainPanel analysis={analysis} />
                 <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
                   <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
                     ← Analyze another track

@@ -215,6 +215,33 @@ def enhance_audio(audio_bytes: bytes, fmt: str = "wav") -> bytes:
 
 
 # ---------------------------------------------------------------------------
+# Format conversion (MIDI <-> MusicXML)
+# ---------------------------------------------------------------------------
+def convert_format(data: bytes, source: str, target: str) -> bytes:
+    """Convert between MIDI and MusicXML using music21."""
+    from music21 import converter
+
+    if source == target:
+        return data
+
+    with tempfile.TemporaryDirectory() as td:
+        ext = ".mid" if source == "midi" else ".xml"
+        in_path = os.path.join(td, f"input{ext}")
+        with open(in_path, "wb") as f:
+            f.write(data)
+
+        score = converter.parse(in_path)
+
+        out_ext = ".mid" if target == "midi" else ".xml"
+        out_path = os.path.join(td, f"output{out_ext}")
+        fmt = "midi" if target == "midi" else "musicxml"
+        score.write(fmt, fp=out_path)
+
+        with open(out_path, "rb") as f:
+            return f.read()
+
+
+# ---------------------------------------------------------------------------
 # Audio -> MIDI (basic-pitch)
 # ---------------------------------------------------------------------------
 def transcribe_audio(

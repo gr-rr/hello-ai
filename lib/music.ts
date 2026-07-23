@@ -72,11 +72,16 @@ export async function uploadToLibrary(name: string, blob: Blob): Promise<{ url: 
   if (!supabase) throw new Error("Supabase not configured");
   const uid = await userId();
   if (!uid) throw new Error("Sign in to save to library");
-  const fmt = (name.split(".").pop() || "wav").toLowerCase();
+  const ext = (name.split(".").pop() || "wav").toLowerCase();
   const safeName = name.replace(/[^a-z0-9.\-_\u00C0-\u024F ]/gi, "_");
   const prefix = await userPrefix();
   const path = `${prefix}/${Date.now()}-${safeName}`;
-  await uploadFile(LIBRARY_BUCKET, path, blob, `audio/${fmt}`, true);
+  const contentType = ext === "musicxml" || ext === "xml"
+    ? "application/xml"
+    : ext === "mid" || ext === "midi"
+      ? "audio/midi"
+      : `audio/${ext}`;
+  await uploadFile(LIBRARY_BUCKET, path, blob, contentType, true);
   return { url: getPublicUrl(LIBRARY_BUCKET, path), id: path };
 }
 
@@ -296,4 +301,15 @@ function encodeVarLen(val: number): number[] {
   }
   result.reverse();
   return result;
+}
+
+export async function convertMusicFormat(
+  dataBase64: string,
+  source: "midi" | "musicxml",
+  target: "midi" | "musicxml" | "auto" = "auto",
+): Promise<{ data_base64: string; format: string }> {
+  return apiFetch("/api/music/convert", {
+    method: "POST",
+    body: JSON.stringify({ source, data_base64: dataBase64, target }),
+  }) as Promise<{ data_base64: string; format: string }>;
 }
