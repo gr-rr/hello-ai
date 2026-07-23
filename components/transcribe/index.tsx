@@ -11,6 +11,7 @@ import {
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
+import { saveLocalTranscription } from "@/lib/browser-store";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 
@@ -131,6 +132,9 @@ export default function Transcribe({
         } catch (e) {
           console.error("auto-save failed", e);
         }
+      } else if (!signedIn && res.notes.length > 0) {
+        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined);
+        setSaved(true);
       }
     } catch (err) {
       setState("error");

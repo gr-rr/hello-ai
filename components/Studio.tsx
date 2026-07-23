@@ -8,8 +8,9 @@ import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
 import { analyzeAudio, notesToMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { loadLocalTranscription, type LocalTranscription } from "@/lib/browser-store";
 import { SharedAudioProvider, useSharedAudio } from "@/lib/audio-context";
-import { AUTH_CALLBACK_URL } from "@/lib/site";
+import { getAuthCallbackUrl } from "@/lib/site";
 
 const TABS = [
   { id: "library", label: "Library" },
@@ -42,7 +43,36 @@ export default function Studio({
 
   useEffect(() => {
     if (tab === "analyze") {
-      listLibrary().then(setAnalyzeLibFiles).catch(() => {});
+      listLibrary().then((lib) => {
+        const local = loadLocalTranscription();
+        if (local && local.notes.length > 0) {
+          const localFile: LibFile = {
+            name: local.name,
+            url: local.audioDataUrl || "",
+            id: "__local__",
+            notes: local.notes,
+            midi_base64: local.midi_base64,
+          };
+          setAnalyzeLibFiles([localFile, ...lib]);
+        } else {
+          setAnalyzeLibFiles(lib);
+        }
+      }).catch(() => {});
+    }
+    if (tab === "viz") {
+      listLibrary().then((lib) => {
+        const local = loadLocalTranscription();
+        if (local && local.notes.length > 0) {
+          const localFile: LibFile = {
+            name: local.name,
+            url: local.audioDataUrl || "",
+            id: "__local__",
+            notes: local.notes,
+            midi_base64: local.midi_base64,
+          };
+          setAnalyzeLibFiles([localFile, ...lib]);
+        }
+      }).catch(() => {});
     }
     if (tab === "library" && signedIn) {
       listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
@@ -115,7 +145,7 @@ export default function Studio({
     if (!supabase) return;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: AUTH_CALLBACK_URL },
+      options: { redirectTo: getAuthCallbackUrl() },
     });
   }
 
