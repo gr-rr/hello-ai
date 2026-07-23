@@ -1,20 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Library from "./library";
-import Transcribe from "./transcribe";
+import Transform from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
+import ExplainPanel from "./ExplainPanel";
 import { analyzeAudio, notesToMidiBase64, saveTranscription, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
-import { loadLocalTranscription, saveLocalTranscription, type LocalTranscription } from "@/lib/browser-store";
+import {
+  loadLocalTranscription, saveLocalTranscription,
+  saveTab, loadTab,
+  saveLastResult, loadLastResult,
+  saveAnalysis, loadAnalysis,
+  saveAudioName, loadAudioName,
+} from "@/lib/browser-store";
 import { SharedAudioProvider, useSharedAudio } from "@/lib/audio-context";
 import { getAuthCallbackUrl } from "@/lib/site";
 
 const TABS = [
   { id: "library", label: "Library" },
-  { id: "transcribe", label: "Transcribe" },
+  { id: "transcribe", label: "Transform" },
   { id: "viz", label: "Visualize" },
   { id: "analyze", label: "Analyze" },
 ] as const;
@@ -29,11 +36,21 @@ export default function Studio({
   signedIn?: boolean;
 }) {
   const router = useRouter();
-  const safeTab = TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
-  const [tab, setTab] = useState<TabId>(safeTab as TabId);
-  const [lastResult, setLastResult] = useState<TranscribeResult | null>(null);
-  const [audioName, setAudioName] = useState("");
-  const [analysis, setAnalysis] = useState<TranscribeResult["analysis"] | null>(null);
+
+  // Restore tab from sessionStorage (survives refresh) or URL or default
+  const savedTab = loadTab();
+  const safeInitial = savedTab && TABS.some((t) => t.id === savedTab)
+    ? savedTab
+    : TABS.some((t) => t.id === initialTab) ? initialTab : "transcribe";
+  const [tab, setTab] = useState<TabId>(safeInitial as TabId);
+
+  // Restore last result + analysis from sessionStorage
+  const [lastResult, setLastResult] = useState<TranscribeResult | null>(() => {
+    const r = loadLastResult();
+    return r as TranscribeResult | null;
+  });
+  const [audioName, setAudioName] = useState(loadAudioName);
+  const [analysis, setAnalysis] = useState<TranscribeResult["analysis"] | null>(loadAnalysis);
   const [analysisError, setAnalysisError] = useState("");
   const [analyzeStatus, setAnalyzeStatus] = useState("");
   const [analyzeLibFiles, setAnalyzeLibFiles] = useState<LibFile[]>([]);
@@ -45,6 +62,18 @@ export default function Studio({
   const [vizSelectedId, setVizSelectedId] = useState<string>("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const vizStopRef = useRef<(() => void) | null>(null);
+
+  // Persist tab on change
+  useEffect(() => { saveTab(tab); }, [tab]);
+
+  // UX6: Pause viz when switching away
+  useEffect(() => {
+    if (tab !== "viz" && vizStopRef.current) {
+      vizStopRef.current();
+      vizStopRef.current = null;
+    }
+  }, [tab]);
 
   useEffect(() => {
     if (signedIn) {
@@ -62,6 +91,7 @@ export default function Studio({
           id: "__local__",
           notes: local.notes,
           midi_base64: local.midi_base64,
+          analysis: local.analysis,
         } as LibFile] : [];
         setAnalyzeLibFiles([...localFile, ...lib]);
       }).catch(() => {});
@@ -86,6 +116,10 @@ export default function Studio({
     setAudioName(name);
     setAnalysis(result.analysis ?? null);
     setAnalysisError("");
+    // UX1: persist
+    saveLastResult(result);
+    saveAudioName(name);
+    if (result.analysis) saveAnalysis(result.analysis);
   }
 
   async function handleAnalyze(midiBase64?: string, name?: string, libraryFileId?: string) {
@@ -95,6 +129,7 @@ export default function Studio({
       goToTab("analyze");
       return;
     }
+    // UX7: If analysis already exists for this track, just show it
     if (analysis && audioName === name) {
       goToTab("analyze");
       return;
@@ -105,7 +140,9 @@ export default function Studio({
     try {
       const result = await analyzeAudio(midiBase64);
       setAnalysis(result);
+      saveAnalysis(result);
 
+      // UX7: Save analysis back to library to avoid duplicate work
       if (libraryFileId && signedIn) {
         try {
           const libFile = analyzeLibFiles.find(f => f.id === libraryFileId);
@@ -136,8 +173,11 @@ export default function Studio({
 
   async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
+    saveAudioName(item.name);
+    // UX7: If already analyzed, show results immediately
     if (item.analysis) {
       setAnalysis(item.analysis);
+      saveAnalysis(item.analysis);
       goToTab("analyze");
       return;
     }
@@ -224,7 +264,7 @@ export default function Studio({
         )}
 
         <div style={{ display: tab === "transcribe" ? "block" : "none" }}>
-          <Transcribe
+          <Transform
             signedIn={signedIn}
             onTranscribed={onTranscribed}
             onGoToAnalyze={() => goToTab("analyze")}
@@ -241,6 +281,7 @@ export default function Studio({
             initialTrackId={vizTrackId}
             selectedId={vizSelectedId}
             onTrackSelected={(id) => { setVizTrackId(null); setVizSelectedId(id); }}
+            onStopRef={vizStopRef}
           />
         )}
 
@@ -271,7 +312,7 @@ export default function Studio({
                 >
                   <option value="">-- Pick a track --</option>
                   {analyzeLibFiles.filter(f => f.notes?.length).map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}{f.analysis ? " (Analyzed)" : ""}</option>
+                    <option key={f.id} value={f.id}>{f.name}{f.analysis ? " ✓" : ""}</option>
                   ))}
                 </select>
               </div>
@@ -305,6 +346,7 @@ export default function Studio({
                   audioName={audioName}
                   numNotes={lastResult?.num_notes ?? 0}
                 />
+                <ExplainPanel analysis={analysis} />
                 <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
                   <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
                     ← Analyze another track
