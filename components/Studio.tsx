@@ -7,7 +7,7 @@ import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
-import { analyzeAudio, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { analyzeAudio, fetchMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -93,7 +93,11 @@ export default function Studio({
 
   async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
-    await handleAnalyze(item.midi_base64, item.name);
+    let midi = item.midi_base64;
+    if (!midi) {
+      midi = await fetchMidiBase64(item.id) ?? undefined;
+    }
+    await handleAnalyze(midi, item.name);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
