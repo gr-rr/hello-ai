@@ -21,13 +21,21 @@ const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "tonnetz", label: "Tonnetz" },
 ];
 
-export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackId?: string | null; onTrackSelected?: () => void }) {
+export default function Viz({
+  initialTrackId,
+  selectedId: selectedIdProp,
+  onTrackSelected,
+}: {
+  initialTrackId?: string | null;
+  selectedId?: string;
+  onTrackSelected?: (id: string) => void;
+}) {
   const [files, setFiles] = useState<LibFile[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedIdLocal, setSelectedIdLocal] = useState<string>("");
+  const selectedId = selectedIdProp ?? selectedIdLocal;
   const [mode, setMode] = useState<VizMode>("piano-roll");
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>("original");
   const [midiTime, setMidiTime] = useState(0);
-  const [midiPaused, setMidiPaused] = useState(false);
   const synthRef = useRef<SynthHandle | null>(null);
   const midiOffsetRef = useRef(0);
 
@@ -53,8 +61,8 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
 
   useEffect(() => {
     if (initialTrackId && files.length > 0) {
-      setSelectedId(initialTrackId);
-      onTrackSelected?.();
+      setSelectedIdLocal(initialTrackId);
+      onTrackSelected?.(initialTrackId);
     }
   }, [initialTrackId, files, onTrackSelected]);
 
@@ -66,7 +74,6 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
     synthRef.current?.stop();
     synthRef.current = null;
     setMidiTime(0);
-    setMidiPaused(false);
     midiOffsetRef.current = 0;
   }, []);
 
@@ -81,7 +88,6 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
     sharedStop();
     stopMidi();
     synthRef.current = synthMidi(selected.notes, setMidiTime, midiOffsetRef.current);
-    setMidiPaused(false);
   }, [selected, sharedStop, stopMidi]);
 
   const handleStop = useCallback(() => {
@@ -92,13 +98,11 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
   const handlePlay = useCallback(() => {
     if (playbackSource === "midi") {
       if (synthRef.current) {
-        if (midiPaused) {
+        if (synthRef.current.isPaused) {
           synthRef.current.resume();
-          setMidiPaused(false);
         } else {
           midiOffsetRef.current = midiTime;
           synthRef.current.pause();
-          setMidiPaused(true);
         }
       } else {
         playMidi();
@@ -110,7 +114,7 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
         playOriginal();
       }
     }
-  }, [playbackSource, isThisPlaying, midiPaused, midiTime, playOriginal, playMidi, sharedStop]);
+  }, [playbackSource, isThisPlaying, midiTime, playOriginal, playMidi, sharedStop]);
 
   useEffect(() => {
     return () => { stopMidi(); };
@@ -134,7 +138,8 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
         value={selectedId}
         onChange={(e) => {
           handleStop();
-          setSelectedId(e.target.value);
+          setSelectedIdLocal(e.target.value);
+          onTrackSelected?.(e.target.value);
           setPlaybackSource("original");
           setMode("piano-roll");
         }}
@@ -170,7 +175,7 @@ export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackI
           <div className="section-label">Playback</div>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
             <button className="icon-btn" onClick={handlePlay}>
-              {(playbackSource === "midi" ? (synthRef.current && !midiPaused) : isThisPlaying) ? "⏸" : "▶"}
+              {(playbackSource === "midi" ? (synthRef.current && !synthRef.current.isPaused) : isThisPlaying) ? "⏸" : "▶"}
             </button>
             <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
               {Math.floor(vizTime)}s
