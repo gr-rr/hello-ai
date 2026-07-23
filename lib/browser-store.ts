@@ -8,6 +8,7 @@ export type LocalTranscription = {
   midi_base64?: string;
   audioDataUrl?: string;
   audioBlob?: Blob;
+  analysis?: TranscribeResult["analysis"];
 };
 
 let cached: LocalTranscription | null = null;
@@ -17,8 +18,9 @@ export function saveLocalTranscription(
   notes: TranscribeResult["notes"],
   midiBase64?: string,
   audioBlob?: Blob,
+  analysis?: TranscribeResult["analysis"],
 ): void {
-  const entry: LocalTranscription = { name, notes, midi_base64: midiBase64 };
+  const entry: LocalTranscription = { name, notes, midi_base64: midiBase64, analysis };
 
   if (audioBlob) {
     const url = URL.createObjectURL(audioBlob);
@@ -29,7 +31,7 @@ export function saveLocalTranscription(
   cached = entry;
 
   try {
-    const serialized = { name, notes, midi_base64: midiBase64 };
+    const serialized = { name, notes, midi_base64: midiBase64, analysis };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
   } catch {}
 }

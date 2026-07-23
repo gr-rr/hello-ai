@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import {
   transcribeAudio,
   enhanceAudio,
+  analyzeAudio,
   listLibrary,
   uploadToLibrary,
   saveTranscription,
@@ -12,6 +13,7 @@ import {
   type LibFile,
 } from "@/lib/music";
 import { saveLocalTranscription } from "@/lib/browser-store";
+import { synthMidi, type SynthHandle } from "@/lib/midi-synth";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 
@@ -44,7 +46,7 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (midiBase64?: string, name?: string) => void;
+  onAnalyze?: (midiBase64?: string, name?: string, libraryFileId?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
@@ -67,6 +69,8 @@ export default function Transcribe({
   const [wasLibraryFile, setWasLibraryFile] = useState(false);
   const [libraryFileId, setLibraryFileId] = useState<string | null>(null);
   const originalBlobRef = useRef<Blob | null>(null);
+  const synthRef = useRef<SynthHandle | null>(null);
+  const [midiPlaying, setMidiPlaying] = useState(false);
 
   useEffect(() => {
     listLibrary()
@@ -77,6 +81,10 @@ export default function Transcribe({
             (err instanceof Error ? err.message : "unknown error"),
         );
       });
+  }, []);
+
+  useEffect(() => {
+    return () => { synthRef.current?.stop(); };
   }, []);
 
   useEffect(() => {
@@ -120,20 +128,39 @@ export default function Transcribe({
           let savedId: string;
           if (sourceLibId) {
             savedId = sourceLibId;
-            await saveTranscription(sourceLibId, res.notes, res.midi_base64);
           } else {
             const { id } = await uploadToLibrary(fileName || "audio", originalBlobRef.current!);
             savedId = id;
-            await saveTranscription(id, res.notes, res.midi_base64);
           }
           setLibraryFileId(savedId);
+
+          let analysisResult: TranscribeResult["analysis"] = res.analysis ?? undefined;
+          if (!analysisResult && res.midi_base64) {
+            try {
+              analysisResult = await analyzeAudio(res.midi_base64);
+              setAnalyzeBase64(res.midi_base64);
+            } catch {
+              // analysis failed, continue without it
+            }
+          }
+
+          await saveTranscription(savedId, res.notes, res.midi_base64, analysisResult);
           setSaved(true);
           onTranscriptionSaved?.();
         } catch (e) {
           console.error("auto-save failed", e);
         }
       } else if (!signedIn && res.notes.length > 0) {
-        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined);
+        let analysisResult: TranscribeResult["analysis"] = res.analysis ?? undefined;
+        if (!analysisResult && res.midi_base64) {
+          try {
+            analysisResult = await analyzeAudio(res.midi_base64);
+            setAnalyzeBase64(res.midi_base64);
+          } catch {
+            // analysis failed, continue without it
+          }
+        }
+        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined, analysisResult);
         setSaved(true);
       }
     } catch (err) {
@@ -185,6 +212,9 @@ export default function Transcribe({
   }
 
   function reset() {
+    synthRef.current?.stop();
+    synthRef.current = null;
+    setMidiPlaying(false);
     setState("idle");
     setResult(null);
     setAudioName("");
@@ -362,7 +392,7 @@ export default function Transcribe({
                     className="btn btn-primary"
                     onClick={async () => {
                       try {
-                        await onAnalyze(result.midi_base64, audioName);
+                        await onAnalyze(result.midi_base64, audioName, libraryFileId ?? undefined);
                       } catch {
                         /* analysisError surfaces on the Analyze tab */
                       }
@@ -377,6 +407,24 @@ export default function Transcribe({
           </div>
 
           <div className="section-label">Playback</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
+            <button className="icon-btn" onClick={() => {
+              if (synthRef.current) {
+                synthRef.current.stop();
+                synthRef.current = null;
+                setMidiPlaying(false);
+                setPlayhead(0);
+              } else if (result.notes.length > 0) {
+                synthRef.current = synthMidi(result.notes, (t) => setPlayhead(t));
+                setMidiPlaying(true);
+              }
+            }}>
+              {midiPlaying ? "⏸" : "▶"}
+            </button>
+            <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
+              {Math.floor(playhead)}s — MIDI
+            </span>
+          </div>
           {result.wav_url && (
             <audio
               ref={audioRef}
