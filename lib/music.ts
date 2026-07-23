@@ -217,3 +217,10 @@ export async function analyzeAudio(
     }),
   }) as Promise<TranscribeResult["analysis"]>;
 }
+
+export async function fetchMidiBase64(libraryId: string): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.storage.from(LIBRARY_BUCKET).download(libraryId);
+  if (error || !data) return null;
+  return blobToBase64(data);
+}
