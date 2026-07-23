@@ -316,7 +316,7 @@ export default function Transcribe({
                 <div className="track-head">
                   <div className="track-name">{f.name}</div>
                   <div className="track-actions">
-                    <span className="chip">{f.notes && f.notes.length > 0 ? "View" : "Transcribe"}</span>
+                    <span className={f.notes && f.notes.length > 0 ? "chip" : "btn btn-primary"} style={f.notes && f.notes.length > 0 ? {} : { fontSize: "var(--fs-xs)", padding: "2px 8px" }}>{f.notes && f.notes.length > 0 ? "View" : "Transcribe"}</span>
                   </div>
                 </div>
               </div>
@@ -345,7 +345,7 @@ export default function Transcribe({
                 <p className="muted" style={{ margin: "var(--s-1) 0 0" }}>{result.num_notes} notes</p>
               </div>
               <div style={{ display: "flex", gap: "var(--s-2)" }}>
-                {!saved && signedIn && (
+                {!saved && signedIn && !wasLibraryFile && (
                   <button className="btn" onClick={saveToLibrary}>
                     Save to library
                   </button>
