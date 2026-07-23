@@ -40,39 +40,32 @@ export default function Studio({
   const [pendingLibFile, setPendingLibFile] = useState<LibFile | null>(null);
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [vizReady, setVizReady] = useState(false);
+  const [analyzeReady, setAnalyzeReady] = useState(false);
 
   useEffect(() => {
-    if (tab === "analyze") {
+    if (signedIn) {
+      listLibrary().catch(() => {});
+    }
+  }, [signedIn]);
+
+  useEffect(() => {
+    if (tab === "analyze" && !analyzeReady) {
       listLibrary().then((lib) => {
         const local = loadLocalTranscription();
-        if (local && local.notes.length > 0) {
-          const localFile: LibFile = {
-            name: local.name,
-            url: local.audioDataUrl || "",
-            id: "__local__",
-            notes: local.notes,
-            midi_base64: local.midi_base64,
-          };
-          setAnalyzeLibFiles([localFile, ...lib]);
-        } else {
-          setAnalyzeLibFiles(lib);
-        }
+        const localFile = local && local.notes.length > 0 ? [{
+          name: local.name,
+          url: local.audioDataUrl || "",
+          id: "__local__",
+          notes: local.notes,
+          midi_base64: local.midi_base64,
+        } as LibFile] : [];
+        setAnalyzeLibFiles([...localFile, ...lib]);
+        setAnalyzeReady(true);
       }).catch(() => {});
     }
-    if (tab === "viz") {
-      listLibrary().then((lib) => {
-        const local = loadLocalTranscription();
-        if (local && local.notes.length > 0) {
-          const localFile: LibFile = {
-            name: local.name,
-            url: local.audioDataUrl || "",
-            id: "__local__",
-            notes: local.notes,
-            midi_base64: local.midi_base64,
-          };
-          setAnalyzeLibFiles([localFile, ...lib]);
-        }
-      }).catch(() => {});
+    if (tab === "viz" && !vizReady) {
+      setVizReady(true);
     }
     if (tab === "library" && signedIn) {
       listTranscriptions().then(setTranscriptions).catch(() => setTranscriptions([]));
@@ -141,6 +134,10 @@ export default function Studio({
     handleAnalyzeLibrary(file);
   }
 
+  function handleLibraryVisualize(file: LibFile) {
+    goToTab("viz");
+  }
+
   async function signIn() {
     if (!supabase) return;
     await supabase.auth.signInWithOAuth({
@@ -193,12 +190,13 @@ export default function Studio({
             onSignIn={signIn}
             onTranscribe={handleLibraryTranscribe}
             onAnalyze={handleLibraryAnalyze}
+            onVisualize={handleLibraryVisualize}
             transcriptions={transcriptions}
             refreshKey={refreshKey}
           />
         )}
 
-        {tab === "transcribe" && (
+        <div style={{ display: tab === "transcribe" ? "block" : "none" }}>
           <Transcribe
             signedIn={signedIn}
             onTranscribed={onTranscribed}
@@ -208,11 +206,11 @@ export default function Studio({
             onClearLibraryFile={() => setPendingLibFile(null)}
             onTranscriptionSaved={refreshTranscriptions}
           />
-        )}
+        </div>
 
         {tab === "viz" && <Viz />}
 
-        {tab === "analyze" && (
+        <div style={{ display: tab === "analyze" ? "block" : "none" }}>
           <div className="card">
             <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
 
@@ -269,7 +267,7 @@ export default function Studio({
               </>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="toast" id="toast" />
