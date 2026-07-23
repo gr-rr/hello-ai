@@ -7,7 +7,8 @@ import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
-import { analyzeAudio, fetchMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { analyzeAudio, notesToMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { SharedAudioProvider, useSharedAudio } from "@/lib/audio-context";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
@@ -94,8 +95,8 @@ export default function Studio({
   async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
     let midi = item.midi_base64;
-    if (!midi) {
-      midi = await fetchMidiBase64(item.id) ?? undefined;
+    if (!midi && item.notes && item.notes.length > 0) {
+      midi = notesToMidiBase64(item.notes);
     }
     await handleAnalyze(midi, item.name);
   }
@@ -124,6 +125,7 @@ export default function Studio({
   }
 
   return (
+    <SharedAudioProvider>
     <div className="page">
       <header className="topbar" style={{ justifyContent: "space-between" }}>
         <div className="brand">
@@ -242,5 +244,6 @@ export default function Studio({
 
       <div className="toast" id="toast" />
     </div>
+    </SharedAudioProvider>
   );
 }
