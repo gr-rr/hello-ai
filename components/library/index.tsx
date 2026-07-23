@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import {
   uploadToLibrary,
@@ -10,6 +10,7 @@ import {
   type Transcription,
 } from "@/lib/music";
 import Visualizer from "@/components/Visualizer";
+import { useSharedAudio } from "@/lib/audio-context";
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return "";
@@ -39,15 +40,12 @@ export default function Library({
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState<LibFile[]>([]);
-  const [playing, setPlaying] = useState<string | null>(null);
-  const [paused, setPaused] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [recording, setRecording] = useState(false);
   const [recordTimer, setRecordTimer] = useState(0);
 
+  const { audioRef, playing, paused, currentTime, duration, stop: stopAudio, toggle: togglePlay, pause, resume } = useSharedAudio();
+
   const dropRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -69,7 +67,6 @@ export default function Library({
 
   useEffect(() => {
     return () => {
-      cleanupRef.current?.();
       if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     };
   }, []);
@@ -108,74 +105,6 @@ export default function Library({
       setBusy(false);
     }
   }
-
-  const stopAudio = useCallback(() => {
-    cleanupRef.current?.();
-    cleanupRef.current = null;
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.removeAttribute("src");
-    }
-    setPlaying(null);
-    setPaused(false);
-    setCurrentTime(0);
-    setDuration(0);
-  }, []);
-
-  const playAudio = useCallback((id: string, url: string) => {
-    cleanupRef.current?.();
-    cleanupRef.current = null;
-
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const onTime = () => setCurrentTime(audio.currentTime);
-    const onMeta = () => setDuration(audio.duration);
-    const onEnd = () => { stopAudio(); };
-
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("loadedmetadata", onMeta);
-    audio.addEventListener("ended", onEnd);
-
-    cleanupRef.current = () => {
-      audio.removeEventListener("timeupdate", onTime);
-      audio.removeEventListener("loadedmetadata", onMeta);
-      audio.removeEventListener("ended", onEnd);
-    };
-
-    audio.src = url;
-    audio.play().catch(() => {});
-    setPlaying(id);
-    setPaused(false);
-    setCurrentTime(0);
-    setDuration(0);
-  }, [stopAudio]);
-
-  const pauseAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) audio.pause();
-    setPaused(true);
-  }, []);
-
-  const resumeAudio = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.play().catch(() => {});
-    setPaused(false);
-  }, []);
-
-  const togglePlay = useCallback((id: string, url: string) => {
-    if (playing !== id) {
-      stopAudio();
-      playAudio(id, url);
-    } else if (paused) {
-      resumeAudio();
-    } else {
-      pauseAudio();
-    }
-  }, [playing, paused, stopAudio, playAudio, pauseAudio, resumeAudio]);
 
   function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
@@ -279,8 +208,6 @@ export default function Library({
         </div>
       )}
 
-      <audio ref={audioRef} crossOrigin="anonymous" style={{ display: "none" }} />
-
       {playing && nowPlaying && (
         <div className="card" style={{ marginTop: "var(--s-3)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--s-1)" }}>
@@ -306,7 +233,7 @@ export default function Library({
           </div>
           <Visualizer audioRef={audioRef} />
           <div className="toolbar" style={{ justifyContent: "center" }}>
-            <button className="icon-btn" onClick={() => paused ? resumeAudio() : pauseAudio()}>
+            <button className="icon-btn" onClick={() => paused ? resume() : pause()}>
               {paused ? "▶" : "⏸"}
             </button>
           </div>

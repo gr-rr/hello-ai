@@ -11,6 +11,7 @@ import {
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
+import { saveLocalTranscription } from "@/lib/browser-store";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 
@@ -131,6 +132,9 @@ export default function Transcribe({
         } catch (e) {
           console.error("auto-save failed", e);
         }
+      } else if (!signedIn && res.notes.length > 0) {
+        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined);
+        setSaved(true);
       }
     } catch (err) {
       setState("error");
@@ -316,7 +320,7 @@ export default function Transcribe({
                 <div className="track-head">
                   <div className="track-name">{f.name}</div>
                   <div className="track-actions">
-                    <span className="chip">{f.notes && f.notes.length > 0 ? "View" : "Transcribe"}</span>
+                    <span className={f.notes && f.notes.length > 0 ? "chip" : "btn btn-primary"} style={f.notes && f.notes.length > 0 ? {} : { fontSize: "var(--fs-xs)", padding: "2px 8px" }}>{f.notes && f.notes.length > 0 ? "View" : "Transcribe"}</span>
                   </div>
                 </div>
               </div>
@@ -345,7 +349,7 @@ export default function Transcribe({
                 <p className="muted" style={{ margin: "var(--s-1) 0 0" }}>{result.num_notes} notes</p>
               </div>
               <div style={{ display: "flex", gap: "var(--s-2)" }}>
-                {!saved && signedIn && (
+                {!saved && signedIn && !wasLibraryFile && (
                   <button className="btn" onClick={saveToLibrary}>
                     Save to library
                   </button>

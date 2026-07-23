@@ -54,6 +54,6 @@ export function computeChroma(notes: NoteInput[]): number[] {
     const dur = Math.max(n.end - n.start, 0);
     bins[pitchClass(n.pitch)] += dur;
   }
-  const max = Math.max(...bins, 1);
-  return bins.map((v) => v / max);
+  const total = bins.reduce((a, b) => a + b, 0) || 1;
+  return bins.map((v) => v / total);
 }
