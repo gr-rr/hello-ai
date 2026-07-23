@@ -10,24 +10,15 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from analyze import analyze_audio, analyze_from_midi
-from finetune_server import (
-    generate as ft_generate,
-)
-from finetune_server import (
-    list_base_models,
-    load_dataset_jsonl,
-    train_lora,
-)
+from analyze import analyze_midi
 from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
-from musicgen_server import generate_audio
 
 _request_id_ctx = contextvars.ContextVar("request_id", default="none")
 
@@ -75,7 +66,6 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 security = HTTPBearer(auto_error=False)
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", "26214400"))  # 25 MB
-_LIBRARY_KEY_RE = re.compile(r"^library/[0-9a-f]{32}-[\w.\-]+$")
 _MIDI_KEY_RE = re.compile(r"^midi/[\w.\-]+/[\w.\-]+$")
 
 
@@ -98,19 +88,46 @@ def _analyze_ext(fmt: str) -> str:
     return _ANALYZE_EXTS.get(fmt.lower(), "wav")
 
 
-def _valid_library_key(storage_path: str) -> str | None:
-    """Return a sanitized storage key inside the `library/` or `midi/` prefix, or None.
+def _split_storage_path(path: str) -> tuple[str, str]:
+    """Split 'library/...' or 'midi/...' into (bucket, key).
 
-    Accepts `library/<uuid>-<name>` (audio) and `midi/<uid>/<name>` (MIDI) and
-    rejects any path traversal or attempt to escape the bucket prefix.
+    The frontend uploads library files with keys like
+    ``library/<uid>/<ts>-<name>.m4a`` inside the ``library`` bucket, so the
+    full path (including the ``library/`` prefix) is the actual storage key.
+
+    Raises HTTPException if the path doesn't match a known prefix or key is empty.
     """
-    if not storage_path or ".." in storage_path:
-        return None
-    if _LIBRARY_KEY_RE.match(storage_path):
-        return storage_path
-    if _MIDI_KEY_RE.match(storage_path):
-        return storage_path
-    return None
+    if path.startswith("library/"):
+        if ".." in path or path == "library/":
+            raise HTTPException(status_code=400, detail="invalid library path")
+        return "library", path
+    if path.startswith("midi/"):
+        key = path[len("midi/") :]
+        if not key or ".." in key:
+            raise HTTPException(status_code=400, detail="invalid midi key")
+        return "midi", key
+    raise HTTPException(status_code=400, detail="path must start with library/ or midi/")
+
+
+_sb_client = None
+_sb_lock = threading.Lock()
+
+
+def _sb():
+    global _sb_client
+    if _sb_client is not None:
+        return _sb_client
+    with _sb_lock:
+        if _sb_client is not None:
+            return _sb_client
+        from supabase import create_client
+
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        if not url or not key:
+            return None
+        _sb_client = create_client(url, key)
+        return _sb_client
 
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -145,9 +162,25 @@ def verify_token_optional(
         return None
 
 
-app = FastAPI(title="hello-ai backend", version="0.2.0")
+app = FastAPI(title="hello-ai backend", version="0.3.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+try:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    _cors_origins = [
+        "https://hello-ai-wheat.vercel.app",
+        "http://localhost:3000",
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+except ImportError:
+    pass
 
 
 @app.middleware("http")
@@ -177,35 +210,19 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
-# Local cache for trained adapters (persisted on the VM volume).
-ADAPTER_ROOT = os.environ.get("ADAPTER_ROOT", "/data/adapters")
-os.makedirs(ADAPTER_ROOT, exist_ok=True)
-
-# In-memory job status (mirrors Supabase jobs row; Supabase is source of truth
-# when configured, this is the fallback for quick status updates).
-_job_logs: dict[str, str] = {}
-_job_lock = threading.Lock()
-# Single-slot training guard: only one training run at a time on the CPU VM.
-_training_slot = threading.Lock()
+def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
+    """Upload bytes to a Supabase bucket (service role) and return public URL."""
+    sb = _sb()
+    if not sb:
+        raise HTTPException(status_code=500, detail="Supabase not configured on server")
+    sb.storage.from_(bucket).upload(path, data, {"content-type": content_type})
+    public = sb.storage.from_(bucket).get_public_url(path)
+    return public if isinstance(public, str) else public.get("publicUrl", "")
 
 
-class GenerateRequest(BaseModel):
-    prompt: str
-    duration: int = 5
-    guidance_scale: float = 3.0
-    temperature: float = 1.0
-    model: str = "Xenova/musicgen-small"
-    # If true, upload to Supabase Storage and return a public URL instead of base64.
-    upload: bool = False
-
-
-class GenerateResponse(BaseModel):
-    audio_base64: str | None = None
-    audio_url: str | None = None
-    format: str = "wav"
-    duration: int
-
-
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
 @app.get("/health")
 def health(request: Request):
     return {"status": "ok"}
@@ -219,343 +236,72 @@ def health_live(request: Request):
 @app.get("/health/ready")
 def health_ready(request: Request):
     sb = _sb()
-    status = "ready" if sb else "degraded"
-    return {"status": status, "supabase": sb is not None}
-
-
-# ---------------------------------------------------------------------------
-# Finetune studio
-# ---------------------------------------------------------------------------
-class TrainRequest(BaseModel):
-    base_model: str
-    dataset_text: str | None = None  # raw JSONL
-    dataset_path: str | None = None  # path in Supabase 'datasets' bucket
-    name: str | None = None
-    lora_r: int = 16
-    lora_alpha: int = 32
-    epochs: float = 3.0
-    learning_rate: float = 2e-4
-    max_seq_len: int | None = None
-    batch_size: int = 4
-
-
-class CompareRequest(BaseModel):
-    prompt: str
-    model_a: str = "base"  # "base" or a models.id
-    model_b: str = "base"
-    base_model: str = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    max_new_tokens: int = 128
-    temperature: float = 0.7
-
-
-class TranscribeRequest(BaseModel):
-    # Raw audio as base64 (browser upload) OR a path in the `library` bucket.
-    audio_base64: str | None = None
-    library_path: str | None = None
-    fmt: str = "wav"
-    onset_threshold: float = 0.5
-    frame_threshold: float = 0.3
-    upload: bool = True  # store midi + wav to Supabase
-
-
-def _sb():
-    import os
-
-    from supabase import create_client
-
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        return None
-    return create_client(url, key)
-
-
-def _append_log(job_id: str, msg: str):
-    with _job_lock:
-        _job_logs[job_id] = (_job_logs.get(job_id, "") + msg + "\n").strip()[-4000:]
-    sb = _sb()
-    if sb:
-        sb.table("jobs").update({"loss_log": _job_logs[job_id]}).eq("id", job_id).execute()
-
-
-def _run_training(job_id: str, req: TrainRequest):
-    sb = _sb()
-    if sb:
-        sb.table("jobs").update({"status": "running"}).eq("id", job_id).execute()
-    try:
-        with _training_slot:
-            # Resolve dataset text.
-            if req.dataset_text:
-                text = req.dataset_text
-            elif req.dataset_path:
-                sb2 = _sb()
-                if not sb2:
-                    raise RuntimeError("Supabase not configured for dataset fetch")
-                data = sb2.storage.from_("datasets").download(req.dataset_path)
-                text = data.decode("utf-8") if isinstance(data, bytes | bytearray) else data
-            else:
-                raise ValueError("no dataset provided")
-
-            rows = load_dataset_jsonl(text)
-
-            adapter_dir = os.path.join(ADAPTER_ROOT, job_id)
-            params = {
-                "lora_r": req.lora_r,
-                "lora_alpha": req.lora_alpha,
-                "epochs": req.epochs,
-                "learning_rate": req.learning_rate,
-                "max_seq_len": req.max_seq_len or 1024,
-                "batch_size": req.batch_size,
-            }
-            train_lora(req.base_model, rows, params, adapter_dir, lambda m: _append_log(job_id, m))
-
-            # Persist adapter to Supabase if configured.
-            adapter_path = f"adapters/{job_id}"
-            sb3 = _sb()
-            if sb3:
-                for fname in os.listdir(adapter_dir):
-                    with open(os.path.join(adapter_dir, fname), "rb") as f:
-                        sb3.storage.from_("adapters").upload(
-                            f"{job_id}/{fname}",
-                            f.read(),
-                            file_options={"content-type": "application/octet-stream"},
-                        )
-                sb3.table("models").insert(
-                    {
-                        "name": req.name or f"{req.base_model.split('/')[-1]} LoRA",
-                        "base_model": req.base_model,
-                        "job_id": job_id,
-                        "adapter_path": adapter_path,
-                    }
-                ).execute()
-
-            if sb:
-                sb.table("jobs").update(
-                    {
-                        "status": "done",
-                        "finished_at": _now(),
-                        "loss_log": _job_logs.get(job_id, ""),
-                    }
-                ).eq("id", job_id).execute()
-            _append_log(job_id, "DONE")
-    except Exception as e:
-        logger.exception("training failed")
-        _append_log(job_id, f"ERROR: {e}")
-        if sb:
-            sb.table("jobs").update(
-                {
-                    "status": "error",
-                    "error": str(e),
-                    "finished_at": _now(),
-                }
-            ).eq("id", job_id).execute()
-
-
-@app.get("/models/base")
-def models_base(_auth=Depends(verify_token)):
-    return {"models": list_base_models()}
-
-
-@app.post("/train")
-@limiter.limit("1/minute")
-def train(
-    req: TrainRequest,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    _auth=Depends(verify_token),
-):
-    # Hard kill-switch (set DISABLE_TRAINING=true to turn training off entirely).
-    if os.environ.get("DISABLE_TRAINING", "false").lower() == "true":
-        raise HTTPException(status_code=503, detail="training is disabled")
-    # Single-slot guard: only one training run at a time on the CPU-only VM.
-    if not _training_slot.acquire(blocking=False):
-        raise HTTPException(
-            status_code=409,
-            detail="a training job is already running — wait for it to finish",
-        )
-    _training_slot.release()  # _run_training re-acquires it for the actual run.
-    if not req.dataset_text and not req.dataset_path:
-        raise HTTPException(status_code=400, detail="dataset_text or dataset_path required")
-    job_id = uuid.uuid4().hex
-    params = {
-        "lora_r": req.lora_r,
-        "lora_alpha": req.lora_alpha,
-        "epochs": req.epochs,
-        "learning_rate": req.learning_rate,
-        "max_seq_len": req.max_seq_len or 1024,
-        "batch_size": req.batch_size,
-        "name": req.name,
-    }
-    sb = _sb()
-    if sb:
-        sb.table("jobs").insert(
-            {
-                "id": job_id,
-                "base_model": req.base_model,
-                "params": params,
-                "dataset_path": req.dataset_path,
-                "status": "queued",
-            }
-        ).execute()
-    _job_logs[job_id] = "queued"
-    background_tasks.add_task(_run_training, job_id, req)
-    return {"job_id": job_id, "status": "queued"}
-
-
-@app.get("/jobs/{job_id}")
-def job_status(job_id: str, _auth=Depends(verify_token)):
-    sb = _sb()
-    if sb:
-        res = sb.table("jobs").select("*").eq("id", job_id).execute()
-        if res.data:
-            row = res.data[0]
-            row["loss_log"] = _job_logs.get(job_id, row.get("loss_log", ""))
-            return row
-    with _job_lock:
-        log = _job_logs.get(job_id)
-    if not log:
-        raise HTTPException(status_code=404, detail="job not found")
-    return {"id": job_id, "status": "running", "loss_log": log}
-
-
-@app.get("/models")
-def list_models(_auth=Depends(verify_token)):
-    sb = _sb()
-    if not sb:
-        return {"models": []}
-    res = sb.table("models").select("*").order("created_at", desc=True).execute()
-    return {"models": res.data or []}
-
-
-def _resolve_adapter(model_ref: str, base_model: str):
-    """Return (base_model, adapter_dir_or_None) for a model reference."""
-    if model_ref in ("base", "", None):
-        return base_model, None
-    sb = _sb()
-    if sb:
-        res = sb.table("models").select("*").eq("id", model_ref).execute()
-        if res.data:
-            m = res.data[0]
-            adapter_dir = os.path.join(ADAPTER_ROOT, m["id"])
-            # Pull adapter files from Supabase if not cached locally.
-            if not os.path.isdir(adapter_dir):
-                files = sb.storage.from_("adapters").list(m["id"])
-                if files:
-                    os.makedirs(adapter_dir, exist_ok=True)
-                    for f in files:
-                        data = sb.storage.from_("adapters").download(f"{m['id']}/{f['name']}")
-                        with open(os.path.join(adapter_dir, f["name"]), "wb") as fh:
-                            fh.write(data if isinstance(data, bytes | bytearray) else data.read())
-            return m["base_model"], (adapter_dir if os.path.isdir(adapter_dir) else None)
-    return base_model, None
-
-
-@app.post("/compare")
-@limiter.limit("5/minute")
-def compare(req: CompareRequest, request: Request, _auth=Depends(verify_token)):
-    if not req.prompt or not req.prompt.strip():
-        raise HTTPException(status_code=400, detail="prompt is required")
-    base_a, ad_a = _resolve_adapter(req.model_a, req.base_model)
-    base_b, ad_b = _resolve_adapter(req.model_b, req.base_model)
-    try:
-        a_text = ft_generate(base_a, ad_a, req.prompt, req.max_new_tokens, req.temperature)
-        b_text = ft_generate(base_b, ad_b, req.prompt, req.max_new_tokens, req.temperature)
-    except Exception as e:
-        logger.exception("compare failed")
-        raise HTTPException(status_code=500, detail="compare failed") from e
-    return {"prompt": req.prompt, "a": a_text, "b": b_text}
-
-
-@app.post("/generate", response_model=GenerateResponse)
-@limiter.limit("5/minute")
-def generate(req: GenerateRequest, request: Request, _auth=Depends(verify_token)):
-    if not req.prompt or not req.prompt.strip():
-        raise HTTPException(status_code=400, detail="prompt is required")
-
-    logger.info(
-        "generating: %s (%.1fs, g=%.1f, t=%.1f)",
-        req.prompt,
-        req.duration,
-        req.guidance_scale,
-        req.temperature,
-    )
-
-    try:
-        wav_bytes = generate_audio(
-            prompt=req.prompt.strip(),
-            duration=req.duration,
-            guidance_scale=req.guidance_scale,
-            temperature=req.temperature,
-            model=req.model,
-        )
-    except Exception as e:
-        logger.exception("generation failed")
-        raise HTTPException(status_code=500, detail="generation failed") from e
-
-    if req.upload:
-        url = _upload_to_supabase(wav_bytes, req)
-        return GenerateResponse(audio_url=url, duration=req.duration)
-
-    b64 = base64.b64encode(wav_bytes).decode("ascii")
-    return GenerateResponse(audio_base64=b64, duration=req.duration)
-
-
-def _upload_to_supabase(wav_bytes: bytes, req: GenerateRequest) -> str:
-    # Server-side upload using the service-role key (kept on the server, never the browser).
-    import os
-
-    from supabase import create_client
-
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
-    if not url or not key:
-        raise HTTPException(status_code=500, detail="Supabase not configured on server")
-
-    sb = create_client(url, key)
-    path = f"tracks/{uuid.uuid4().hex}.wav"
-    sb.storage.from_("audio").upload(path, wav_bytes, {"content-type": "audio/wav"})
-    # Insert metadata row.
-    sb.table("tracks").insert(
-        {
-            "prompt": req.prompt.strip(),
-            "model": req.model,
-            "duration": req.duration,
-            "guidance_scale": req.guidance_scale,
-            "temperature": req.temperature,
-            "audio_path": path,
-        }
-    ).execute()
-    public = sb.storage.from_("audio").get_public_url(path)
-    return public if isinstance(public, str) else public.get("publicUrl", "")
-
-
-def _sb_upload(bucket: str, path: str, data: bytes, content_type: str) -> str:
-    """Upload bytes to a Supabase bucket (service role) and return public URL."""
-    sb = _sb()
-    if not sb:
-        raise HTTPException(status_code=500, detail="Supabase not configured on server")
-    sb.storage.from_(bucket).upload(path, data, {"content-type": content_type})
-    public = sb.storage.from_(bucket).get_public_url(path)
-    return public if isinstance(public, str) else public.get("publicUrl", "")
+    st = "ready" if sb else "degraded"
+    return {"status": st, "supabase": sb is not None}
 
 
 # ---------------------------------------------------------------------------
 # Music features: library + transcription
 # ---------------------------------------------------------------------------
+class TranscribeRequest(BaseModel):
+    audio_base64: str | None = None
+    library_path: str | None = None
+    fmt: str = "wav"
+    onset_threshold: float = 0.5
+    frame_threshold: float = 0.3
+    upload: bool = True
+
+
+def _load_audio_from_request(
+    audio_base64: str | None,
+    library_path: str | None,
+) -> bytes:
+    """Decode base64 audio or download from the library bucket."""
+    if audio_base64:
+        try:
+            audio = base64.b64decode(audio_base64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail="invalid base64") from e
+        if len(audio) > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+            )
+        return audio
+    if library_path:
+        sb = _sb()
+        if not sb:
+            raise HTTPException(status_code=500, detail="Supabase not configured")
+        bucket, key = _split_storage_path(library_path)
+        try:
+            data = sb.storage.from_(bucket).download(key)
+        except Exception as e:
+            err_msg = str(e)
+            err_lower = err_msg.lower()
+            if "404" in err_msg or "not_found" in err_lower or "Object not found" in err_msg:
+                raise HTTPException(status_code=404, detail="file not found in library") from e
+            raise HTTPException(status_code=500, detail="storage error") from e
+        return data if isinstance(data, bytes | bytearray) else data.read()
+    raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+
+
+class UploadLibraryRequest(BaseModel):
+    name: str = ""
+    data_base64: str
+    fmt: str = "wav"
+
+
 @app.post("/music/library")
 @limiter.limit("10/minute")
-async def upload_library(req: dict, request: Request, _auth=Depends(verify_token)):
+async def upload_library(req: UploadLibraryRequest, request: Request, _auth=Depends(verify_token)):
     """Store a raw audio file in the `library` bucket.
 
     Body: { name, data_base64, fmt }. Returns { path, url }.
     """
-    name = (req.get("name") or f"{uuid.uuid4().hex}").replace("/", "_")
-    fmt = _sanitize_fmt(req.get("fmt") or "wav")
-    data_b64 = req.get("data_base64")
-    if not data_b64:
-        raise HTTPException(status_code=400, detail="data_base64 required")
+    name = (req.name or f"{uuid.uuid4().hex}").replace("/", "_")
+    fmt = _sanitize_fmt(req.fmt)
     try:
-        raw = base64.b64decode(data_b64)
+        raw = base64.b64decode(req.data_base64)
     except Exception as e:
         raise HTTPException(status_code=400, detail="invalid base64") from e
     if len(raw) > MAX_UPLOAD_BYTES:
@@ -579,33 +325,8 @@ class EnhanceRequest(BaseModel):
 @app.post("/music/enhance")
 @limiter.limit("20/minute")
 def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg.
-
-    This is the audio-quality preprocessing step, run before transcription or
-    storage so every uploaded/recorded clip is consistent. Returns cleaned
-    WAV (base64) and, when upload=True, a stored URL.
-    """
-    if req.audio_base64:
-        try:
-            audio = base64.b64decode(req.audio_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="invalid base64") from e
-        if len(audio) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-            )
-    elif req.library_path:
-        sb = _sb()
-        if not sb:
-            raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = _valid_library_key(req.library_path)
-        if not key:
-            raise HTTPException(status_code=400, detail="invalid library_path")
-        data = sb.storage.from_("library").download(key[len("library/") :])
-        audio = data if isinstance(data, bytes | bytearray) else data.read()
-    else:
-        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+    """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg."""
+    audio = _load_audio_from_request(req.audio_base64, req.library_path)
 
     try:
         cleaned = enhance_audio(audio, fmt=req.fmt)
@@ -623,32 +344,8 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_op
 @app.post("/music/transcribe")
 @limiter.limit("10/minute")
 def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Transcribe audio -> MIDI (+ synthesized WAV + note events).
-
-    Accepts raw audio as base64, or a path in the `library` bucket.
-    Stores midi + wav to Supabase when upload=True.
-    """
-    if req.audio_base64:
-        try:
-            audio = base64.b64decode(req.audio_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail="invalid base64") from e
-        if len(audio) > MAX_UPLOAD_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-            )
-    elif req.library_path:
-        sb = _sb()
-        if not sb:
-            raise HTTPException(status_code=500, detail="Supabase not configured")
-        key = _valid_library_key(req.library_path)
-        if not key:
-            raise HTTPException(status_code=400, detail="invalid library_path")
-        data = sb.storage.from_("library").download(key[len("library/") :])
-        audio = data if isinstance(data, bytes | bytearray) else data.read()
-    else:
-        raise HTTPException(status_code=400, detail="audio_base64 or library_path required")
+    """Transcribe audio -> MIDI (+ synthesized WAV + note events)."""
+    audio = _load_audio_from_request(req.audio_base64, req.library_path)
 
     try:
         result = transcribe_audio(
@@ -670,96 +367,38 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         "wav_base64": base64.b64encode(wav).decode("ascii"),
     }
     if req.upload:
-        midi_path = f"midi/{uuid.uuid4().hex}.mid"
-        wav_path = f"midi/{uuid.uuid4().hex}.wav"
+        midi_path = f"midi/backend/{uuid.uuid4().hex}.mid"
+        wav_path = f"midi/backend/{uuid.uuid4().hex}.wav"
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
     return out
 
 
 class AnalyzeRequest(BaseModel):
-    audio_base64: str | None = None
-    midi_base64: str | None = None
-    library_path: str | None = None
-    fmt: str = "wav"
+    midi_base64: str
 
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
 def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Analyze audio (or MIDI) for key, tempo, time signature, and chords.
-
-    Prefers raw audio (audio_base64) because that yields reliable tempo and
-    time-signature detection; when MIDI is also supplied its note events refine
-    the key and chord estimates. Falls back to MIDI-only when no audio is given.
-    Public: anonymous requests are allowed (auth is optional)."""
-    has_audio = bool(req.audio_base64)
-    has_midi = bool(req.midi_base64)
-    has_library = bool(req.library_path)
-    if not (has_audio or has_midi or has_library):
+    """Analyze MIDI for key, tempo, time signature, chords, Roman numerals, etc."""
+    try:
+        midi_bytes = base64.b64decode(req.midi_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid midi base64") from None
+    if len(midi_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status_code=422,
-            detail="audio_base64, midi_base64, or library_path required",
+            status_code=413,
+            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
         )
 
     with tempfile.TemporaryDirectory() as td:
-        audio_path = None
-        midi_path = None
-
-        if has_audio:
-            try:
-                audio_bytes = base64.b64decode(req.audio_base64, validate=True)
-            except Exception:
-                raise HTTPException(status_code=400, detail="invalid audio base64") from None
-            if len(audio_bytes) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-                )
-            ext = _analyze_ext(req.fmt)
-            audio_path = os.path.join(td, f"input.{ext}")
-            with open(audio_path, "wb") as f:
-                f.write(audio_bytes)
-
-        if has_midi:
-            try:
-                midi_bytes = base64.b64decode(req.midi_base64, validate=True)
-            except Exception:
-                raise HTTPException(status_code=400, detail="invalid midi base64") from None
-            if len(midi_bytes) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-                )
-            midi_path = os.path.join(td, "input.mid")
-            with open(midi_path, "wb") as f:
-                f.write(midi_bytes)
-
-        if has_library:
-            sb = _sb()
-            if not sb:
-                raise HTTPException(status_code=500, detail="Supabase not configured")
-            key = _valid_library_key(req.library_path)
-            if not key:
-                raise HTTPException(status_code=400, detail="invalid library_path")
-            bucket = "midi" if req.library_path.startswith("midi/") else "library"
-            data = sb.storage.from_(bucket).download(key[len(bucket) + 1 :])
-            raw = data if isinstance(data, bytes | bytearray) else data.read()
-            if req.library_path.endswith(".mid") or bucket == "midi":
-                midi_path = os.path.join(td, "input.mid")
-                with open(midi_path, "wb") as f:
-                    f.write(raw)
-            else:
-                ext = _analyze_ext(req.fmt)
-                audio_path = os.path.join(td, f"input.{ext}")
-                with open(audio_path, "wb") as f:
-                    f.write(raw)
+        midi_path = os.path.join(td, "input.mid")
+        with open(midi_path, "wb") as f:
+            f.write(midi_bytes)
 
         try:
-            if audio_path:
-                result = analyze_audio(audio_path, midi_path)
-            else:
-                result = analyze_from_midi(midi_path)
+            result = analyze_midi(midi_path)
         except Exception:
             logger.exception("analysis failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None
@@ -770,10 +409,7 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
 @app.delete("/music/library/transcription/{record_id:path}")
 @limiter.limit("30/minute")
 def delete_transcription(record_id: str, request: Request, auth=Depends(verify_token)):
-    """Delete a saved transcription from the `transcriptions` bucket.
-
-    Keys are shaped `transcriptions/<user_id>/<record>.json`; only the owning
-    user may delete (defense-in-depth alongside storage RLS)."""
+    """Delete a saved transcription from the `transcriptions` bucket."""
     segments = record_id.split("/")
     if len(segments) < 2 or segments[0] != "transcriptions":
         raise HTTPException(status_code=400, detail="invalid path")
@@ -803,6 +439,5 @@ def delete_library_file(path: str, request: Request, auth=Depends(verify_token))
     sb = _sb()
     if not sb:
         raise HTTPException(status_code=500, detail="Supabase not configured")
-    key = path.replace("library/", "", 1)
-    sb.storage.from_("library").remove([key])
+    sb.storage.from_("library").remove([path])
     return {"status": "deleted"}
