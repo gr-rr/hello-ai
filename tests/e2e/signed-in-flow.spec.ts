@@ -105,7 +105,7 @@ test.describe("Library transcribe/analyze flow", () => {
 test.describe("Transcribe flow", () => {
   test("T1: upload new file → transcribe → notes render", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: "Transcribe" }).click();
+    await page.getByRole("button", { name: "Transform" }).click();
 
     const fileInput = page.locator("input[type='file']");
     await fileInput.setInputFiles({
@@ -139,7 +139,7 @@ test.describe("Transcribe flow", () => {
 
   test("T3: analyze from transcribe tab works", async ({ page }) => {
     await signIn(page);
-    await page.getByRole("button", { name: "Transcribe" }).click();
+    await page.getByRole("button", { name: "Transform" }).click();
 
     const fileInput = page.locator("input[type='file']");
     await fileInput.setInputFiles({
@@ -238,7 +238,7 @@ test.describe("Analyze flow", () => {
 test.describe("Navigation", () => {
   test("N1: tab navigation works correctly", async ({ page }) => {
     await signIn(page);
-    for (const tab of ["Library", "Transcribe", "Analyze"]) {
+    for (const tab of ["Library", "Transform", "Analyze"]) {
       await page.getByRole("button", { name: tab }).click();
       await page.waitForTimeout(300);
       await expect(page.getByText(tab, { exact: false }).first()).toBeVisible();

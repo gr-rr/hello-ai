@@ -16,6 +16,6 @@ test.describe("P1: unauthenticated landing", () => {
 
     // In mock/bypass mode the Studio shell renders directly with its nav tabs.
     await expect(page.locator(".nav")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Transcribe/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Transform/ })).toBeVisible();
   });
 });

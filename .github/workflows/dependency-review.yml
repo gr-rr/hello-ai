@@ -12,6 +12,11 @@ jobs:
   review:
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v4
+        with:
+          config-file: './.github/dependency-review.yml'

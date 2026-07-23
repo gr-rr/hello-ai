@@ -25,7 +25,7 @@ async function openHome(page: Page) {
 }
 
 test.describe("P2: sign-in flow reaches Studio", () => {
-  test("a signed-in (mocked) session renders Studio and the Transcribe tab", async ({
+  test("a signed-in (mocked) session renders Studio and the Transform tab", async ({
     page,
   }) => {
     await seedSession(page);
@@ -33,11 +33,11 @@ test.describe("P2: sign-in flow reaches Studio", () => {
 
     await expect(page.locator(".nav")).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByRole("button", { name: /Transcribe/ }),
+      page.getByRole("button", { name: /Transform/ }),
     ).toBeVisible();
   });
 
-  test("studio nav navigates between Library and Transcribe tabs", async ({
+  test("studio nav navigates between Library and Transform tabs", async ({
     page,
   }) => {
     await seedSession(page);
@@ -50,9 +50,9 @@ test.describe("P2: sign-in flow reaches Studio", () => {
       timeout: 10_000,
     });
 
-    await page.getByRole("button", { name: /Transcribe/ }).click();
+    await page.getByRole("button", { name: /Transform/ }).click();
     await expect(
-      page.locator(".card-title", { hasText: /Transcribe/ }),
+      page.locator(".card-title", { hasText: /Transform/ }),
     ).toBeVisible({ timeout: 10_000 });
   });
 });

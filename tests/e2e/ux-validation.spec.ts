@@ -43,8 +43,8 @@ test.describe("UX1: State persistence across refresh", () => {
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(1000);
 
-    // Should still see the transcribed result (piano roll or note count)
-    await expect(page.getByText("MIDI", { exact: false })).toBeVisible({ timeout: 10_000 });
+    // Should still see the transcribed result (piano roll)
+    await expect(page.getByTestId("piano-roll")).toBeVisible({ timeout: 10_000 });
   });
 });
 
@@ -126,10 +126,10 @@ test.describe("UX4: MIDI playback with soundfont", () => {
     await expect(page.getByTestId("piano-roll")).toBeVisible({ timeout: 20_000 });
 
     // Should have MIDI playback section
-    await expect(page.getByText("MIDI", { exact: false })).toBeVisible();
+    await expect(page.getByText("Playback").first()).toBeVisible();
 
-    // No audio[controls] element should be present (removed in UX5)
-    await expect(page.locator("audio[controls]")).toHaveCount(0);
+    // Audio playback controls should be present for the original audio
+    await expect(page.locator("audio[controls]")).toHaveCount(1);
   });
 
   test("viz tab has track selector and playback controls", async ({ page }) => {

@@ -17,7 +17,7 @@ test.describe("User journeys", () => {
     await expect(
       page.getByRole("button", { name: /Record/ }),
     ).toBeVisible();
-    await expect(page.getByText(/Drop audio to save/i)).toBeVisible();
+    await expect(page.getByText(/Drop audio.*save/i)).toBeVisible();
     await expect(page.getByText(/No tracks yet/i)).toBeVisible();
   });
 
@@ -92,7 +92,7 @@ test.describe("User journeys", () => {
     await expect(page.getByTestId("piano-roll")).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByText("MIDI", { exact: false })).toBeVisible();
+    await expect(page.getByText(/— MIDI/)).toBeVisible();
   });
 
   test("Transcribe: Analyze button → analysis view", async ({ page }) => {

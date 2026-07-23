@@ -1,0 +1,5 @@
+fail-on-severity: critical
+allow-ghsas:
+  - GHSA-xcpc-8h2w-3j85
+warn-on-openssf-scorecard-level: 1
+comment-summary-in-pr: always

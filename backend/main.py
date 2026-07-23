@@ -18,7 +18,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from analyze import analyze_midi
-from music_features import _sanitize_fmt, enhance_audio, transcribe_audio
+from music_features import _sanitize_fmt, convert_format, enhance_audio, transcribe_audio
 
 _request_id_ctx = contextvars.ContextVar("request_id", default="none")
 
@@ -465,6 +465,48 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
         },
     )
     return result
+
+
+class ConvertRequest(BaseModel):
+    source: str
+    data_base64: str
+    target: str = "auto"
+
+
+@app.post("/music/convert")
+@limiter.limit("30/minute")
+def convert(req: ConvertRequest, request: Request, _auth=Depends(verify_token_optional)):
+    """Convert between MIDI and MusicXML formats."""
+    try:
+        data = base64.b64decode(req.data_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid base64") from None
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
+        )
+
+    source = req.source.lower()
+    if source not in ("midi", "musicxml"):
+        raise HTTPException(status_code=400, detail="source must be 'midi' or 'musicxml'")
+
+    target = req.target.lower()
+    if target == "auto":
+        target = "musicxml" if source == "midi" else "midi"
+
+    try:
+        result_bytes = convert_format(data, source, target)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception:
+        logger.exception("conversion failed")
+        raise HTTPException(status_code=500, detail="conversion failed") from None
+
+    return {
+        "data_base64": base64.b64encode(result_bytes).decode("ascii"),
+        "format": target,
+    }
 
 
 @app.delete("/music/library/transcription/{record_id:path}")
