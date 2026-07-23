@@ -128,8 +128,8 @@ test.describe("UX4: MIDI playback with soundfont", () => {
     // Should have MIDI playback section
     await expect(page.getByText("Playback").first()).toBeVisible();
 
-    // No audio[controls] element should be present (removed in UX5)
-    await expect(page.locator("audio[controls]")).toHaveCount(0);
+    // Audio playback controls should be present for the original audio
+    await expect(page.locator("audio[controls]")).toHaveCount(1);
   });
 
   test("viz tab has track selector and playback controls", async ({ page }) => {
