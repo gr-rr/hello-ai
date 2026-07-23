@@ -172,7 +172,12 @@ try:
         "https://hello-ai-wheat.vercel.app",
         "http://localhost:3000",
     ]
-    app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 except ImportError:
     pass
 
