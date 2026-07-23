@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { listLibrary, type LibFile } from "@/lib/music";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
 import ChromaHeatmap from "@/components/ChromaHeatmap";
 import Tonnetz from "@/components/Tonnetz";
+import { useSharedAudio } from "@/lib/audio-context";
 
 type VizMode = "piano-roll" | "spectrogram" | "chroma" | "tonnetz";
+type PlaybackSource = "original" | "midi";
 
 const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "piano-roll", label: "Piano roll" },
@@ -16,13 +18,66 @@ const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "tonnetz", label: "Tonnetz" },
 ];
 
+function synthMidi(notes: { pitch: number; start: number; end: number; velocity: number }[], onTime: (t: number) => void): () => void {
+  const ctx = new AudioContext();
+  let raf: number;
+  let stopped = false;
+  const startTime = ctx.currentTime;
+
+  const noteEvents: { time: number; pitch: number; dur: number; vel: number }[] = [];
+  for (const n of notes) {
+    noteEvents.push({ time: n.start, pitch: n.pitch, dur: Math.max(n.end - n.start, 0.01), vel: n.velocity / 127 });
+  }
+  noteEvents.sort((a, b) => a.time - b.time);
+
+  const oscs: OscillatorNode[] = [];
+  for (const ev of noteEvents) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = 440 * Math.pow(2, (ev.pitch - 69) / 12);
+    gain.gain.setValueAtTime(0, startTime + ev.time);
+    gain.gain.linearRampToValueAtTime(ev.vel * 0.3, startTime + ev.time + 0.01);
+    gain.gain.linearRampToValueAtTime(0, startTime + ev.time + ev.dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(startTime + ev.time);
+    osc.stop(startTime + ev.time + ev.dur + 0.01);
+    oscs.push(osc);
+  }
+
+  const lastEnd = noteEvents.length > 0 ? Math.max(...noteEvents.map((e) => e.time + e.dur)) : 0;
+
+  function tick() {
+    if (stopped) return;
+    const elapsed = ctx.currentTime - startTime;
+    onTime(Math.min(elapsed, lastEnd));
+    if (elapsed < lastEnd) {
+      raf = requestAnimationFrame(tick);
+    } else {
+      onTime(0);
+    }
+  }
+  raf = requestAnimationFrame(tick);
+
+  return () => {
+    stopped = true;
+    cancelAnimationFrame(raf);
+    for (const o of oscs) {
+      try { o.stop(); } catch {}
+    }
+    ctx.close();
+  };
+}
+
 export default function Viz() {
   const [files, setFiles] = useState<LibFile[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [mode, setMode] = useState<VizMode>("piano-roll");
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>("original");
+  const [midiTime, setMidiTime] = useState(0);
+  const synthRef = useRef<(() => void) | null>(null);
+
+  const { playing, currentTime, play, stop: sharedStop } = useSharedAudio();
 
   useEffect(() => {
     listLibrary().then(setFiles).catch(() => {});
@@ -30,39 +85,59 @@ export default function Viz() {
 
   const selected = files.find((f) => f.id === selectedId);
   const hasNotes = (selected?.notes?.length ?? 0) > 0;
+  const isThisPlaying = playing === selectedId;
 
-  const play = useCallback(() => {
-    if (!selected) return;
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.src = selected.url;
-    audio.play().catch(() => {});
-    setPlaying(true);
-    setCurrentTime(0);
-  }, [selected]);
-
-  const stop = useCallback(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-    setPlaying(false);
-    setCurrentTime(0);
+  const stopMidi = useCallback(() => {
+    synthRef.current?.();
+    synthRef.current = null;
+    setMidiTime(0);
   }, []);
+
+  const playOriginal = useCallback(() => {
+    if (!selected) return;
+    stopMidi();
+    play(selected.id, selected.url);
+  }, [selected, play, stopMidi]);
+
+  const playMidi = useCallback(() => {
+    if (!selected?.notes || selected.notes.length === 0) return;
+    sharedStop();
+    stopMidi();
+    synthRef.current = synthMidi(selected.notes, setMidiTime);
+  }, [selected, sharedStop, stopMidi]);
+
+  const handleStop = useCallback(() => {
+    stopMidi();
+    sharedStop();
+  }, [stopMidi, sharedStop]);
+
+  const handlePlay = useCallback(() => {
+    if (playbackSource === "midi") {
+      if (synthRef.current) {
+        stopMidi();
+      } else {
+        playMidi();
+      }
+    } else {
+      if (isThisPlaying) {
+        sharedStop();
+      } else {
+        playOriginal();
+      }
+    }
+  }, [playbackSource, isThisPlaying, playOriginal, playMidi, stopMidi, sharedStop]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onTime = () => setCurrentTime(audio.currentTime);
-    const onEnd = () => setPlaying(false);
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("ended", onEnd);
-    return () => {
-      audio.removeEventListener("timeupdate", onTime);
-      audio.removeEventListener("ended", onEnd);
-    };
-  }, []);
+    return () => { stopMidi(); };
+  }, [stopMidi]);
+
+  useEffect(() => {
+    if (playing !== selectedId) {
+      stopMidi();
+    }
+  }, [playing, selectedId, stopMidi]);
+
+  const vizTime = playbackSource === "midi" ? midiTime : currentTime;
 
   return (
     <div className="card">
@@ -73,8 +148,10 @@ export default function Viz() {
         className="sel"
         value={selectedId}
         onChange={(e) => {
-          stop();
+          handleStop();
           setSelectedId(e.target.value);
+          setPlaybackSource("original");
+          setMode("piano-roll");
         }}
         style={{ width: "100%", marginBottom: "var(--s-3)" }}
       >
@@ -88,34 +165,48 @@ export default function Viz() {
 
       {selected && (
         <>
+          <div style={{ display: "flex", gap: "var(--s-2)", marginBottom: "var(--s-3)", flexWrap: "wrap" }}>
+            <button
+              className={`chip${playbackSource === "original" ? "" : " ghost"}`}
+              onClick={() => { handleStop(); setPlaybackSource("original"); }}
+            >
+              Original
+            </button>
+            {hasNotes && (
+              <button
+                className={`chip${playbackSource === "midi" ? "" : " ghost"}`}
+                onClick={() => { handleStop(); setPlaybackSource("midi"); }}
+              >
+                MIDI
+              </button>
+            )}
+          </div>
+
           <div className="section-label">Playback</div>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-3)" }}>
-            <button className="icon-btn" onClick={playing ? stop : play}>
-              {playing ? "⏸" : "▶"}
+            <button className="icon-btn" onClick={handlePlay}>
+              {(playbackSource === "midi" ? synthRef.current : isThisPlaying) ? "⏸" : "▶"}
             </button>
             <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
-              {Math.floor(currentTime)}s
+              {Math.floor(vizTime)}s
             </span>
           </div>
-          <audio ref={audioRef} crossOrigin="anonymous" style={{ display: "none" }} />
 
           <div className="section-label">Visualization</div>
           <div style={{ display: "flex", gap: "var(--s-1)", marginBottom: "var(--s-3)", flexWrap: "wrap" }}>
-            {VIZ_MODES.map((m) => (
-              (m.id !== "piano-roll" || hasNotes) && (
-                <button
-                  key={m.id}
-                  className={`chip${mode === m.id ? "" : " ghost"}`}
-                  onClick={() => setMode(m.id)}
-                >
-                  {m.label}
-                </button>
-              )
+            {VIZ_MODES.filter((m) => hasNotes || m.id === "spectrogram").map((m) => (
+              <button
+                key={m.id}
+                className={`chip${mode === m.id ? "" : " ghost"}`}
+                onClick={() => setMode(m.id)}
+              >
+                {m.label}
+              </button>
             ))}
           </div>
 
           {mode === "piano-roll" && hasNotes && (
-            <PianoRoll notes={selected.notes!} playheadTime={currentTime} bpm={120} />
+            <PianoRoll notes={selected.notes!} playheadTime={vizTime} bpm={120} />
           )}
 
           {mode === "spectrogram" && selected.url && (

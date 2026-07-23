@@ -11,6 +11,7 @@ const BAR_W = 36;
 const GAP = 4;
 const MAX_H = 120;
 const LABEL_H = 20;
+const TOP_PAD = 16;
 
 export default function ChromaHeatmap({ notes }: { notes: Note[] }) {
   const chroma = useMemo(() => computeChroma(notes), [notes]);
@@ -22,11 +23,11 @@ export default function ChromaHeatmap({ notes }: { notes: Note[] }) {
     <div className="viz-panel">
       <div className="section-label">Pitch class distribution</div>
       <div style={{ overflowX: "auto" }}>
-        <svg viewBox={`0 0 ${W} ${MAX_H + LABEL_H}`} width="100%" height={MAX_H + LABEL_H}>
+        <svg viewBox={`0 0 ${W} ${MAX_H + LABEL_H + TOP_PAD}`} width="100%" height={MAX_H + LABEL_H + TOP_PAD}>
           {chroma.map((val, i) => {
             const h = val * MAX_H;
             const x = i * (BAR_W + GAP);
-            const y = MAX_H - h;
+            const y = TOP_PAD + MAX_H - h;
             const isBlack = [1, 3, 6, 8, 10].includes(i);
             return (
               <g key={i}>
@@ -41,7 +42,7 @@ export default function ChromaHeatmap({ notes }: { notes: Note[] }) {
                 />
                 <text
                   x={x + BAR_W / 2}
-                  y={MAX_H + 14}
+                  y={TOP_PAD + MAX_H + 14}
                   textAnchor="middle"
                   fill="var(--muted)"
                   fontSize={11}

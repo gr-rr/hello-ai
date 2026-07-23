@@ -218,9 +218,68 @@ export async function analyzeAudio(
   }) as Promise<TranscribeResult["analysis"]>;
 }
 
-export async function fetchMidiBase64(libraryId: string): Promise<string | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase.storage.from(LIBRARY_BUCKET).download(libraryId);
-  if (error || !data) return null;
-  return blobToBase64(data);
+type NoteInput = { pitch: number; start: number; end: number; velocity: number };
+
+export function notesToMidiBase64(notes: NoteInput[]): string {
+  const TPQ = 480;
+  const tempoMicros = 500000;
+  const events: number[] = [];
+
+  events.push(0, 0xFF, 0x51, 0x03, (tempoMicros >> 16) & 0xFF, (tempoMicros >> 8) & 0xFF, tempoMicros & 0xFF);
+
+  const sorted = [...notes].sort((a, b) => a.start - b.start || a.end - b.end);
+  let lastTick = 0;
+  const pending: { tick: number; pitch: number; velocity: number; off: boolean }[] = [];
+
+  for (const n of sorted) {
+    const onTick = Math.round(n.start * TPQ);
+    const offTick = Math.round(n.end * TPQ);
+    pending.push({ tick: onTick, pitch: n.pitch, velocity: n.velocity, off: false });
+    pending.push({ tick: offTick, pitch: n.pitch, velocity: 0, off: true });
+  }
+
+  pending.sort((a, b) => a.tick - b.tick || (a.off ? 0 : 1) - (b.off ? 0 : 1));
+
+  for (const ev of pending) {
+    const delta = ev.tick - lastTick;
+    lastTick = ev.tick;
+    events.push(...encodeVarLen(delta));
+    events.push(ev.off ? 0x80 : 0x90, ev.pitch & 0x7F, ev.velocity & 0x7F);
+  }
+
+  events.push(0, 0xFF, 0x2F, 0x00);
+
+  const trackChunk = events.length + 8;
+  const totalLen = 14 + trackChunk;
+  const buf = new Uint8Array(totalLen);
+  let p = 0;
+
+  buf[p++] = 0x4D; buf[p++] = 0x54; buf[p++] = 0x68; buf[p++] = 0x64;
+  buf[p++] = 0; buf[p++] = 0; buf[p++] = 0; buf[p++] = 6;
+  buf[p++] = 0; buf[p++] = 0;
+  buf[p++] = 0; buf[p++] = 1;
+  buf[p++] = (TPQ >> 8) & 0xFF; buf[p++] = TPQ & 0xFF;
+
+  buf[p++] = 0x4D; buf[p++] = 0x54; buf[p++] = 0x72; buf[p++] = 0x6B;
+  buf[p++] = (events.length >> 24) & 0xFF;
+  buf[p++] = (events.length >> 16) & 0xFF;
+  buf[p++] = (events.length >> 8) & 0xFF;
+  buf[p++] = events.length & 0xFF;
+  for (const b of events) buf[p++] = b;
+
+  let binary = "";
+  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]);
+  return btoa(binary);
+}
+
+function encodeVarLen(val: number): number[] {
+  const result: number[] = [];
+  result.push(val & 0x7F);
+  val >>= 7;
+  while (val > 0) {
+    result.push((val & 0x7F) | 0x80);
+    val >>= 7;
+  }
+  result.reverse();
+  return result;
 }
