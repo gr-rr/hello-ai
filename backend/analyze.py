@@ -810,18 +810,9 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
     except Exception:
         logger.exception("deep midi analysis failed; skipping")
 
-    # Partitura tonal tension
-    try:
-        t7 = _time.perf_counter()
-        tension = _partitura_tension(midi_path)
-        t8 = _time.perf_counter()
-        logger.info(
-            "analyze_step", extra={"step": "partitura_tension", "step_ms": round((t8 - t7) * 1000)}
-        )
-        if tension:
-            result["tonal_tension"] = tension
-    except Exception:
-        logger.debug("tonal tension failed; skipping")
+    # Partitura tonal tension — disabled: partitura downloads a soundfont
+    # from FTP at runtime which can hang indefinitely.  Re-enable once a
+    # local soundfont is pre-cached on the server.
 
     total_ms = round((_time.perf_counter() - t0) * 1000)
     logger.info("analyze_total", extra={"step": "total", "step_ms": total_ms})
