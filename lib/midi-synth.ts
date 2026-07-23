@@ -2,6 +2,7 @@ export type SynthHandle = {
   stop: () => void;
   pause: () => void;
   resume: () => void;
+  isPaused: boolean;
 };
 
 export function synthMidi(
@@ -13,8 +14,8 @@ export function synthMidi(
   let raf: number;
   let stopped = false;
   let paused = false;
-  let pauseOffset = offset;
-  const startTime = ctx.currentTime + 0.05;
+  let baseTime = offset;
+  let segStart = ctx.currentTime + 0.05;
 
   const noteEvents: { time: number; pitch: number; dur: number; vel: number }[] = [];
   for (const n of notes) {
@@ -27,6 +28,10 @@ export function synthMidi(
   masterGain.connect(ctx.destination);
 
   const activeOscs: OscillatorNode[] = [];
+
+  function elapsed(): number {
+    return baseTime + (ctx.currentTime - segStart);
+  }
 
   function scheduleNotes(fromTime: number) {
     for (const ev of noteEvents) {
@@ -50,13 +55,13 @@ export function synthMidi(
 
   const lastEnd = noteEvents.length > 0 ? Math.max(...noteEvents.map((e) => e.time + e.dur)) : 0;
 
-  scheduleNotes(pauseOffset);
+  scheduleNotes(offset);
 
   function tick() {
     if (stopped || paused) return;
-    const elapsed = ctx.currentTime - startTime + pauseOffset;
-    onTime(Math.min(elapsed, lastEnd));
-    if (elapsed < lastEnd) {
+    const t = Math.min(elapsed(), lastEnd);
+    onTime(t);
+    if (t < lastEnd) {
       raf = requestAnimationFrame(tick);
     } else {
       onTime(0);
@@ -78,7 +83,7 @@ export function synthMidi(
     if (stopped || paused) return;
     paused = true;
     cancelAnimationFrame(raf);
-    pauseOffset = ctx.currentTime - startTime + pauseOffset;
+    baseTime = elapsed();
     for (const o of activeOscs) {
       try { o.stop(); } catch {}
     }
@@ -88,9 +93,15 @@ export function synthMidi(
   function resume() {
     if (stopped || !paused) return;
     paused = false;
-    scheduleNotes(pauseOffset);
+    segStart = ctx.currentTime;
+    scheduleNotes(baseTime);
     raf = requestAnimationFrame(tick);
   }
 
-  return { stop: stopAll, pause, resume };
+  return {
+    stop: stopAll,
+    pause,
+    resume,
+    get isPaused() { return paused; },
+  };
 }

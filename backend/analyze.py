@@ -730,17 +730,35 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
         5. music21 → Roman numerals, cadences, modulations, voice leading, phrases
         6. partitura → tonal tension
     """
+    import time as _time
+
     import pretty_midi
 
+    t0 = _time.perf_counter()
     pm = pretty_midi.PrettyMIDI(midi_path)
+    t1 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "pretty_midi_parse", "step_ms": round((t1 - t0) * 1000)}
+    )
+
     pc_hist, frames = _midi_frames(midi_path)
+    t2 = _time.perf_counter()
+    logger.info("analyze_step", extra={"step": "pitch_frames", "step_ms": round((t2 - t1) * 1000)})
 
     # Key: prefer partitura (more accurate), fall back to PC histogram
     key = _estimate_key_partitura(midi_path) or _key_from_pc_vector(pc_hist)
+    t3 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "key_estimation", "step_ms": round((t3 - t2) * 1000)}
+    )
 
     # Chords: detect + smooth
     raw_chords = _chords_from_frames(frames)
     chords = _smooth_chords(raw_chords)
+    t4 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "chord_detection", "step_ms": round((t4 - t3) * 1000)}
+    )
 
     result: AnalysisResult = {
         "key": key,
@@ -770,18 +788,31 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
 
     # Deep music21 analysis
     try:
+        t5 = _time.perf_counter()
         deep = deep_midi_analysis(midi_path)
+        t6 = _time.perf_counter()
+        logger.info(
+            "analyze_step", extra={"step": "music21_deep", "step_ms": round((t6 - t5) * 1000)}
+        )
         result.update(deep)
     except Exception:
         logger.exception("deep midi analysis failed; skipping")
 
     # Partitura tonal tension
     try:
+        t7 = _time.perf_counter()
         tension = _partitura_tension(midi_path)
+        t8 = _time.perf_counter()
+        logger.info(
+            "analyze_step", extra={"step": "partitura_tension", "step_ms": round((t8 - t7) * 1000)}
+        )
         if tension:
             result["tonal_tension"] = tension
     except Exception:
         logger.debug("tonal tension failed; skipping")
+
+    total_ms = round((_time.perf_counter() - t0) * 1000)
+    logger.info("analyze_total", extra={"step": "total", "step_ms": total_ms})
 
     return result
 

@@ -41,8 +41,10 @@ export default function Studio({
   const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [vizReady, setVizReady] = useState(false);
-  const [analyzeReady, setAnalyzeReady] = useState(false);
   const [vizTrackId, setVizTrackId] = useState<string | null>(null);
+  const [vizSelectedId, setVizSelectedId] = useState<string>("");
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
     if (signedIn) {
@@ -51,7 +53,7 @@ export default function Studio({
   }, [signedIn]);
 
   useEffect(() => {
-    if (tab === "analyze" && !analyzeReady) {
+    if (tab === "analyze") {
       listLibrary().then((lib) => {
         const local = loadLocalTranscription();
         const localFile = local && local.notes.length > 0 ? [{
@@ -62,7 +64,6 @@ export default function Studio({
           midi_base64: local.midi_base64,
         } as LibFile] : [];
         setAnalyzeLibFiles([...localFile, ...lib]);
-        setAnalyzeReady(true);
       }).catch(() => {});
     }
     if (tab === "viz" && !vizReady) {
@@ -100,6 +101,7 @@ export default function Studio({
     }
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
+    setIsAnalyzing(true);
     try {
       const result = await analyzeAudio(midiBase64);
       setAnalysis(result);
@@ -122,6 +124,7 @@ export default function Studio({
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
     } finally {
       setAnalyzeStatus("");
+      setIsAnalyzing(false);
       goToTab("analyze");
     }
   }
@@ -215,6 +218,8 @@ export default function Studio({
             onVisualize={handleLibraryVisualize}
             transcriptions={transcriptions}
             refreshKey={refreshKey}
+            isTranscribing={isTranscribing}
+            isAnalyzing={isAnalyzing}
           />
         )}
 
@@ -227,10 +232,17 @@ export default function Studio({
             libraryFileToLoad={pendingLibFile}
             onClearLibraryFile={() => setPendingLibFile(null)}
             onTranscriptionSaved={refreshTranscriptions}
+            onBusyChange={setIsTranscribing}
           />
         </div>
 
-        {tab === "viz" && <Viz initialTrackId={vizTrackId} onTrackSelected={() => setVizTrackId(null)} />}
+        {tab === "viz" && (
+          <Viz
+            initialTrackId={vizTrackId}
+            selectedId={vizSelectedId}
+            onTrackSelected={(id) => { setVizTrackId(null); setVizSelectedId(id); }}
+          />
+        )}
 
         <div style={{ display: tab === "analyze" ? "block" : "none" }}>
           <div className="card">
@@ -265,7 +277,19 @@ export default function Studio({
               </div>
             )}
 
-            {analyzeStatus && <p className="status" style={{ marginBottom: "var(--s-3)" }}>{analyzeStatus}</p>}
+            {analyzeStatus && (
+              <div style={{ marginBottom: "var(--s-3)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
+                  <span className="status" style={{ fontSize: "var(--fs-sm)" }}>{analyzeStatus}</span>
+                </div>
+                <div style={{ height: 6, background: "var(--panel-3)", borderRadius: "var(--r-full)" }}>
+                  <div className="pulse" style={{ height: "100%", width: "50%", background: "var(--accent)", borderRadius: "var(--r-full)" }} />
+                </div>
+                <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "var(--s-1) 0 0" }}>
+                  Analyzing key, tempo, chords, Roman numerals, cadences…
+                </p>
+              </div>
+            )}
 
             {analysisError && !analysis && !analyzeStatus && (
               <div className="alert-danger" style={{ marginBottom: "var(--s-3)" }}>

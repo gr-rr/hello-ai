@@ -42,6 +42,7 @@ export default function Transcribe({
   libraryFileToLoad,
   onClearLibraryFile,
   onTranscriptionSaved,
+  onBusyChange,
 }: {
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
@@ -50,6 +51,7 @@ export default function Transcribe({
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { user } = useAuth();
   const [state, setState] = useState<State>("idle");
@@ -86,6 +88,10 @@ export default function Transcribe({
   useEffect(() => {
     return () => { synthRef.current?.stop(); };
   }, []);
+
+  useEffect(() => {
+    onBusyChange?.(state === "enhancing" || state === "transcribing");
+  }, [state, onBusyChange]);
 
   useEffect(() => {
     if (libraryFileToLoad) {
@@ -367,7 +373,30 @@ export default function Transcribe({
             <span className="chip-q major" style={{ borderRadius: "var(--r-md)" }}>{audioName || "audio"}</span>
             <span className="status" style={{ fontSize: "var(--fs-sm)" }}>{status}</span>
           </div>
-          <div className="pulse" style={{ height: 8, width: "60%", background: "var(--panel-3)", borderRadius: "var(--r-full)", marginBottom: "var(--s-4)" }} />
+          <div style={{ display: "flex", gap: "var(--s-3)", marginBottom: "var(--s-2)" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "enhancing" ? "var(--text)" : "var(--muted)" }}>1. Clean</span>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "enhancing" ? "var(--accent)" : state === "transcribing" || state === "populated" ? "var(--success)" : "var(--muted)" }}>
+                  {state === "enhancing" ? "…" : "✓"}
+                </span>
+              </div>
+              <div style={{ height: 4, background: "var(--panel-3)", borderRadius: "var(--r-full)" }}>
+                <div className="pulse" style={{ height: "100%", width: state === "enhancing" ? "60%" : "100%", background: state === "enhancing" ? "var(--accent)" : "var(--success)", borderRadius: "var(--r-full)", transition: "width 0.3s" }} />
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "transcribing" ? "var(--text)" : "var(--muted)" }}>2. Transcribe</span>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "transcribing" ? "var(--accent)" : "var(--muted)" }}>
+                  {state === "transcribing" ? "…" : ""}
+                </span>
+              </div>
+              <div style={{ height: 4, background: "var(--panel-3)", borderRadius: "var(--r-full)" }}>
+                <div className={state === "transcribing" ? "pulse" : ""} style={{ height: "100%", width: state === "transcribing" ? "60%" : "0%", background: "var(--accent)", borderRadius: "var(--r-full)", transition: "width 0.3s" }} />
+              </div>
+            </div>
+          </div>
         </>
       )}
 
