@@ -673,7 +673,8 @@ def _partitura_tension_inner(midi_path: str) -> TonalTensionResult | None:
 
 def _partitura_tension(midi_path: str, timeout: float = 20.0) -> TonalTensionResult | None:
     """Compute tonal tension with a hard timeout (partitura can be very slow)."""
-    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as _FuturesTimeout
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
