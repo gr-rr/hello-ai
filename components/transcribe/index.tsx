@@ -43,7 +43,7 @@ export default function Transcribe({
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (midiBase64?: string, name?: string, libraryPath?: string) => void;
+  onAnalyze?: (midiBase64?: string, name?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
@@ -119,11 +119,11 @@ export default function Transcribe({
           let savedId: string;
           if (sourceLibId) {
             savedId = sourceLibId;
-            await saveTranscription(sourceLibId, res.notes);
+            await saveTranscription(sourceLibId, res.notes, res.midi_base64);
           } else {
             const { id } = await uploadToLibrary(fileName || "audio", originalBlobRef.current!);
             savedId = id;
-            await saveTranscription(id, res.notes);
+            await saveTranscription(id, res.notes, res.midi_base64);
           }
           setLibraryFileId(savedId);
           setSaved(true);
@@ -207,7 +207,7 @@ export default function Transcribe({
       if (!blob) return;
       const { id } = await uploadToLibrary(audioName || "audio", blob);
       if (result.notes.length) {
-        await saveTranscription(id, result.notes);
+        await saveTranscription(id, result.notes, result.midi_base64);
       }
       setLibraryFileId(id);
       setSaved(true);
@@ -248,7 +248,7 @@ export default function Transcribe({
 
       if (signedIn && res.notes.length > 0) {
         try {
-          await saveTranscription(file.id, res.notes);
+          await saveTranscription(file.id, res.notes, res.midi_base64);
           setSaved(true);
           onTranscriptionSaved?.();
         } catch (e) {
@@ -358,11 +358,7 @@ export default function Transcribe({
                     className="btn btn-primary"
                     onClick={async () => {
                       try {
-                        if (libraryFileId) {
-                          await onAnalyze(undefined, audioName, libraryFileId);
-                        } else {
-                          await onAnalyze(result.midi_base64, audioName, undefined);
-                        }
+                        await onAnalyze(result.midi_base64, audioName);
                       } catch {
                         /* analysisError surfaces on the Analyze tab */
                       }
