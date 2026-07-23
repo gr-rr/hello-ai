@@ -76,7 +76,7 @@ test.describe("User journeys", () => {
     await expect(page.locator(".status")).toContainText("Recording");
   });
 
-  test("Transcribe: upload → piano roll + audio", async ({ page }) => {
+  test("Transcribe: upload → piano roll + MIDI playback", async ({ page }) => {
     // Transcribe/analyze APIs are mocked by MSW (NEXT_PUBLIC_MOCK_ENABLED).
     await page.goto("/?tab=transcribe");
     await page.getByText("Upload file").waitFor({ timeout: 15_000 });
@@ -92,7 +92,7 @@ test.describe("User journeys", () => {
     await expect(page.getByTestId("piano-roll")).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.locator("audio[controls]")).toBeVisible();
+    await expect(page.getByText("MIDI", { exact: false })).toBeVisible();
   });
 
   test("Transcribe: Analyze button → analysis view", async ({ page }) => {
