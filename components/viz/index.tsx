@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listLibrary, type LibFile } from "@/lib/music";
+import { loadLocalTranscription } from "@/lib/browser-store";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
 import ChromaHeatmap from "@/components/ChromaHeatmap";
 import Tonnetz from "@/components/Tonnetz";
+import Visualizer from "@/components/Visualizer";
 import { useSharedAudio } from "@/lib/audio-context";
 
 type VizMode = "piano-roll" | "spectrogram" | "chroma" | "tonnetz";
@@ -22,13 +24,17 @@ function synthMidi(notes: { pitch: number; start: number; end: number; velocity:
   const ctx = new AudioContext();
   let raf: number;
   let stopped = false;
-  const startTime = ctx.currentTime;
+  const startTime = ctx.currentTime + 0.05;
 
   const noteEvents: { time: number; pitch: number; dur: number; vel: number }[] = [];
   for (const n of notes) {
     noteEvents.push({ time: n.start, pitch: n.pitch, dur: Math.max(n.end - n.start, 0.01), vel: n.velocity / 127 });
   }
   noteEvents.sort((a, b) => a.time - b.time);
+
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0.5;
+  masterGain.connect(ctx.destination);
 
   const oscs: OscillatorNode[] = [];
   for (const ev of noteEvents) {
@@ -37,9 +43,10 @@ function synthMidi(notes: { pitch: number; start: number; end: number; velocity:
     osc.type = "triangle";
     osc.frequency.value = 440 * Math.pow(2, (ev.pitch - 69) / 12);
     gain.gain.setValueAtTime(0, startTime + ev.time);
-    gain.gain.linearRampToValueAtTime(ev.vel * 0.3, startTime + ev.time + 0.01);
+    gain.gain.linearRampToValueAtTime(ev.vel * 0.6, startTime + ev.time + 0.01);
+    gain.gain.setValueAtTime(ev.vel * 0.6, startTime + ev.time + ev.dur * 0.7);
     gain.gain.linearRampToValueAtTime(0, startTime + ev.time + ev.dur);
-    osc.connect(gain).connect(ctx.destination);
+    osc.connect(gain).connect(masterGain);
     osc.start(startTime + ev.time);
     osc.stop(startTime + ev.time + ev.dur + 0.01);
     oscs.push(osc);
@@ -77,10 +84,24 @@ export default function Viz() {
   const [midiTime, setMidiTime] = useState(0);
   const synthRef = useRef<(() => void) | null>(null);
 
-  const { playing, currentTime, play, stop: sharedStop } = useSharedAudio();
+  const { playing, currentTime, play, stop: sharedStop, audioRef } = useSharedAudio();
 
   useEffect(() => {
-    listLibrary().then(setFiles).catch(() => {});
+    listLibrary().then((lib) => {
+      const local = loadLocalTranscription();
+      if (local && local.notes.length > 0) {
+        const localFile: LibFile = {
+          name: local.name,
+          url: local.audioDataUrl || "",
+          id: "__local__",
+          notes: local.notes,
+          midi_base64: local.midi_base64,
+        };
+        setFiles([localFile, ...lib]);
+      } else {
+        setFiles(lib);
+      }
+    }).catch(() => {});
   }, []);
 
   const selected = files.find((f) => f.id === selectedId);
@@ -158,7 +179,7 @@ export default function Viz() {
         <option value="">-- Pick a track --</option>
         {files.map((f) => (
           <option key={f.id} value={f.id}>
-            {f.name}{f.notes && f.notes.length > 0 ? " ✓" : ""}
+            {f.name}
           </option>
         ))}
       </select>
@@ -183,7 +204,7 @@ export default function Viz() {
           </div>
 
           <div className="section-label">Playback</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-3)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
             <button className="icon-btn" onClick={handlePlay}>
               {(playbackSource === "midi" ? synthRef.current : isThisPlaying) ? "⏸" : "▶"}
             </button>
@@ -191,6 +212,7 @@ export default function Viz() {
               {Math.floor(vizTime)}s
             </span>
           </div>
+          {playbackSource === "original" && <Visualizer audioRef={audioRef} />}
 
           <div className="section-label">Visualization</div>
           <div style={{ display: "flex", gap: "var(--s-1)", marginBottom: "var(--s-3)", flexWrap: "wrap" }}>

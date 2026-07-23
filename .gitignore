@@ -51,3 +51,4 @@ design/mockups/workbench-functional.html
 .venv/
 scripts/vm-ssh-key
 data/
+.env*
