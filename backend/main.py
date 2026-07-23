@@ -32,6 +32,21 @@ class _JsonFormatter(logging.Formatter):
             "msg": record.getMessage(),
             "req_id": getattr(record, "req_id", "none"),
         }
+        for key in (
+            "method",
+            "path",
+            "status",
+            "duration_ms",
+            "input_bytes",
+            "output_bytes",
+            "step",
+            "step_ms",
+            "num_notes",
+            "fmt",
+        ):
+            val = getattr(record, key, None)
+            if val is not None:
+                payload[key] = val
         if record.exc_info:
             payload["exc"] = self.formatException(record.exc_info)
         return json.dumps(payload, ensure_ascii=False)
@@ -327,12 +342,24 @@ class EnhanceRequest(BaseModel):
 def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_optional)):
     """Cleanup a raw recording (denoise/declip/normalize) via ffmpeg."""
     audio = _load_audio_from_request(req.audio_base64, req.library_path)
+    t0 = time.perf_counter()
+    logger.info("enhance_start", extra={"input_bytes": len(audio)})
 
     try:
         cleaned = enhance_audio(audio, fmt=req.fmt)
     except Exception as e:
-        logger.exception("enhance failed")
+        logger.exception("enhance_failed")
         raise HTTPException(status_code=500, detail="enhance failed") from e
+
+    elapsed_ms = round((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "enhance_done",
+        extra={
+            "step": "ffmpeg",
+            "step_ms": elapsed_ms,
+            "output_bytes": len(cleaned),
+        },
+    )
 
     out = {"wav_base64": base64.b64encode(cleaned).decode("ascii")}
     if req.upload:
@@ -346,6 +373,8 @@ def enhance(req: EnhanceRequest, request: Request, _auth=Depends(verify_token_op
 def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_token_optional)):
     """Transcribe audio -> MIDI (+ synthesized WAV + note events)."""
     audio = _load_audio_from_request(req.audio_base64, req.library_path)
+    t0 = time.perf_counter()
+    logger.info("transcribe_start", extra={"input_bytes": len(audio), "fmt": req.fmt})
 
     try:
         result = transcribe_audio(
@@ -355,8 +384,18 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
             frame_threshold=req.frame_threshold,
         )
     except Exception as e:
-        logger.exception("transcription failed")
+        logger.exception("transcription_failed")
         raise HTTPException(status_code=500, detail="transcription failed") from e
+
+    t1 = time.perf_counter()
+    logger.info(
+        "transcribe_done",
+        extra={
+            "step": "basic_pitch",
+            "step_ms": round((t1 - t0) * 1000),
+            "num_notes": result["num_notes"],
+        },
+    )
 
     midi = result["midi"]
     wav = result["wav"]
@@ -367,10 +406,21 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
         "wav_base64": base64.b64encode(wav).decode("ascii"),
     }
     if req.upload:
+        t2 = time.perf_counter()
         midi_path = f"midi/backend/{uuid.uuid4().hex}.mid"
         wav_path = f"midi/backend/{uuid.uuid4().hex}.wav"
         out["midi_url"] = _sb_upload("midi", midi_path, midi, "audio/midi")
         out["wav_url"] = _sb_upload("midi", wav_path, wav, "audio/wav")
+        upload_ms = round((time.perf_counter() - t2) * 1000)
+        logger.info(
+            "transcribe_upload",
+            extra={
+                "step": "supabase_upload",
+                "step_ms": upload_ms,
+            },
+        )
+    total_ms = round((time.perf_counter() - t0) * 1000)
+    logger.info("transcribe_total", extra={"step": "total", "step_ms": total_ms})
     return out
 
 
@@ -392,6 +442,9 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
             detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
         )
 
+    t0 = time.perf_counter()
+    logger.info("analyze_start", extra={"input_bytes": len(midi_bytes)})
+
     with tempfile.TemporaryDirectory() as td:
         midi_path = os.path.join(td, "input.mid")
         with open(midi_path, "wb") as f:
@@ -400,9 +453,17 @@ def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_op
         try:
             result = analyze_midi(midi_path)
         except Exception:
-            logger.exception("analysis failed")
+            logger.exception("analysis_failed")
             raise HTTPException(status_code=500, detail="analysis failed") from None
 
+    elapsed_ms = round((time.perf_counter() - t0) * 1000)
+    logger.info(
+        "analyze_done",
+        extra={
+            "step": "analyze_midi",
+            "step_ms": elapsed_ms,
+        },
+    )
     return result
 
 

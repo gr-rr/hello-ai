@@ -27,6 +27,8 @@ export default function Library({
   onVisualize,
   transcriptions,
   refreshKey,
+  isTranscribing,
+  isAnalyzing,
 }: {
   signedIn?: boolean;
   onSignIn?: () => void;
@@ -35,6 +37,8 @@ export default function Library({
   onVisualize?: (file: LibFile) => void;
   transcriptions?: Transcription[];
   refreshKey?: number;
+  isTranscribing?: boolean;
+  isAnalyzing?: boolean;
 }) {
   const transcribedIds = new Set(
     (transcriptions ?? []).map((t) => (t.id.split("/").pop() ?? "").replace(/\.[^.]+$/, "")),
@@ -261,8 +265,13 @@ export default function Library({
                       {playing === f.id && !paused ? "⏸" : "▶"}
                     </button>
                     {onTranscribe && (
-                      <button className="btn btn-primary" style={{ fontSize: "var(--fs-xs)", padding: "2px 8px" }} onClick={() => onTranscribe(f)}>
-                        {f.notes && f.notes.length > 0 ? "Transcribe" : "Transcribe"}
+                      <button
+                        className={f.notes && f.notes.length > 0 ? "icon-btn" : "btn btn-primary"}
+                        style={f.notes && f.notes.length > 0 ? {} : { fontSize: "var(--fs-xs)", padding: "2px 8px" }}
+                        onClick={() => onTranscribe(f)}
+                        disabled={isTranscribing || isAnalyzing}
+                      >
+                        {f.notes && f.notes.length > 0 ? "Transcription" : "Transcribe"}
                       </button>
                     )}
                     {onVisualize && (
@@ -271,7 +280,12 @@ export default function Library({
                       </button>
                     )}
                     {onAnalyze && f.notes && f.notes.length > 0 && (
-                      <button className="icon-btn" onClick={() => onAnalyze(f)}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ fontSize: "var(--fs-xs)", padding: "2px 8px" }}
+                        onClick={() => onAnalyze(f)}
+                        disabled={isTranscribing || isAnalyzing}
+                      >
                         Analyze
                       </button>
                     )}
@@ -286,6 +300,9 @@ export default function Library({
                     <span className="artifact done"><span className="dot" /> MIDI — transcribed</span>
                   ) : (
                     <span className="artifact pending"><span className="dot" /> MIDI — transcribe to generate</span>
+                  )}
+                  {f.analysis && (
+                    <span className="artifact done"><span className="dot" /> Analyzed</span>
                   )}
                 </div>
               </div>

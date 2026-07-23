@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import {
   transcribeAudio,
   enhanceAudio,
+  analyzeAudio,
   listLibrary,
   uploadToLibrary,
   saveTranscription,
@@ -13,6 +14,7 @@ import {
   type LibFile,
 } from "@/lib/music";
 import { saveLocalTranscription } from "@/lib/browser-store";
+import { synthMidi, type SynthHandle } from "@/lib/midi-synth";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 import SheetMusic from "@/components/SheetMusic";
@@ -49,14 +51,16 @@ export default function Transform({
   libraryFileToLoad,
   onClearLibraryFile,
   onTranscriptionSaved,
+  onBusyChange,
 }: {
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
   onGoToAnalyze?: () => void;
-  onAnalyze?: (midiBase64?: string, name?: string) => void;
+  onAnalyze?: (midiBase64?: string, name?: string, libraryFileId?: string) => void;
   libraryFileToLoad?: LibFile | null;
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { user } = useAuth();
   const [mode, setMode] = useState<Mode>("transcribe");
@@ -78,6 +82,8 @@ export default function Transform({
   const [libraryFileId, setLibraryFileId] = useState<string | null>(null);
   const originalBlobRef = useRef<Blob | null>(null);
   const [musicXml, setMusicXml] = useState("");
+  const synthRef = useRef<SynthHandle | null>(null);
+  const [midiPlaying, setMidiPlaying] = useState(false);
 
   useEffect(() => {
     listLibrary()
@@ -89,6 +95,14 @@ export default function Transform({
         );
       });
   }, []);
+
+  useEffect(() => {
+    return () => { synthRef.current?.stop(); };
+  }, []);
+
+  useEffect(() => {
+    onBusyChange?.(state === "enhancing" || state === "transcribing");
+  }, [state, onBusyChange]);
 
   useEffect(() => {
     if (libraryFileToLoad) {
@@ -147,20 +161,39 @@ export default function Transform({
           let savedId: string;
           if (sourceLibId) {
             savedId = sourceLibId;
-            await saveTranscription(sourceLibId, res.notes, res.midi_base64);
           } else {
             const { id } = await uploadToLibrary(fileName || "audio", originalBlobRef.current!);
             savedId = id;
-            await saveTranscription(id, res.notes, res.midi_base64);
           }
           setLibraryFileId(savedId);
+
+          let analysisResult: TranscribeResult["analysis"] = res.analysis ?? undefined;
+          if (!analysisResult && res.midi_base64) {
+            try {
+              analysisResult = await analyzeAudio(res.midi_base64);
+              setAnalyzeBase64(res.midi_base64);
+            } catch {
+              // analysis failed, continue without it
+            }
+          }
+
+          await saveTranscription(savedId, res.notes, res.midi_base64, analysisResult);
           setSaved(true);
           onTranscriptionSaved?.();
         } catch (e) {
           console.error("auto-save failed", e);
         }
       } else if (!signedIn && res.notes.length > 0) {
-        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined);
+        let analysisResult: TranscribeResult["analysis"] = res.analysis ?? undefined;
+        if (!analysisResult && res.midi_base64) {
+          try {
+            analysisResult = await analyzeAudio(res.midi_base64);
+            setAnalyzeBase64(res.midi_base64);
+          } catch {
+            // analysis failed, continue without it
+          }
+        }
+        saveLocalTranscription(fileName, res.notes, res.midi_base64, originalBlobRef.current ?? undefined, analysisResult);
         setSaved(true);
       }
     } catch (err) {
@@ -236,6 +269,9 @@ export default function Transform({
   }
 
   function reset() {
+    synthRef.current?.stop();
+    synthRef.current = null;
+    setMidiPlaying(false);
     setState("idle");
     setResult(null);
     setAudioName("");
@@ -453,7 +489,30 @@ export default function Transform({
             <span className="chip-q major" style={{ borderRadius: "var(--r-md)" }}>{audioName || "audio"}</span>
             <span className="status" style={{ fontSize: "var(--fs-sm)" }}>{status}</span>
           </div>
-          <div className="pulse" style={{ height: 8, width: "60%", background: "var(--panel-3)", borderRadius: "var(--r-full)", marginBottom: "var(--s-4)" }} />
+          <div style={{ display: "flex", gap: "var(--s-3)", marginBottom: "var(--s-2)" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "enhancing" ? "var(--text)" : "var(--muted)" }}>1. Clean</span>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "enhancing" ? "var(--accent)" : state === "transcribing" ? "var(--success)" : "var(--muted)" }}>
+                  {state === "enhancing" ? "…" : "✓"}
+                </span>
+              </div>
+              <div style={{ height: 4, background: "var(--panel-3)", borderRadius: "var(--r-full)" }}>
+                <div className="pulse" style={{ height: "100%", width: state === "enhancing" ? "60%" : "100%", background: state === "enhancing" ? "var(--accent)" : "var(--success)", borderRadius: "var(--r-full)", transition: "width 0.3s" }} />
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "transcribing" ? "var(--text)" : "var(--muted)" }}>2. Transcribe</span>
+                <span style={{ fontSize: "var(--fs-xs)", color: state === "transcribing" ? "var(--accent)" : "var(--muted)" }}>
+                  {state === "transcribing" ? "…" : ""}
+                </span>
+              </div>
+              <div style={{ height: 4, background: "var(--panel-3)", borderRadius: "var(--r-full)" }}>
+                <div className={state === "transcribing" ? "pulse" : ""} style={{ height: "100%", width: state === "transcribing" ? "60%" : "0%", background: "var(--accent)", borderRadius: "var(--r-full)", transition: "width 0.3s" }} />
+              </div>
+            </div>
+          </div>
         </>
       )}
 
@@ -485,7 +544,7 @@ export default function Transform({
                     className="btn btn-primary"
                     onClick={async () => {
                       try {
-                        await onAnalyze(result!.midi_base64, audioName);
+                        await onAnalyze(result.midi_base64, audioName, libraryFileId ?? undefined);
                       } catch {
                         /* analysisError surfaces on the Analyze tab */
                       }
@@ -506,30 +565,46 @@ export default function Transform({
             </>
           )}
 
-          {result && (
-            <>
-              <div className="section-label">Playback</div>
-              {result.wav_url && (
-                <audio
-                  ref={audioRef}
-                  controls
-                  src={result.wav_url}
-                  style={{ width: "100%", marginBottom: "var(--s-2)" }}
-                  onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
-                  onPlay={() => setPlayhead(audioRef.current?.currentTime ?? 0)}
-                />
-              )}
+          <div className="section-label">Playback</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
+            <button className="icon-btn" onClick={() => {
+              if (synthRef.current) {
+                synthRef.current.stop();
+                synthRef.current = null;
+                setMidiPlaying(false);
+                setPlayhead(0);
+              } else if (result && result.notes.length > 0) {
+                synthRef.current = synthMidi(result.notes, (t) => setPlayhead(t));
+                setMidiPlaying(true);
+              }
+            }}>
+              {midiPlaying ? "⏸" : "▶"}
+            </button>
+            <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
+              {Math.floor(playhead)}s — MIDI
+            </span>
+          </div>
+          {result?.wav_url && (
+            <audio
+              ref={audioRef}
+              controls
+              src={result.wav_url}
+              style={{ width: "100%", marginBottom: "var(--s-2)" }}
+              onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
+              onPlay={() => setPlayhead(audioRef.current?.currentTime ?? 0)}
+            />
+          )}
 
+          {result?.notes && result.notes.length > 0 && (
+            <>
               <div className="section-label">Piano roll</div>
-              {result.notes.length > 0 && (
-                <div className="card">
-                  <PianoRoll
-                    notes={result.notes}
-                    playheadTime={playhead}
-                    bpm={result.analysis?.tempo?.bpm ?? 120}
-                  />
-                </div>
-              )}
+              <div className="card">
+                <PianoRoll
+                  notes={result.notes}
+                  playheadTime={playhead}
+                  bpm={result.analysis?.tempo?.bpm ?? 120}
+                />
+              </div>
             </>
           )}
         </>

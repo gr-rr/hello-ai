@@ -653,22 +653,34 @@ def _m21_phrases(score) -> list[PhraseResult]:
 # ── Partitura tonal tension ────────────────────────────────────────────────
 
 
-def _partitura_tension(midi_path: str) -> TonalTensionResult | None:
-    """Compute tonal tension curve using partitura."""
-    try:
-        import partitura as pt
+def _partitura_tension_inner(midi_path: str) -> TonalTensionResult | None:
+    """Compute tonal tension curve using partitura (inner, may block)."""
+    import partitura as pt
 
-        score = pt.load_score(midi_path)
-        note_array = pt.musicanalysis.compute_note_array(score, include_key_signature=True)
-        tension_data = pt.musicanalysis.estimate_tonaltension(note_array)
-        if tension_data is not None and len(tension_data) > 0:
-            tension_list = [float(x) for x in tension_data.flatten()[:200]]
-            # Find peaks (local maxima)
-            peaks = []
-            for i in range(1, len(tension_list) - 1):
-                if tension_list[i] > tension_list[i - 1] and tension_list[i] > tension_list[i + 1]:
-                    peaks.append(round(tension_list[i], 3))
-            return TonalTensionResult(tension=tension_list, peaks=peaks[:20])
+    score = pt.load_score(midi_path)
+    note_array = pt.musicanalysis.compute_note_array(score, include_key_signature=True)
+    tension_data = pt.musicanalysis.estimate_tonaltension(note_array)
+    if tension_data is not None and len(tension_data) > 0:
+        tension_list = [float(x) for x in tension_data.flatten()[:200]]
+        # Find peaks (local maxima)
+        peaks = []
+        for i in range(1, len(tension_list) - 1):
+            if tension_list[i] > tension_list[i - 1] and tension_list[i] > tension_list[i + 1]:
+                peaks.append(round(tension_list[i], 3))
+        return TonalTensionResult(tension=tension_list, peaks=peaks[:20])
+    return None
+
+
+def _partitura_tension(midi_path: str, timeout: float = 20.0) -> TonalTensionResult | None:
+    """Compute tonal tension with a hard timeout (partitura can be very slow)."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_partitura_tension_inner, midi_path)
+            return future.result(timeout=timeout)
+    except _FuturesTimeout:
+        logger.warning("partitura tonal tension timed out after %.0fs, skipping", timeout)
     except Exception:
         logger.debug("partitura tonal tension failed")
     return None
@@ -730,17 +742,35 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
         5. music21 → Roman numerals, cadences, modulations, voice leading, phrases
         6. partitura → tonal tension
     """
+    import time as _time
+
     import pretty_midi
 
+    t0 = _time.perf_counter()
     pm = pretty_midi.PrettyMIDI(midi_path)
-    pc_hist, frames = _midi_frames(midi_path)
+    t1 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "pretty_midi_parse", "step_ms": round((t1 - t0) * 1000)}
+    )
 
-    # Key: prefer partitura (more accurate), fall back to PC histogram
-    key = _estimate_key_partitura(midi_path) or _key_from_pc_vector(pc_hist)
+    pc_hist, frames = _midi_frames(midi_path)
+    t2 = _time.perf_counter()
+    logger.info("analyze_step", extra={"step": "pitch_frames", "step_ms": round((t2 - t1) * 1000)})
+
+    # Key: fast PC-histogram method (partitura's load_score is too slow)
+    key = _key_from_pc_vector(pc_hist)
+    t3 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "key_estimation", "step_ms": round((t3 - t2) * 1000)}
+    )
 
     # Chords: detect + smooth
     raw_chords = _chords_from_frames(frames)
     chords = _smooth_chords(raw_chords)
+    t4 = _time.perf_counter()
+    logger.info(
+        "analyze_step", extra={"step": "chord_detection", "step_ms": round((t4 - t3) * 1000)}
+    )
 
     result: AnalysisResult = {
         "key": key,
@@ -770,18 +800,22 @@ def analyze_midi(midi_path: str) -> AnalysisResult:
 
     # Deep music21 analysis
     try:
+        t5 = _time.perf_counter()
         deep = deep_midi_analysis(midi_path)
+        t6 = _time.perf_counter()
+        logger.info(
+            "analyze_step", extra={"step": "music21_deep", "step_ms": round((t6 - t5) * 1000)}
+        )
         result.update(deep)
     except Exception:
         logger.exception("deep midi analysis failed; skipping")
 
-    # Partitura tonal tension
-    try:
-        tension = _partitura_tension(midi_path)
-        if tension:
-            result["tonal_tension"] = tension
-    except Exception:
-        logger.debug("tonal tension failed; skipping")
+    # Partitura tonal tension — disabled: partitura downloads a soundfont
+    # from FTP at runtime which can hang indefinitely.  Re-enable once a
+    # local soundfont is pre-cached on the server.
+
+    total_ms = round((_time.perf_counter() - t0) * 1000)
+    logger.info("analyze_total", extra={"step": "total", "step_ms": total_ms})
 
     return result
 
