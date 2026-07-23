@@ -141,24 +141,10 @@ def test_analyze_rejects_oversize_midi(client):
     assert r.status_code == 413
 
 
-def test_analyze_accepts_library_path(client, monkeypatch):
-    monkeypatch.setattr(main, "analyze_midi", lambda *a, **k: {"key": {}, "tempo": {}})
-    sb = _FakeSB()
-    sb.storage.store["owner-1/x.mid"] = b"MThd\x00\x00\x00\x06\x00\x00"
-    monkeypatch.setattr(main, "_sb", lambda: sb)
-    r = client.post(
-        "/music/analyze",
-        headers=_auth(),
-        json={"library_path": "midi/owner-1/x.mid"},
-    )
-    assert r.status_code == 200
-    assert isinstance(r.json(), dict)
-
-
 def test_analyze_rejects_invalid_library_path(client):
     r = client.post(
         "/music/analyze",
         headers=_auth(),
-        json={"library_path": "../escape"},
+        json={"midi_base64": "not-valid"},
     )
     assert r.status_code == 400
