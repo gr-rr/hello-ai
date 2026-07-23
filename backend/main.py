@@ -168,6 +168,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 try:
     from fastapi.middleware.cors import CORSMiddleware
+
     _cors_origins = [
         "https://hello-ai-wheat.vercel.app",
         "http://localhost:3000",
