@@ -43,6 +43,8 @@ export default function Transcribe({
   onClearLibraryFile,
   onTranscriptionSaved,
   onBusyChange,
+  initialResult,
+  initialAudioName,
 }: {
   signedIn?: boolean;
   onTranscribed?: (result: TranscribeResult, name: string) => void;
@@ -52,11 +54,13 @@ export default function Transcribe({
   onClearLibraryFile?: () => void;
   onTranscriptionSaved?: () => void;
   onBusyChange?: (busy: boolean) => void;
+  initialResult?: TranscribeResult | null;
+  initialAudioName?: string;
 }) {
   const { user } = useAuth();
-  const [state, setState] = useState<State>("idle");
-  const [result, setResult] = useState<TranscribeResult | null>(null);
-  const [audioName, setAudioName] = useState("");
+  const [state, setState] = useState<State>(() => initialResult ? "populated" : "idle");
+  const [result, setResult] = useState<TranscribeResult | null>(initialResult ?? null);
+  const [audioName, setAudioName] = useState(initialAudioName ?? "");
   const [analyzeBase64, setAnalyzeBase64] = useState("");
   const [status, setStatus] = useState("");
   const [libFiles, setLibFiles] = useState<LibFile[]>([]);

@@ -264,6 +264,8 @@ export default function Studio({
             onClearLibraryFile={() => setPendingLibFile(null)}
             onTranscriptionSaved={refreshTranscriptions}
             onBusyChange={setIsTranscribing}
+            initialResult={lastResult}
+            initialAudioName={audioName}
           />
         </div>
 
