@@ -5,6 +5,8 @@ if (!SITE_URL) {
   console.warn("NEXT_PUBLIC_SITE_URL is not set — auth callbacks may fail");
 }
 
-export const AUTH_CALLBACK_URL = SITE_URL
-  ? `${SITE_URL}/auth/callback`
-  : "/auth/callback";
+export function getAuthCallbackUrl(): string {
+  if (SITE_URL) return `${SITE_URL}/auth/callback`;
+  if (typeof window !== "undefined") return `${window.location.origin}/auth/callback`;
+  return "/auth/callback";
+}

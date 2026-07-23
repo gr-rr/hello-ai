@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listLibrary, type LibFile } from "@/lib/music";
+import { loadLocalTranscription } from "@/lib/browser-store";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
 import ChromaHeatmap from "@/components/ChromaHeatmap";
@@ -80,7 +81,21 @@ export default function Viz() {
   const { playing, currentTime, play, stop: sharedStop } = useSharedAudio();
 
   useEffect(() => {
-    listLibrary().then(setFiles).catch(() => {});
+    listLibrary().then((lib) => {
+      const local = loadLocalTranscription();
+      if (local && local.notes.length > 0) {
+        const localFile: LibFile = {
+          name: local.name,
+          url: local.audioDataUrl || "",
+          id: "__local__",
+          notes: local.notes,
+          midi_base64: local.midi_base64,
+        };
+        setFiles([localFile, ...lib]);
+      } else {
+        setFiles(lib);
+      }
+    }).catch(() => {});
   }, []);
 
   const selected = files.find((f) => f.id === selectedId);
