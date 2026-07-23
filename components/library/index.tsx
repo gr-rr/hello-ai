@@ -24,6 +24,7 @@ export default function Library({
   onSignIn,
   onTranscribe,
   onAnalyze,
+  onVisualize,
   transcriptions,
   refreshKey,
 }: {
@@ -31,6 +32,7 @@ export default function Library({
   onSignIn?: () => void;
   onTranscribe?: (file: LibFile) => void;
   onAnalyze?: (file: LibFile) => void;
+  onVisualize?: (file: LibFile) => void;
   transcriptions?: Transcription[];
   refreshKey?: number;
 }) {
@@ -259,8 +261,13 @@ export default function Library({
                       {playing === f.id && !paused ? "⏸" : "▶"}
                     </button>
                     {onTranscribe && (
-                      <button className="icon-btn" onClick={() => onTranscribe(f)}>
-                        {f.notes && f.notes.length > 0 ? "View" : "Transcribe"}
+                      <button className="btn btn-primary" style={{ fontSize: "var(--fs-xs)", padding: "2px 8px" }} onClick={() => onTranscribe(f)}>
+                        {f.notes && f.notes.length > 0 ? "Transcribe" : "Transcribe"}
+                      </button>
+                    )}
+                    {onVisualize && (
+                      <button className="icon-btn" onClick={() => onVisualize(f)}>
+                        Visualize
                       </button>
                     )}
                     {onAnalyze && f.notes && f.notes.length > 0 && (
