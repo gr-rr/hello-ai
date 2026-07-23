@@ -7,8 +7,8 @@ import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
 import Viz from "./viz";
-import { analyzeAudio, notesToMidiBase64, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
-import { loadLocalTranscription, type LocalTranscription } from "@/lib/browser-store";
+import { analyzeAudio, notesToMidiBase64, saveTranscription, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
+import { loadLocalTranscription, saveLocalTranscription, type LocalTranscription } from "@/lib/browser-store";
 import { SharedAudioProvider, useSharedAudio } from "@/lib/audio-context";
 import { getAuthCallbackUrl } from "@/lib/site";
 
@@ -42,6 +42,7 @@ export default function Studio({
   const [refreshKey, setRefreshKey] = useState(0);
   const [vizReady, setVizReady] = useState(false);
   const [analyzeReady, setAnalyzeReady] = useState(false);
+  const [vizTrackId, setVizTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     if (signedIn) {
@@ -86,7 +87,7 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(midiBase64?: string, name?: string) {
+  async function handleAnalyze(midiBase64?: string, name?: string, libraryFileId?: string) {
     if (name) setAudioName(name);
     if (!midiBase64) {
       setAnalysisError("Transcribe a track first, then analyze it");
@@ -102,6 +103,21 @@ export default function Studio({
     try {
       const result = await analyzeAudio(midiBase64);
       setAnalysis(result);
+
+      if (libraryFileId && signedIn) {
+        try {
+          const libFile = analyzeLibFiles.find(f => f.id === libraryFileId);
+          await saveTranscription(libraryFileId, libFile?.notes ?? lastResult?.notes ?? [], midiBase64, result);
+          refreshTranscriptions();
+        } catch {
+          console.error("save analysis failed");
+        }
+      } else if (!signedIn) {
+        const local = loadLocalTranscription();
+        if (local) {
+          saveLocalTranscription(local.name, local.notes, local.midi_base64, local.audioBlob, result);
+        }
+      }
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
     } finally {
@@ -117,11 +133,16 @@ export default function Studio({
 
   async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
+    if (item.analysis) {
+      setAnalysis(item.analysis);
+      goToTab("analyze");
+      return;
+    }
     let midi = item.midi_base64;
     if (!midi && item.notes && item.notes.length > 0) {
       midi = notesToMidiBase64(item.notes);
     }
-    await handleAnalyze(midi, item.name);
+    await handleAnalyze(midi, item.name, item.id);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
@@ -135,6 +156,7 @@ export default function Studio({
   }
 
   function handleLibraryVisualize(file: LibFile) {
+    setVizTrackId(file.id);
     goToTab("viz");
   }
 
@@ -208,7 +230,7 @@ export default function Studio({
           />
         </div>
 
-        {tab === "viz" && <Viz />}
+        {tab === "viz" && <Viz initialTrackId={vizTrackId} onTrackSelected={() => setVizTrackId(null)} />}
 
         <div style={{ display: tab === "analyze" ? "block" : "none" }}>
           <div className="card">
@@ -237,7 +259,7 @@ export default function Studio({
                 >
                   <option value="">-- Pick a track --</option>
                   {analyzeLibFiles.filter(f => f.notes?.length).map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
+                    <option key={f.id} value={f.id}>{f.name}{f.analysis ? " (Analyzed)" : ""}</option>
                   ))}
                 </select>
               </div>

@@ -50,6 +50,7 @@ export type LibFile = {
   created_at?: string;
   notes?: { pitch: number; start: number; end: number; velocity: number }[];
   midi_base64?: string;
+  analysis?: TranscribeResult["analysis"];
 };
 
 export type Transcription = {
@@ -106,6 +107,7 @@ export async function listLibrary(): Promise<LibFile[]> {
         const baseName = f.name.replace(/\.[^.]+$/, "");
         let notes;
         let midi_base64;
+        let analysis;
         if (notesNames.has(`${baseName}.json`)) {
           try {
             const raw = await downloadText(TRANSCRIPTIONS_BUCKET, `${uid}/${baseName}.json`);
@@ -116,6 +118,7 @@ export async function listLibrary(): Promise<LibFile[]> {
               } else {
                 notes = parsed.notes;
                 midi_base64 = parsed.midi_base64;
+                analysis = parsed.analysis;
               }
             }
           } catch {
@@ -130,6 +133,7 @@ export async function listLibrary(): Promise<LibFile[]> {
           created_at: f.created_at,
           notes,
           midi_base64,
+          analysis,
         };
       }),
   );
@@ -140,14 +144,16 @@ export async function saveTranscription(
   id: string,
   notes: { pitch: number; start: number; end: number; velocity: number }[],
   midi_base64?: string,
+  analysis?: TranscribeResult["analysis"],
 ): Promise<void> {
   if (!supabase) return;
   const uid = await userId();
   if (!uid) return;
-  // Strip audio extension so JSON is saved as <uid>/name.json (not name.wav.json)
   const baseName = (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "");
   const path = `${uid}/${baseName}.json`;
-  const payload = midi_base64 ? { notes, midi_base64 } : { notes };
+  const payload: Record<string, unknown> = { notes };
+  if (midi_base64) payload.midi_base64 = midi_base64;
+  if (analysis) payload.analysis = analysis;
   await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(payload), "application/json", true);
 }
 
@@ -210,22 +216,6 @@ export async function enhanceAudio(
 export async function analyzeAudio(
   midiBase64?: string,
 ): Promise<TranscribeResult["analysis"]> {
-  const backendUrl = process.env.NEXT_PUBLIC_MUSIC_BACKEND_URL;
-  if (backendUrl) {
-    const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : null;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-    const res = await fetch(`${backendUrl}/music/analyze`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ midi_base64: midiBase64 }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body?.detail || `Request failed: ${res.status}`);
-    }
-    return res.json();
-  }
   return apiFetch("/api/music/analyze", {
     method: "POST",
     body: JSON.stringify({ midi_base64: midiBase64 }),

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listLibrary, type LibFile } from "@/lib/music";
 import { loadLocalTranscription } from "@/lib/browser-store";
+import { synthMidi, type SynthHandle } from "@/lib/midi-synth";
 import PianoRoll from "@/components/PianoRoll";
 import Spectrogram from "@/components/Spectrogram";
 import ChromaHeatmap from "@/components/ChromaHeatmap";
@@ -20,69 +21,15 @@ const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "tonnetz", label: "Tonnetz" },
 ];
 
-function synthMidi(notes: { pitch: number; start: number; end: number; velocity: number }[], onTime: (t: number) => void): () => void {
-  const ctx = new AudioContext();
-  let raf: number;
-  let stopped = false;
-  const startTime = ctx.currentTime + 0.05;
-
-  const noteEvents: { time: number; pitch: number; dur: number; vel: number }[] = [];
-  for (const n of notes) {
-    noteEvents.push({ time: n.start, pitch: n.pitch, dur: Math.max(n.end - n.start, 0.01), vel: n.velocity / 127 });
-  }
-  noteEvents.sort((a, b) => a.time - b.time);
-
-  const masterGain = ctx.createGain();
-  masterGain.gain.value = 0.5;
-  masterGain.connect(ctx.destination);
-
-  const oscs: OscillatorNode[] = [];
-  for (const ev of noteEvents) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.value = 440 * Math.pow(2, (ev.pitch - 69) / 12);
-    gain.gain.setValueAtTime(0, startTime + ev.time);
-    gain.gain.linearRampToValueAtTime(ev.vel * 0.6, startTime + ev.time + 0.01);
-    gain.gain.setValueAtTime(ev.vel * 0.6, startTime + ev.time + ev.dur * 0.7);
-    gain.gain.linearRampToValueAtTime(0, startTime + ev.time + ev.dur);
-    osc.connect(gain).connect(masterGain);
-    osc.start(startTime + ev.time);
-    osc.stop(startTime + ev.time + ev.dur + 0.01);
-    oscs.push(osc);
-  }
-
-  const lastEnd = noteEvents.length > 0 ? Math.max(...noteEvents.map((e) => e.time + e.dur)) : 0;
-
-  function tick() {
-    if (stopped) return;
-    const elapsed = ctx.currentTime - startTime;
-    onTime(Math.min(elapsed, lastEnd));
-    if (elapsed < lastEnd) {
-      raf = requestAnimationFrame(tick);
-    } else {
-      onTime(0);
-    }
-  }
-  raf = requestAnimationFrame(tick);
-
-  return () => {
-    stopped = true;
-    cancelAnimationFrame(raf);
-    for (const o of oscs) {
-      try { o.stop(); } catch {}
-    }
-    ctx.close();
-  };
-}
-
-export default function Viz() {
+export default function Viz({ initialTrackId, onTrackSelected }: { initialTrackId?: string | null; onTrackSelected?: () => void }) {
   const [files, setFiles] = useState<LibFile[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [mode, setMode] = useState<VizMode>("piano-roll");
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>("original");
   const [midiTime, setMidiTime] = useState(0);
-  const synthRef = useRef<(() => void) | null>(null);
+  const [midiPaused, setMidiPaused] = useState(false);
+  const synthRef = useRef<SynthHandle | null>(null);
+  const midiOffsetRef = useRef(0);
 
   const { playing, currentTime, play, stop: sharedStop, audioRef } = useSharedAudio();
 
@@ -104,14 +51,23 @@ export default function Viz() {
     }).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (initialTrackId && files.length > 0) {
+      setSelectedId(initialTrackId);
+      onTrackSelected?.();
+    }
+  }, [initialTrackId, files, onTrackSelected]);
+
   const selected = files.find((f) => f.id === selectedId);
   const hasNotes = (selected?.notes?.length ?? 0) > 0;
   const isThisPlaying = playing === selectedId;
 
   const stopMidi = useCallback(() => {
-    synthRef.current?.();
+    synthRef.current?.stop();
     synthRef.current = null;
     setMidiTime(0);
+    setMidiPaused(false);
+    midiOffsetRef.current = 0;
   }, []);
 
   const playOriginal = useCallback(() => {
@@ -124,7 +80,8 @@ export default function Viz() {
     if (!selected?.notes || selected.notes.length === 0) return;
     sharedStop();
     stopMidi();
-    synthRef.current = synthMidi(selected.notes, setMidiTime);
+    synthRef.current = synthMidi(selected.notes, setMidiTime, midiOffsetRef.current);
+    setMidiPaused(false);
   }, [selected, sharedStop, stopMidi]);
 
   const handleStop = useCallback(() => {
@@ -135,7 +92,14 @@ export default function Viz() {
   const handlePlay = useCallback(() => {
     if (playbackSource === "midi") {
       if (synthRef.current) {
-        stopMidi();
+        if (midiPaused) {
+          synthRef.current.resume();
+          setMidiPaused(false);
+        } else {
+          midiOffsetRef.current = midiTime;
+          synthRef.current.pause();
+          setMidiPaused(true);
+        }
       } else {
         playMidi();
       }
@@ -146,7 +110,7 @@ export default function Viz() {
         playOriginal();
       }
     }
-  }, [playbackSource, isThisPlaying, playOriginal, playMidi, stopMidi, sharedStop]);
+  }, [playbackSource, isThisPlaying, midiPaused, midiTime, playOriginal, playMidi, sharedStop]);
 
   useEffect(() => {
     return () => { stopMidi(); };
@@ -206,7 +170,7 @@ export default function Viz() {
           <div className="section-label">Playback</div>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
             <button className="icon-btn" onClick={handlePlay}>
-              {(playbackSource === "midi" ? synthRef.current : isThisPlaying) ? "⏸" : "▶"}
+              {(playbackSource === "midi" ? (synthRef.current && !midiPaused) : isThisPlaying) ? "⏸" : "▶"}
             </button>
             <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
               {Math.floor(vizTime)}s
