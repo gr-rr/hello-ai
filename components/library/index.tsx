@@ -189,14 +189,14 @@ export default function Library({
         <input
           ref={inputRef}
           type="file"
-          accept="audio/*"
+          accept="audio/*,.musicxml,.mid,.midi"
           onChange={onUpload}
           disabled={busy || !signedIn}
           style={{ display: "none" }}
         />
         <span className="drop-icon">+</span>
-        <span className="muted">{signedIn ? "Drop audio to save to your library" : "Sign in to save audio to your library"}</span>
-        <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>WAV · MP3 · M4A</span>
+        <span className="muted">{signedIn ? "Drop audio or MusicXML to save to your library" : "Sign in to save audio to your library"}</span>
+        <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>WAV · MP3 · M4A · MusicXML · MIDI</span>
       </div>
 
       <div className="toolbar">
