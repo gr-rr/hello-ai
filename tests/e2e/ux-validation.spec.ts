@@ -126,7 +126,7 @@ test.describe("UX4: MIDI playback with soundfont", () => {
     await expect(page.getByTestId("piano-roll")).toBeVisible({ timeout: 20_000 });
 
     // Should have MIDI playback section
-    await expect(page.getByText("Playback")).toBeVisible();
+    await expect(page.getByText("Playback").first()).toBeVisible();
 
     // No audio[controls] element should be present (removed in UX5)
     await expect(page.locator("audio[controls]")).toHaveCount(0);
