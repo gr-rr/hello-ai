@@ -49,6 +49,7 @@ export type LibFile = {
   size?: number;
   created_at?: string;
   notes?: { pitch: number; start: number; end: number; velocity: number }[];
+  midi_base64?: string;
 };
 
 export type Transcription = {
@@ -104,10 +105,19 @@ export async function listLibrary(): Promise<LibFile[]> {
         // Strip extension to get the base name (e.g., "hello" from "hello.wav")
         const baseName = f.name.replace(/\.[^.]+$/, "");
         let notes;
+        let midi_base64;
         if (notesNames.has(`${baseName}.json`)) {
           try {
             const raw = await downloadText(TRANSCRIPTIONS_BUCKET, `${uid}/${baseName}.json`);
-            if (raw) notes = JSON.parse(raw);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                notes = parsed;
+              } else {
+                notes = parsed.notes;
+                midi_base64 = parsed.midi_base64;
+              }
+            }
           } catch {
             notes = undefined;
           }
@@ -119,6 +129,7 @@ export async function listLibrary(): Promise<LibFile[]> {
           size: f.metadata?.size,
           created_at: f.created_at,
           notes,
+          midi_base64,
         };
       }),
   );
@@ -128,6 +139,7 @@ export async function listLibrary(): Promise<LibFile[]> {
 export async function saveTranscription(
   id: string,
   notes: { pitch: number; start: number; end: number; velocity: number }[],
+  midi_base64?: string,
 ): Promise<void> {
   if (!supabase) return;
   const uid = await userId();
@@ -135,7 +147,8 @@ export async function saveTranscription(
   // Strip audio extension so JSON is saved as <uid>/name.json (not name.wav.json)
   const baseName = (id.split("/").pop() ?? id).replace(/\.[^.]+$/, "");
   const path = `${uid}/${baseName}.json`;
-  await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(notes), "application/json", true);
+  const payload = midi_base64 ? { notes, midi_base64 } : { notes };
+  await uploadFile(TRANSCRIPTIONS_BUCKET, path, JSON.stringify(payload), "application/json", true);
 }
 
 export async function deleteFromLibrary(id: string): Promise<void> {
@@ -196,15 +209,11 @@ export async function enhanceAudio(
 
 export async function analyzeAudio(
   midiBase64?: string,
-  libraryPath?: string,
-  notes?: { pitch: number; start: number; end: number; velocity: number }[],
 ): Promise<TranscribeResult["analysis"]> {
   return apiFetch("/api/music/analyze", {
     method: "POST",
     body: JSON.stringify({
       midi_base64: midiBase64,
-      library_path: libraryPath,
-      notes: notes,
     }),
   }) as Promise<TranscribeResult["analysis"]>;
 }

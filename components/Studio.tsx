@@ -6,13 +6,15 @@ import { supabase } from "@/lib/supabase";
 import Library from "./library";
 import Transcribe from "./transcribe";
 import Analysis from "./analyze";
+import Viz from "./viz";
 import { analyzeAudio, listLibrary, listTranscriptions, type TranscribeResult, type LibFile, type Transcription } from "@/lib/music";
 import { AUTH_CALLBACK_URL } from "@/lib/site";
 
 const TABS = [
   { id: "library", label: "Library" },
   { id: "transcribe", label: "Transcribe" },
-  { id: "analyze", label: "Analyze transcription" },
+  { id: "viz", label: "Visualize" },
+  { id: "analyze", label: "Analyze" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -60,10 +62,10 @@ export default function Studio({
     setAnalysisError("");
   }
 
-  async function handleAnalyze(midiBase64?: string, name?: string, libraryPath?: string, notes?: { pitch: number; start: number; end: number; velocity: number }[]) {
+  async function handleAnalyze(midiBase64?: string, name?: string) {
     if (name) setAudioName(name);
-    if (!midiBase64 && !libraryPath && !notes) {
-      setAnalysisError("Load a track or pick one from your library first");
+    if (!midiBase64) {
+      setAnalysisError("Transcribe a track first, then analyze it");
       goToTab("analyze");
       return;
     }
@@ -74,7 +76,7 @@ export default function Studio({
     setAnalyzeStatus("Analyzing…");
     setAnalysisError("");
     try {
-      const result = await analyzeAudio(midiBase64, libraryPath, notes);
+      const result = await analyzeAudio(midiBase64);
       setAnalysis(result);
     } catch (err) {
       setAnalysisError(err instanceof Error ? err.message : "analysis failed");
@@ -89,9 +91,9 @@ export default function Studio({
     router.replace(`/?tab=${id}`, { scroll: false });
   }
 
-async function handleAnalyzeLibrary(item: LibFile) {
+  async function handleAnalyzeLibrary(item: LibFile) {
     setAudioName(item.name);
-    await handleAnalyze(undefined, item.name, item.id, item.notes);
+    await handleAnalyze(item.midi_base64, item.name);
   }
 
   function handleLibraryTranscribe(file: LibFile) {
@@ -172,9 +174,11 @@ async function handleAnalyzeLibrary(item: LibFile) {
           />
         )}
 
+        {tab === "viz" && <Viz />}
+
         {tab === "analyze" && (
           <div className="card">
-            <h3 className="card-title"><span className="glyph">◈</span> Analyze transcription</h3>
+            <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
 
             {!analysis && !analyzeStatus && (
               <div className="section-label">Select a transcribed track</div>

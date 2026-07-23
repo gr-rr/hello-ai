@@ -359,78 +359,27 @@ def transcribe(req: TranscribeRequest, request: Request, _auth=Depends(verify_to
 
 
 class AnalyzeRequest(BaseModel):
-    midi_base64: str | None = None
-    library_path: str | None = None
-    notes: list[dict] | None = None
+    midi_base64: str
 
 
 @app.post("/music/analyze")
 @limiter.limit("30/minute")
 def analyze(req: AnalyzeRequest, request: Request, _auth=Depends(verify_token_optional)):
-    """Analyze MIDI for key, tempo, time signature, chords, Roman numerals, etc.
-
-    Requires MIDI input — either ``midi_base64`` or a ``library_path`` pointing
-    to a .mid file.  Audio analysis is not supported; transcribe first.
-
-    Alternatively, pass ``notes`` (note events from transcription) directly.
-    """
-    has_midi = bool(req.midi_base64)
-    has_library = bool(req.library_path)
-    has_notes = bool(req.notes)
-    if not (has_midi or has_library or has_notes):
+    """Analyze MIDI for key, tempo, time signature, chords, Roman numerals, etc."""
+    try:
+        midi_bytes = base64.b64decode(req.midi_base64, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid midi base64") from None
+    if len(midi_bytes) > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status_code=422,
-            detail=(
-                "midi_base64, library_path (to a .mid file), or notes required — transcribe first"
-            ),
+            status_code=413,
+            detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
         )
 
     with tempfile.TemporaryDirectory() as td:
-        midi_path = None
-
-        if has_midi:
-            try:
-                midi_bytes = base64.b64decode(req.midi_base64, validate=True)
-            except Exception:
-                raise HTTPException(status_code=400, detail="invalid midi base64") from None
-            if len(midi_bytes) > MAX_UPLOAD_BYTES:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"payload too large (max {MAX_UPLOAD_BYTES} bytes)",
-                )
-            midi_path = os.path.join(td, "input.mid")
-            with open(midi_path, "wb") as f:
-                f.write(midi_bytes)
-
-        if has_library:
-            sb = _sb()
-            if not sb:
-                raise HTTPException(status_code=500, detail="Supabase not configured")
-            bucket, key = _split_storage_path(req.library_path)
-            try:
-                data = sb.storage.from_(bucket).download(key)
-            except Exception as e:
-                err_msg = str(e)
-                err_lower = err_msg.lower()
-                if "404" in err_msg or "not_found" in err_lower or "Object not found" in err_msg:
-                    raise HTTPException(status_code=404, detail="file not found in library") from e
-                raise HTTPException(status_code=500, detail="storage error") from e
-            raw = data if isinstance(data, bytes | bytearray) else data.read()
-            midi_path = os.path.join(td, "input.mid")
-            with open(midi_path, "wb") as f:
-                f.write(raw)
-
-        if has_notes and not midi_path:
-            from analyze import analyze_from_notes
-
-            try:
-                return analyze_from_notes(req.notes)
-            except Exception:
-                logger.exception("analysis from notes failed")
-                raise HTTPException(status_code=500, detail="analysis failed") from None
-
-        if not midi_path:
-            raise HTTPException(status_code=422, detail="no MIDI data provided")
+        midi_path = os.path.join(td, "input.mid")
+        with open(midi_path, "wb") as f:
+            f.write(midi_bytes)
 
         try:
             result = analyze_midi(midi_path)
