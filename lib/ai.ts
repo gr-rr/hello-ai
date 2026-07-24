@@ -10,7 +10,7 @@ type TextGenerationPipeline = {
 let generatorPromise: Promise<TextGenerationPipeline> | null = null;
 let generatorInstance: TextGenerationPipeline | null = null;
 
-const MODEL_ID = "onnx-community/LFM2.5-350M-q4";
+const MODEL_ID = "onnx-community/LFM2.5-350M-ONNX";
 const MODEL_CACHE = "music-studio-ai-cache";
 
 export function checkWebAssembly(): { supported: boolean; error?: string } {
@@ -38,9 +38,7 @@ async function loadGenerator(): Promise<TextGenerationPipeline> {
     const { pipeline, env } = await import("@huggingface/transformers");
     env.cacheDir = MODEL_CACHE;
 
-    const pipe = (await pipeline("text-generation", MODEL_ID, {
-      dtype: "q4",
-    })) as unknown as TextGenerationPipeline;
+    const pipe = (await pipeline("text-generation", MODEL_ID)) as unknown as TextGenerationPipeline;
 
     generatorInstance = pipe;
     return pipe;
