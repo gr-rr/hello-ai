@@ -359,11 +359,13 @@ export default function Studio({
                   numNotes={lastResult?.num_notes ?? 0}
                 />
                 <ExplainPanel analysis={analysis} />
-                <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
-                  <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
-                    ← Analyze another track
-                  </button>
-                </div>
+                {signedIn && (
+                  <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
+                    <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
+                      ← Analyze another track
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

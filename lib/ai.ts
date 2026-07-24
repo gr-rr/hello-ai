@@ -10,7 +10,7 @@ type TextGenerationPipeline = {
 let generatorPromise: Promise<TextGenerationPipeline> | null = null;
 let generatorInstance: TextGenerationPipeline | null = null;
 
-const MODEL_ID = "onnx-community/LFM2.5-350M-ONNX";
+const MODEL_ID = "Xenova/distilgpt2";
 const MODEL_CACHE = "music-studio-ai-cache";
 
 export function checkWebAssembly(): { supported: boolean; error?: string } {

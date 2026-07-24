@@ -69,7 +69,7 @@ export default function SheetMusic({ musicXml, className }: Props) {
       style={{
         overflow: "auto",
         maxHeight: 500,
-        background: "#ffffff",
+        background: "#f8f8f8",
         borderRadius: "var(--r-md)",
         padding: "var(--s-4)",
         border: "1px solid var(--border-strong)",
