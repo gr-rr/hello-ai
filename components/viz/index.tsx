@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { listLibrary, type LibFile } from "@/lib/music";
+import { listLibrary, convertMusicFormat, type LibFile } from "@/lib/music";
 import { loadLocalTranscription } from "@/lib/browser-store";
 import { synthMidi, type SynthHandle } from "@/lib/midi-synth";
 import PianoRoll from "@/components/PianoRoll";
@@ -9,10 +9,11 @@ import Spectrogram from "@/components/Spectrogram";
 import ChromaHeatmap from "@/components/ChromaHeatmap";
 import Tonnetz from "@/components/Tonnetz";
 import Visualizer from "@/components/Visualizer";
+import SheetMusic from "@/components/SheetMusic";
 import { useSharedAudio } from "@/lib/audio-context";
 
 type VizMode = "piano-roll" | "spectrogram" | "chroma" | "tonnetz";
-type PlaybackSource = "original" | "midi";
+type PlaybackSource = "original" | "midi" | "sheet-music";
 
 const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "piano-roll", label: "Piano roll" },
@@ -20,6 +21,12 @@ const VIZ_MODES: { id: VizMode; label: string }[] = [
   { id: "chroma", label: "Chroma" },
   { id: "tonnetz", label: "Tonnetz" },
 ];
+
+function formatTime(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function Viz({
   initialTrackId,
@@ -38,10 +45,12 @@ export default function Viz({
   const [mode, setMode] = useState<VizMode>("piano-roll");
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>("original");
   const [midiTime, setMidiTime] = useState(0);
+  const [musicXml, setMusicXml] = useState("");
+  const [midiDuration, setMidiDuration] = useState(0);
   const synthRef = useRef<SynthHandle | null>(null);
   const midiOffsetRef = useRef(0);
 
-  const { playing, currentTime, play, stop: sharedStop, audioRef } = useSharedAudio();
+  const { playing, currentTime, duration, paused, play, pause, resume, stop: sharedStop, audioRef } = useSharedAudio();
 
   useEffect(() => {
     listLibrary().then((lib) => {
@@ -98,7 +107,7 @@ export default function Viz({
   }, [stopMidi, sharedStop]);
 
   const handlePlay = useCallback(() => {
-    if (playbackSource === "midi") {
+    if (playbackSource === "midi" || playbackSource === "sheet-music") {
       if (synthRef.current) {
         if (synthRef.current.isPaused) {
           synthRef.current.resume();
@@ -118,6 +127,22 @@ export default function Viz({
     }
   }, [playbackSource, isThisPlaying, midiTime, playOriginal, playMidi, sharedStop]);
 
+  const handleSeek = useCallback((pct: number) => {
+    if (playbackSource === "midi" || playbackSource === "sheet-music") {
+      if (synthRef.current && !synthRef.current.isPaused) {
+        synthRef.current.stop();
+        midiOffsetRef.current = pct * midiDuration;
+        synthRef.current = synthMidi(selected?.notes ?? [], setMidiTime, midiOffsetRef.current);
+      } else {
+        midiOffsetRef.current = pct * midiDuration;
+        setMidiTime(midiOffsetRef.current);
+      }
+    } else {
+      const a = audioRef.current;
+      if (a && duration > 0) a.currentTime = pct * duration;
+    }
+  }, [playbackSource, midiDuration, selected, audioRef, duration]);
+
   useEffect(() => {
     return () => { stopMidi(); };
   }, [stopMidi]);
@@ -135,7 +160,33 @@ export default function Viz({
     }
   }, [playing, selectedId, stopMidi]);
 
-  const vizTime = playbackSource === "midi" ? midiTime : currentTime;
+  // Load MusicXML when sheet-music source is selected
+  useEffect(() => {
+    if (playbackSource === "sheet-music" && selected?.midi_base64 && !musicXml) {
+      convertMusicFormat(selected.midi_base64, "midi", "musicxml")
+        .then((converted) => setMusicXml(atob(converted.data_base64)))
+        .catch(() => setMusicXml(""));
+    }
+  }, [playbackSource, selected, musicXml]);
+
+  // Calculate MIDI duration
+  useEffect(() => {
+    if (selected?.notes && selected.notes.length > 0) {
+      const maxEnd = Math.max(...selected.notes.map((n) => n.end));
+      setMidiDuration(maxEnd);
+    }
+  }, [selected]);
+
+  // Reset musicXml when track changes
+  useEffect(() => {
+    setMusicXml("");
+  }, [selectedId]);
+
+  const vizTime = playbackSource === "midi" || playbackSource === "sheet-music" ? midiTime : currentTime;
+  const totalDuration = playbackSource === "midi" || playbackSource === "sheet-music" ? midiDuration : duration;
+  const currentPct = totalDuration > 0 ? (vizTime / totalDuration) * 100 : 0;
+  const isMidiSource = playbackSource === "midi" || playbackSource === "sheet-music";
+  const isPlaying = isMidiSource ? (synthRef.current && !synthRef.current.isPaused) : isThisPlaying;
 
   return (
     <div className="card">
@@ -179,15 +230,34 @@ export default function Viz({
                 MIDI
               </button>
             )}
+            {hasNotes && selected.midi_base64 && (
+              <button
+                className={`chip${playbackSource === "sheet-music" ? "" : " ghost"}`}
+                onClick={() => { handleStop(); setPlaybackSource("sheet-music"); }}
+              >
+                Sheet Music
+              </button>
+            )}
           </div>
 
           <div className="section-label">Playback</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-1)" }}>
             <button className="icon-btn" onClick={handlePlay}>
-              {(playbackSource === "midi" ? (synthRef.current && !synthRef.current.isPaused) : isThisPlaying) ? "⏸" : "▶"}
+              {isPlaying ? "⏸" : "▶"}
             </button>
+            <div
+              className="pb-track"
+              style={{ flex: 1, height: 6 }}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const pct = (e.clientX - rect.left) / rect.width;
+                handleSeek(Math.max(0, Math.min(1, pct)));
+              }}
+            >
+              <div className="pb-fill" style={{ width: `${currentPct}%` }} />
+            </div>
             <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
-              {Math.floor(vizTime)}s
+              {formatTime(vizTime)} / {formatTime(totalDuration || 0)}
             </span>
           </div>
           {playbackSource === "original" && <Visualizer audioRef={audioRef} />}
@@ -219,6 +289,19 @@ export default function Viz({
 
           {mode === "tonnetz" && hasNotes && (
             <Tonnetz notes={selected.notes!} />
+          )}
+
+          {playbackSource === "sheet-music" && (
+            <>
+              <div className="section-label">Sheet Music</div>
+              {musicXml ? (
+                <SheetMusic musicXml={musicXml} />
+              ) : selected.midi_base64 ? (
+                <div style={{ textAlign: "center", padding: "var(--s-4)", color: "var(--muted)", fontSize: "var(--fs-sm)" }}>
+                  Loading sheet music…
+                </div>
+              ) : null}
+            </>
           )}
         </>
       )}
