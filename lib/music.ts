@@ -293,6 +293,15 @@ function encodeVarLen(val: number): number[] {
   return result;
 }
 
+export async function synthAudio(
+  midiBase64: string,
+): Promise<{ wav_base64: string }> {
+  return apiFetch("/api/music/synth", {
+    method: "POST",
+    body: JSON.stringify({ midi_base64: midiBase64 }),
+  }) as Promise<{ wav_base64: string }>;
+}
+
 export async function convertMusicFormat(
   dataBase64: string,
   source: "midi" | "musicxml",

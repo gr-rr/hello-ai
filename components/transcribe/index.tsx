@@ -10,11 +10,11 @@ import {
   saveTranscription,
   blobToBase64,
   convertMusicFormat,
+  synthAudio,
   type TranscribeResult,
   type LibFile,
 } from "@/lib/music";
 import { saveLocalTranscription } from "@/lib/browser-store";
-import { synthMidi, type SynthHandle } from "@/lib/midi-synth";
 import { useAuth } from "@/components/AuthProvider";
 import PianoRoll from "@/components/PianoRoll";
 import SheetMusic from "@/components/SheetMusic";
@@ -84,8 +84,8 @@ export default function Transform({
   const [wasLibraryFile, setWasLibraryFile] = useState(false);
   const [libraryFileId, setLibraryFileId] = useState<string | null>(null);
   const originalBlobRef = useRef<Blob | null>(null);
-  const synthRef = useRef<SynthHandle | null>(null);
-  const [midiPlaying, setMidiPlaying] = useState(false);
+  const [wavUrl, setWavUrl] = useState("");
+  const [wavPlaying, setWavPlaying] = useState(false);
   const [musicXml, setMusicXml] = useState("");
 
   useEffect(() => {
@@ -100,7 +100,9 @@ export default function Transform({
   }, []);
 
   useEffect(() => {
-    return () => { synthRef.current?.stop(); };
+    return () => {
+      if (wavUrl) URL.revokeObjectURL(wavUrl);
+    };
   }, []);
 
   useEffect(() => {
@@ -142,6 +144,19 @@ export default function Transform({
       setResult(res);
       setAnalyzeBase64(transcribeBase64);
       onTranscribed?.(res, fileName);
+
+      if (res.midi_base64) {
+        setStatus("Generating audio…");
+        try {
+          const synth = await synthAudio(res.midi_base64);
+          const bytes = Uint8Array.from(atob(synth.wav_base64), (c) => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: "audio/wav" });
+          if (wavUrl) URL.revokeObjectURL(wavUrl);
+          setWavUrl(URL.createObjectURL(blob));
+        } catch {
+          // synth failed, will fall back to MIDI display only
+        }
+      }
 
       setState("populated");
       setStatus(`${res.num_notes} notes extracted`);
@@ -259,9 +274,9 @@ export default function Transform({
   }
 
   function reset() {
-    synthRef.current?.stop();
-    synthRef.current = null;
-    setMidiPlaying(false);
+    if (wavUrl) URL.revokeObjectURL(wavUrl);
+    setWavUrl("");
+    setWavPlaying(false);
     setState("idle");
     setResult(null);
     setAudioName("");
@@ -307,9 +322,8 @@ export default function Transform({
     setLibraryFileId(file.id);
     setMusicXml("");
     setPlayhead(0);
-    synthRef.current?.stop();
-    synthRef.current = null;
-    setMidiPlaying(false);
+    audioRef.current?.pause();
+    setWavPlaying(false);
 
     if (mode === "midi-to-score") {
       const midiB64 = file.midi_base64;
@@ -544,7 +558,23 @@ export default function Transform({
                   </button>
                 )}
               {saved && (
-                <span className="chip" style={{ cursor: "default" }}>{wasLibraryFile ? "✓ In library" : "✓ Saved"}</span>
+                <span className="chip" style={{ cursor: "default" }}>
+                  {wasLibraryFile ? "✓ In library" : signedIn ? "✓ Saved" : "✓ Cached locally"}
+                </span>
+              )}
+              {result?.midi_base64 && (
+                <button className="btn" onClick={() => {
+                  const bytes = Uint8Array.from(atob(result.midi_base64!), (c) => c.charCodeAt(0));
+                  const blob = new Blob([bytes], { type: "audio/midi" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = (audioName || "midi").replace(/\.[^.]+$/, "") + ".mid";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}>
+                  Download MIDI
+                </button>
               )}
               {musicXml && (
                 <button className="btn" onClick={downloadMusicXml}>
@@ -580,27 +610,37 @@ export default function Transform({
           {mode === "transcribe" && result && result.notes.length > 0 && (
             <>
               <div className="section-label">Playback</div>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
-                <button className="icon-btn" onClick={() => {
-                  if (synthRef.current) {
-                    if (synthRef.current.isPaused) {
-                      synthRef.current.resume();
-                      setMidiPlaying(true);
+              {wavUrl ? (
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginBottom: "var(--s-2)" }}>
+                  <button className="icon-btn" onClick={() => {
+                    const a = audioRef.current;
+                    if (!a) return;
+                    if (a.paused) {
+                      a.play().catch(() => {});
+                      setWavPlaying(true);
                     } else {
-                      synthRef.current.pause();
-                      setMidiPlaying(false);
+                      a.pause();
+                      setWavPlaying(false);
                     }
-                  } else if (result.notes.length > 0) {
-                    synthRef.current = synthMidi(result.notes, (t) => setPlayhead(t));
-                    setMidiPlaying(true);
-                  }
-                }}>
-                  {midiPlaying ? "⏸" : "▶"}
-                </button>
-                <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
-                  {Math.floor(playhead)}s — MIDI
-                </span>
-              </div>
+                  }}>
+                    {wavPlaying ? "⏸" : "▶"}
+                  </button>
+                  <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
+                    {Math.floor(playhead)}s — Audio
+                  </span>
+                </div>
+              ) : (
+                <p className="muted" style={{ fontSize: "var(--fs-sm)" }}>Audio synthesis unavailable</p>
+              )}
+              <audio
+                ref={audioRef}
+                src={wavUrl}
+                onTimeUpdate={(e) => setPlayhead(e.currentTarget.currentTime)}
+                onPlay={() => setWavPlaying(true)}
+                onPause={() => setWavPlaying(false)}
+                onEnded={() => { setWavPlaying(false); setPlayhead(0); }}
+                style={{ display: "none" }}
+              />
 
               <div className="section-label">Piano roll</div>
               <div className="card">
