@@ -56,17 +56,19 @@ export default function Viz({
   useEffect(() => {
     listLibrary().then((lib) => {
       const local = loadLocalTranscription();
-      if (local && local.notes.length > 0) {
-        const localFile: LibFile = {
-          name: local.name,
-          url: local.audioDataUrl || "",
-          id: "__local__",
-          notes: local.notes,
-          midi_base64: local.midi_base64,
-        };
-        setFiles([localFile, ...lib]);
-      } else {
-        setFiles(lib);
+      const localFile = local && local.notes.length > 0 ? [{
+        name: local.name,
+        url: local.audioDataUrl || "",
+        id: "__local__",
+        notes: local.notes,
+        midi_base64: local.midi_base64,
+      } as LibFile] : [];
+      const allFiles = [...localFile, ...lib];
+      setFiles(allFiles);
+
+      if (!selectedIdProp && localFile.length > 0 && lib.length === 0) {
+        setSelectedIdLocal("__local__");
+        onTrackSelected?.("__local__");
       }
     }).catch(() => {});
   }, []);

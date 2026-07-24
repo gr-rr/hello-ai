@@ -174,83 +174,93 @@ export default function Library({
   const nowPlaying = files.find((f) => f.id === playing);
 
   return (
-    <div className="card">
+    <div className="card" style={!signedIn ? { opacity: 0.5, pointerEvents: "none" } : undefined}>
       <h3 className="card-title"><span className="glyph">▤</span> Library</h3>
 
-      <div
-        ref={dropRef}
-        className={`drop-zone${!signedIn ? " disabled" : ""}`}
-        onDragOver={signedIn ? handleDragOver : undefined}
-        onDragLeave={signedIn ? handleDragLeave : undefined}
-        onDrop={signedIn ? handleDrop : undefined}
-        onClick={() => signedIn && !recording && inputRef.current?.click()}
-        style={{ opacity: recording ? 0.4 : 1, pointerEvents: recording ? "none" : "auto" }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="audio/*,.musicxml,.mid,.midi"
-          onChange={onUpload}
-          disabled={busy || !signedIn}
-          style={{ display: "none" }}
-        />
-        <span className="drop-icon">+</span>
-        <span className="muted">{signedIn ? "Drop audio or MusicXML to save to your library" : "Sign in to save audio to your library"}</span>
-        <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>WAV · MP3 · M4A · MusicXML · MIDI</span>
-      </div>
-
-      <div className="toolbar">
-        <button className="icon-btn" onClick={recording ? stopRecording : startRecording} disabled={busy || !signedIn}>
-          {recording ? "■ Stop" : "● Record"}
-        </button>
-      </div>
-
-      {recording && (
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginTop: "var(--s-2)" }}>
-          <span className="record-dot" />
-          <span className="muted" style={{ fontFamily: "monospace" }}>
-            {formatTime(recordTimer)}
-          </span>
-        </div>
-      )}
-
-      {playing && nowPlaying && (
-        <div className="card" style={{ marginTop: "var(--s-3)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--s-1)" }}>
-            <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }}>{nowPlaying.name}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
-              <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
-                {formatTime(currentTime)} / {formatTime(duration || 0)}
-              </span>
-              <button className="icon-btn ghost" onClick={stopAudio} title="Close" style={{ fontSize: "var(--fs-xs)", padding: 0, lineHeight: 1 }}>✕</button>
-            </div>
-          </div>
-          <div
-            className="pb-track"
-            style={{ height: 4, marginBottom: 4 }}
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const pct = (e.clientX - rect.left) / rect.width;
-              const a = audioRef.current;
-              if (a && duration > 0) a.currentTime = pct * duration;
-            }}
+      {!signedIn ? (
+        <div className="empty" style={{ marginTop: "var(--s-2)" }}>
+          <p style={{ margin: 0 }}>Sign in to save and manage tracks.</p>
+          <button
+            className="btn btn-primary"
+            style={{ marginTop: "var(--s-3)", pointerEvents: "auto" }}
+            onClick={onSignIn}
           >
-            <div className="pb-fill" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+            Sign in
+          </button>
+        </div>
+      ) : (
+        <>
+          <div
+            ref={dropRef}
+            className={`drop-zone`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => !recording && inputRef.current?.click()}
+            style={{ opacity: recording ? 0.4 : 1, pointerEvents: recording ? "none" : "auto" }}
+          >
+            <input
+              ref={inputRef}
+              type="file"
+              accept="audio/*,.musicxml,.mid,.midi"
+              onChange={onUpload}
+              disabled={busy}
+              style={{ display: "none" }}
+            />
+            <span className="drop-icon">+</span>
+            <span className="muted">Drop audio or MusicXML to save to your library</span>
+            <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>WAV · MP3 · M4A · MusicXML · MIDI</span>
           </div>
-          <Visualizer audioRef={audioRef} />
-          <div className="toolbar" style={{ justifyContent: "center" }}>
-            <button className="icon-btn" onClick={() => paused ? resume() : pause()}>
-              {paused ? "▶" : "⏸"}
+
+          <div className="toolbar">
+            <button className="icon-btn" onClick={recording ? stopRecording : startRecording} disabled={busy}>
+              {recording ? "■ Stop" : "● Record"}
             </button>
           </div>
-        </div>
-      )}
 
-      <span className="status">{status}</span>
+          {recording && (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)", marginTop: "var(--s-2)" }}>
+              <span className="record-dot" />
+              <span className="muted" style={{ fontFamily: "monospace" }}>
+                {formatTime(recordTimer)}
+              </span>
+            </div>
+          )}
 
+          {playing && nowPlaying && (
+            <div className="card" style={{ marginTop: "var(--s-3)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--s-1)" }}>
+                <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }}>{nowPlaying.name}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: "var(--s-2)" }}>
+                  <span className="muted" style={{ fontFamily: "monospace", fontSize: "var(--fs-xs)" }}>
+                    {formatTime(currentTime)} / {formatTime(duration || 0)}
+                  </span>
+                  <button className="icon-btn ghost" onClick={stopAudio} title="Close" style={{ fontSize: "var(--fs-xs)", padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              </div>
+              <div
+                className="pb-track"
+                style={{ height: 4, marginBottom: 4 }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const pct = (e.clientX - rect.left) / rect.width;
+                  const a = audioRef.current;
+                  if (a && duration > 0) a.currentTime = pct * duration;
+                }}
+              >
+                <div className="pb-fill" style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+              </div>
+              <Visualizer audioRef={audioRef} />
+              <div className="toolbar" style={{ justifyContent: "center" }}>
+                <button className="icon-btn" onClick={() => paused ? resume() : pause()}>
+                  {paused ? "▶" : "⏸"}
+                </button>
+              </div>
+            </div>
+          )}
 
-      {signedIn ? (
-        <>
+          <span className="status">{status}</span>
+
           <div className="section-label">Tracks</div>
           {files.length === 0 ? (
             <div className="empty">No tracks yet. Transcribe audio and save it here.</div>
@@ -309,10 +319,6 @@ export default function Library({
             ))
           )}
         </>
-      ) : (
-        <div className="empty" style={{ marginTop: "var(--s-4)" }}>
-          Sign in to view and manage your tracks.
-        </div>
       )}
 
     </div>

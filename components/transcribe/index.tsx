@@ -409,10 +409,7 @@ export default function Transform({
 
   const canUseLibrary = signedIn && libFiles.length > 0;
   const localTranscription = !signedIn ? loadLocalTranscription() : null;
-  const hasLocalWithMidi = !!localTranscription?.midi_base64;
-  const canUseCached = !signedIn && !!localTranscription;
   const midiTranscriptions = libFiles.filter((f) => f.midi_base64);
-  const acceptTypes = mode === "midi-to-score" ? ".mid,.midi,.musicxml" : "audio/*";
   const isBusy = state === "enhancing" || state === "transcribing" || state === "converting" || state === "synthing";
 
   return (
@@ -443,50 +440,91 @@ export default function Transform({
         <>
           <div className="section-label">
             {mode === "transcribe" && "Choose an audio source"}
-            {mode === "midi-to-score" && (signedIn ? "Choose a MIDI file or saved transcription" : "Use your cached song")}
+            {mode === "midi-to-score" && "MIDI → Sheet Music"}
           </div>
-          <div className="source-grid">
-            {signedIn && (
+
+          {mode === "transcribe" && (
+            <div className="source-grid">
               <div className="source-card" onClick={() => inputRef.current?.click()}>
                 <span className="sc-icon">⬆</span>
                 <span className="sc-label">Upload file</span>
-                <span className="sc-hint">
-                  {mode === "midi-to-score" ? "MIDI files" : "WAV · MP3 · M4A"}
-                </span>
+                <span className="sc-hint">WAV · MP3 · M4A</span>
                 <input
                   ref={inputRef}
                   type="file"
-                  accept={acceptTypes}
+                  accept="audio/*"
                   onChange={onUploadNew}
                   style={{ display: "none" }}
                 />
               </div>
-            )}
-            {mode !== "midi-to-score" && (
               <div className="source-card" onClick={recording ? stopRecording : startRecording}>
                 <span className="sc-icon">{recording ? "■" : "●"}</span>
                 <span className="sc-label">{recording ? "Stop" : "Record"}</span>
                 <span className="sc-hint">Use your mic</span>
               </div>
-            )}
-            {(canUseLibrary || canUseCached) && (
-              <div
-                className={`source-card${(canUseLibrary || canUseCached) ? "" : " disabled"}`}
-                onClick={() => (canUseLibrary || canUseCached) && setShowLibPicker(true)}
-              >
-                <span className="sc-icon">▤</span>
-                <span className="sc-label">From library</span>
-                <span className="sc-hint">
-                  {!signedIn ? (localTranscription?.name ?? "Cached song") : libFiles.length === 0 ? "No saved tracks" : "Pick a track"}
-                </span>
-              </div>
-            )}
-          </div>
+              {signedIn && canUseLibrary && (
+                <div className="source-card" onClick={() => setShowLibPicker(true)}>
+                  <span className="sc-icon">▤</span>
+                  <span className="sc-label">From library</span>
+                  <span className="sc-hint">{libFiles.length === 0 ? "No saved tracks" : "Pick a track"}</span>
+                </div>
+              )}
+            </div>
+          )}
 
-          {!signedIn && (
+          {mode === "midi-to-score" && !signedIn && (
+            localTranscription?.midi_base64 ? (
+              <div style={{ textAlign: "center", padding: "var(--s-4)" }}>
+                <p className="muted" style={{ margin: "0 0 var(--s-3)" }}>
+                  Using: <strong>{localTranscription.name}</strong>
+                </p>
+                <button className="btn btn-primary" onClick={() => {
+                  const localFile: LibFile = {
+                    name: localTranscription.name,
+                    url: localTranscription.audioDataUrl || "",
+                    id: "__local__",
+                    notes: localTranscription.notes,
+                    midi_base64: localTranscription.midi_base64,
+                  };
+                  onSelectLibraryFile(localFile);
+                }}>
+                  Convert to Sheet Music
+                </button>
+              </div>
+            ) : (
+              <p className="muted" style={{ fontSize: "var(--fs-sm)", textAlign: "center", padding: "var(--s-4)" }}>
+                Transcribe an audio song first — then come back for sheet music.
+              </p>
+            )
+          )}
+
+          {mode === "midi-to-score" && signedIn && (
+            <div className="source-grid">
+              <div className="source-card" onClick={() => inputRef.current?.click()}>
+                <span className="sc-icon">⬆</span>
+                <span className="sc-label">Upload MIDI</span>
+                <span className="sc-hint">.mid files</span>
+                <input
+                  ref={inputRef}
+                  type="file"
+                  accept=".mid,.midi"
+                  onChange={onUploadNew}
+                  style={{ display: "none" }}
+                />
+              </div>
+              {canUseLibrary && (
+                <div className="source-card" onClick={() => setShowLibPicker(true)}>
+                  <span className="sc-icon">▤</span>
+                  <span className="sc-label">From library</span>
+                  <span className="sc-hint">{midiTranscriptions.length === 0 ? "No transcriptions" : "Pick a track"}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!signedIn && mode === "transcribe" && (
             <p className="muted" style={{ fontSize: "var(--fs-sm)", textAlign: "center" }}>
-              {mode === "transcribe" && "Transcribe freely — sign in to save results to your library."}
-              {mode === "midi-to-score" && (localTranscription ? "Use your cached song for sheet music." : "Transcribe an audio song first — then come back for sheet music.")}
+              Transcribe freely — sign in to save results to your library.
             </p>
           )}
         </>
