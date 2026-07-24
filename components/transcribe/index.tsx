@@ -403,11 +403,12 @@ export default function Transform({
             key={m.id}
             className={`chip${mode === m.id ? "" : " ghost"}`}
             onClick={() => {
-              if (mode !== m.id) {
+              if (mode !== m.id && !isBusy) {
                 reset();
                 setMode(m.id);
               }
             }}
+            disabled={isBusy && mode !== m.id}
             title={m.hint}
           >
             {m.label}
