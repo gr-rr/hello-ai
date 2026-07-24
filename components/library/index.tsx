@@ -248,7 +248,6 @@ export default function Library({
 
       <span className="status">{status}</span>
 
-
       {signedIn ? (
         <>
           <div className="section-label">Tracks</div>

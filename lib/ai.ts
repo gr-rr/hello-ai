@@ -10,8 +10,25 @@ type TextGenerationPipeline = {
 let generatorPromise: Promise<TextGenerationPipeline> | null = null;
 let generatorInstance: TextGenerationPipeline | null = null;
 
-const MODEL_ID = "onnx-community/LFM2.5-350M-q4";
+const MODEL_ID = "Xenova/distilgpt2";
 const MODEL_CACHE = "music-studio-ai-cache";
+
+export function checkWebAssembly(): { supported: boolean; error?: string } {
+  try {
+    if (typeof WebAssembly === "undefined") {
+      return { supported: false, error: "WebAssembly is not supported in this browser." };
+    }
+    // Test basic WASM instantiation
+    const module = new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+    if (!WebAssembly.Module.prototype) {
+      return { supported: false, error: "WebAssembly module support is limited." };
+    }
+    void module;
+    return { supported: true };
+  } catch {
+    return { supported: false, error: "WebAssembly is available but not functioning correctly." };
+  }
+}
 
 async function loadGenerator(): Promise<TextGenerationPipeline> {
   if (generatorInstance) return generatorInstance;
@@ -21,9 +38,7 @@ async function loadGenerator(): Promise<TextGenerationPipeline> {
     const { pipeline, env } = await import("@huggingface/transformers");
     env.cacheDir = MODEL_CACHE;
 
-    const pipe = (await pipeline("text-generation", MODEL_ID, {
-      dtype: "q4",
-    })) as unknown as TextGenerationPipeline;
+    const pipe = (await pipeline("text-generation", MODEL_ID)) as unknown as TextGenerationPipeline;
 
     generatorInstance = pipe;
     return pipe;
@@ -33,6 +48,10 @@ async function loadGenerator(): Promise<TextGenerationPipeline> {
 }
 
 export async function loadModel(): Promise<void> {
+  const wasmCheck = checkWebAssembly();
+  if (!wasmCheck.supported) {
+    throw new Error(wasmCheck.error ?? "WebAssembly is not available.");
+  }
   await loadGenerator();
 }
 

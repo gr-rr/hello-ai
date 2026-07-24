@@ -197,9 +197,10 @@ export default function Studio({
 
   async function signIn() {
     if (!supabase) return;
+    const currentPath = window.location.pathname + window.location.search;
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: getAuthCallbackUrl() },
+      options: { redirectTo: getAuthCallbackUrl(currentPath) },
     });
   }
 
@@ -283,17 +284,17 @@ export default function Studio({
           <div className="card">
             <h3 className="card-title"><span className="glyph">◈</span> Analyze</h3>
 
-            {!analysis && !analyzeStatus && (
+            {!analysis && !analyzeStatus && signedIn && (
               <div className="section-label">Select a transcribed track</div>
             )}
 
-            {!analysis && !analyzeStatus && analyzeLibFiles.filter(f => f.notes?.length).length === 0 && (
+            {!analysis && !analyzeStatus && signedIn && analyzeLibFiles.filter(f => f.notes?.length).length === 0 && (
               <p className="muted" style={{ textAlign: "center", margin: "var(--s-4) 0" }}>
                 No transcribed tracks in your library — transcribe one first.
               </p>
             )}
 
-            {!analysis && !analyzeStatus && analyzeLibFiles.filter(f => f.notes?.length).length > 0 && (
+            {!analysis && !analyzeStatus && signedIn && analyzeLibFiles.filter(f => f.notes?.length).length > 0 && (
               <div style={{ display: "flex", gap: "var(--s-2)", marginBottom: "var(--s-4)" }}>
                 <select
                   className="sel"
@@ -310,6 +311,23 @@ export default function Studio({
                   ))}
                 </select>
               </div>
+            )}
+
+            {!analysis && !analyzeStatus && !signedIn && (
+              analyzeLibFiles.filter(f => f.notes?.length).length > 0 ? (
+                <div style={{ textAlign: "center", padding: "var(--s-4)" }}>
+                  <p className="muted" style={{ margin: "0 0 var(--s-3)" }}>
+                    Using: <strong>{analyzeLibFiles[0].name}</strong>
+                  </p>
+                  <button className="btn btn-primary" onClick={() => handleAnalyzeLibrary(analyzeLibFiles[0])}>
+                    Analyze
+                  </button>
+                </div>
+              ) : (
+                <p className="muted" style={{ textAlign: "center", margin: "var(--s-4) 0" }}>
+                  Transcribe an audio song first — then come back to analyze.
+                </p>
+              )
             )}
 
             {analyzeStatus && (
@@ -341,11 +359,13 @@ export default function Studio({
                   numNotes={lastResult?.num_notes ?? 0}
                 />
                 <ExplainPanel analysis={analysis} />
-                <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
-                  <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
-                    ← Analyze another track
-                  </button>
-                </div>
+                {signedIn && (
+                  <div className="toolbar" style={{ marginTop: "var(--s-4)" }}>
+                    <button className="btn" onClick={() => { setAnalysis(null); setAnalysisError(""); listLibrary().then(setAnalyzeLibFiles).catch(() => {}); }}>
+                      ← Analyze another track
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
