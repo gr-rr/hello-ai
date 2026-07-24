@@ -192,26 +192,32 @@ export default function Viz({
     <div className="card">
       <h3 className="card-title"><span className="glyph">◈</span> Visualize</h3>
 
-      <div className="section-label">Select a track</div>
-      <select
-        className="sel"
-        value={selectedId}
-        onChange={(e) => {
-          handleStop();
-          setSelectedIdLocal(e.target.value);
-          onTrackSelected?.(e.target.value);
-          setPlaybackSource("original");
-          setMode("piano-roll");
-        }}
-        style={{ width: "100%", marginBottom: "var(--s-3)" }}
-      >
-        <option value="">-- Pick a track --</option>
-        {files.map((f) => (
-          <option key={f.id} value={f.id}>
-            {f.name}
-          </option>
-        ))}
-      </select>
+      <div className="section-label">Select a transcribed track</div>
+      {files.filter((f) => (f.notes?.length ?? 0) > 0).length === 0 ? (
+        <div className="empty">
+          No transcribed tracks in your library — transcribe one first.
+        </div>
+      ) : (
+        <select
+          className="sel"
+          value={selectedId}
+          onChange={(e) => {
+            handleStop();
+            setSelectedIdLocal(e.target.value);
+            onTrackSelected?.(e.target.value);
+            setPlaybackSource("original");
+            setMode("piano-roll");
+          }}
+          style={{ width: "100%", marginBottom: "var(--s-3)" }}
+        >
+          <option value="">-- Pick a track --</option>
+          {files.filter((f) => (f.notes?.length ?? 0) > 0).map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.name}
+            </option>
+          ))}
+        </select>
+      )}
 
       {selected && (
         <>
@@ -306,17 +312,6 @@ export default function Viz({
         </>
       )}
 
-      {!selected && files.length === 0 && (
-        <div className="empty">
-          No transcribed tracks in your library — transcribe one first.
-        </div>
-      )}
-
-      {!selected && files.length > 0 && (
-        <p className="muted" style={{ textAlign: "center", margin: "var(--s-4) 0" }}>
-          Select a transcribed track above to visualize it.
-        </p>
-      )}
     </div>
   );
 }
