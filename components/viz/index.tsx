@@ -306,9 +306,15 @@ export default function Viz({
         </>
       )}
 
-      {!selected && (
+      {!selected && files.length === 0 && (
+        <div className="empty">
+          No transcribed tracks in your library — transcribe one first.
+        </div>
+      )}
+
+      {!selected && files.length > 0 && (
         <p className="muted" style={{ textAlign: "center", margin: "var(--s-4) 0" }}>
-          Pick a track above to visualize it.
+          Select a transcribed track above to visualize it.
         </p>
       )}
     </div>
