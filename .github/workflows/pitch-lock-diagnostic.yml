@@ -1,0 +1,40 @@
+name: Pitch dependency lock diagnostic
+
+on:
+  push:
+    branches:
+      - agent/1236-pitch-alternates
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version-file: .python-version
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d
+        with:
+          version: 0.12.9
+      - name: Resolve lock
+        run: uv lock --project backend
+      - name: Verify alternate imports
+        run: |
+          uv sync --project backend --group worker
+          backend/.venv/bin/python - <<'PY'
+          import pesto
+          import torch
+          import torchcrepe
+          import torchaudio
+          print('torch', torch.__version__)
+          print('torchaudio', torchaudio.__version__)
+          print('torchcrepe', __import__('importlib.metadata').metadata.version('torchcrepe'))
+          print('pesto', pesto.__version__)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pitch-uv-lock
+          path: backend/uv.lock
