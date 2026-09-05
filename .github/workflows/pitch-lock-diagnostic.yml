@@ -6,7 +6,7 @@ on:
       - agent/1236-pitch-alternates
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   resolve:
@@ -25,16 +25,24 @@ jobs:
         run: |
           uv sync --project backend --group worker
           backend/.venv/bin/python - <<'PY'
+          import importlib.metadata
           import pesto
           import torch
           import torchcrepe
           import torchaudio
           print('torch', torch.__version__)
           print('torchaudio', torchaudio.__version__)
-          print('torchcrepe', __import__('importlib.metadata').metadata.version('torchcrepe'))
+          print('torchcrepe', importlib.metadata.version('torchcrepe'))
           print('pesto', pesto.__version__)
           PY
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pitch-uv-lock
-          path: backend/uv.lock
+      - name: Commit exact resolved lock
+        run: |
+          if git diff --quiet -- backend/uv.lock; then
+            echo "backend/uv.lock already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/uv.lock
+          git commit -m "chore: refresh pitch worker lock [skip ci]"
+          git push origin HEAD:agent/1236-pitch-alternates
